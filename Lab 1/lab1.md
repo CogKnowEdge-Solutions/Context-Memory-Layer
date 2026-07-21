@@ -1,7 +1,5 @@
 # Lab 1 Guide: Automated Ingestion (Building Structured Knowledge)
 
-Before looking at the code, it's worth understanding what we're building and why. Once that's clear, the notebook itself is easy to follow.
-
 ---
 
 ## 1. What is an LLM Wiki?
