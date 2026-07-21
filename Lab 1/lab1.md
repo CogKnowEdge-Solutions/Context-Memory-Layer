@@ -230,7 +230,20 @@ At the end of this cell, `concepts` contains one dictionary per extracted fact, 
 
 ### Step 6 — Build OKF Files and Update the Index
 
-This step is split across two cells.
+This step is split across two cells, and the diagram below shows what the second cell does before we look at its code line by line.
+
+```mermaid
+flowchart TD
+    A["Start loop: next concept"] --> B["Build filename and file path"]
+    B --> C["Write concept file<br/>mode: w"]
+    C --> D["Append summary line to index.md<br/>mode: a"]
+    D --> E{"More concepts<br/>remaining?"}
+    E -- Yes --> A
+    E -- No --> F["Result: one .md file per concept<br/>plus one complete index.md"]
+
+    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    class A,B,C,D,E,F defaultStyle
+```
 
 **Cell A — Preparing the output folder and index file:**
 
@@ -292,44 +305,11 @@ This loop runs once for every item in `concepts`. On each pass, the variable `co
 5. **Printing a confirmation** for each file created.
 6. **Updating the index.** `open(index_path, "a", ...)` opens the index in append mode, meaning each pass adds one new line without erasing what's already there. This is what allows the index to accumulate one entry per concept across the entire loop.
 
-```mermaid
-flowchart TD
-    A["Start loop: next concept"] --> B["Build filename and file path"]
-    B --> C["Write concept file<br/>mode: w"]
-    C --> D["Append summary line to index.md<br/>mode: a"]
-    D --> E{"More concepts<br/>remaining?"}
-    E -- Yes --> A
-    E -- No --> F["Result: one .md file per concept<br/>plus one complete index.md"]
-
-    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
-    class A,B,C,D,E,F defaultStyle
-```
-
 Once this loop completes, `output_wiki/` contains one file per fact, along with an `index.md` listing every one of them.
 
 ---
 
-## 6. Variable Reference
-
-| Variable | Holds |
-|---|---|
-| `client` | The connection used to send requests to Groq |
-| `PDF_PATH` | The file location of the source PDF |
-| `raw_text` | The entire PDF's extracted text |
-| `system_prompt` | The instructions given to the AI |
-| `response` | The AI's full reply, including metadata |
-| `raw_json` | The AI's reply, as a plain string |
-| `structured_data` | The reply, converted into a Python dictionary |
-| `concepts` | A list of dictionaries, one per extracted fact |
-| `output_dir` | The folder where generated files are saved |
-| `index_path` | The location of the master index file |
-| `concept` | The current fact being processed inside the loop |
-| `filename` / `file_path` | The name and full save location of one file |
-| `okf_content` | The assembled metadata + content for one file |
-
----
-
-## 7. Expected Output
+## 6. Expected Output
 
 When the notebook runs successfully, the final cell should print output similar to:
 
@@ -347,15 +327,6 @@ The `output_wiki/` folder should then contain one `.md` file per extracted fact,
 
 ---
 
-## 8. Troubleshooting
-
-- **`ModuleNotFoundError`** — the install step was skipped. Uncomment the install line, run it once, then continue.
-- **`Error: Could not find the document.`** — check that `PDF_PATH` matches the actual file location.
-- **`Error: The model's JSON response was cut off or malformed.`** — the response likely exceeded `max_tokens` before completing. Try a shorter source document or a higher `max_tokens` value.
-- **Duplicate or missing index entries** — confirm the "prepare output directory" cell isn't being re-run in a way that overwrites an index that already has entries appended to it.
-
----
-
-## 9. Summary
+## 7. Summary
 
 By the end of Lab 1, an unstructured PDF has been converted into a folder of clean, consistently formatted OKF files, along with a master index describing all of them — generated automatically. This structured knowledge base, along with its master index, is the complete output of this lab.
