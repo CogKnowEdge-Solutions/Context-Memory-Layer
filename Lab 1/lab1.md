@@ -127,11 +127,9 @@ load_dotenv("../.env")
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 ```
 
-- `load_dotenv("../.env")` loads the contents of a `.env` file located one directory above the notebook into memory.
-- `os.getenv("GROQ_API_KEY")` retrieves the value of `GROQ_API_KEY` from that loaded file.
-- `client = Groq(api_key=...)` creates a client object — the interface used to send requests to Groq for the rest of the notebook.
-
-Keeping the API key in a separate `.env` file (rather than typing it directly into the notebook) prevents it from being exposed if the notebook is ever shared or published.
+- This cell loads the secret Groq API key from a hidden `.env` file, and uses it to open a connection to the AI.
+- That connection is stored in `client`, which every later call to the AI will use.
+- Keeping the key in a separate `.env` file — instead of typing it directly into the notebook — means the key stays private even if the notebook itself is shared.
 
 ### Step 4 — Locate and Read the Document
 
@@ -151,10 +149,9 @@ for page in reader.pages:
 print("Text extraction complete! Ready for AI processing.")
 ```
 
-- **`PDF_PATH`** stores the file's location as a string, not the file itself.
-- `os.path.exists(PDF_PATH)` checks that a file actually exists at that location before attempting to open it, preventing an avoidable crash.
-- `reader = PyPDF2.PdfReader(PDF_PATH)` opens the PDF for reading, page by page.
-- **`raw_text`** starts as an empty string. The `for` loop iterates through every page, extracts its text with `page.extract_text()`, and appends it to `raw_text` (the `+=` operator adds each page's text onto what's already collected). After the loop finishes, `raw_text` holds the entire PDF's content as one continuous string.
+- This cell first checks that the PDF actually exists at the given location, so the notebook fails with a clear message instead of a confusing crash.
+- It then opens the PDF and reads through every page, collecting all the text into one variable, `raw_text`.
+- By the end of this cell, the entire PDF exists as one plain block of text — nothing has been summarized yet, it's just been pulled out of the PDF.
 
 ### Step 5 — Extract Concepts with Groq
 
@@ -180,11 +177,7 @@ Respond in JSON only, matching this format:
 }
 Output ONLY the JSON. No extra text, no markdown formatting blocks.
 """
-```
 
-This block is the **system prompt** — the instructions given to the AI before any actual content. The instructions are deliberately strict and repetitive ("extract all of them," "do not paraphrase," "Output ONLY the JSON") because the AI's response will be parsed as strict JSON a few lines later. Any extra conversational text in the response would cause that parsing step to fail.
-
-```python
 print("Sending document to Groq for extraction...")
 
 response = client.chat.completions.create(
@@ -196,18 +189,7 @@ response = client.chat.completions.create(
     temperature=0.0,
     max_tokens=8000
 )
-```
 
-This is the actual request sent to Groq, using the `client` created in Step 3.
-
-- `model="llama-3.3-70b-versatile"` specifies which AI model to use.
-- `messages=[...]` supplies both the instructions (`system_prompt`) and the actual input (`raw_text`, the full PDF text).
-- `temperature=0.0` controls how deterministic the output is. A value of `0.0` produces the most consistent, repeatable results — appropriate for an extraction task where reliability matters more than variation.
-- `max_tokens=8000` sets the maximum length of the response, leaving enough room to list a large number of facts without the output being cut off.
-
-The result is stored in **`response`**, a structured object containing the AI's reply along with additional metadata about the request.
-
-```python
 raw_json = response.choices[0].message.content.strip()
 
 try:
@@ -221,16 +203,17 @@ except json.JSONDecodeError:
     concepts = []
 ```
 
-- `response.choices[0].message.content` extracts just the AI's written reply from the larger `response` object. `.strip()` removes any leading/trailing whitespace. The result is stored in **`raw_json`** — still a plain string at this point.
-- `json.loads(raw_json)` converts that string into an actual Python dictionary, stored in **`structured_data`**.
-- `structured_data.get("concepts", [])` retrieves the list stored under the `"concepts"` key, producing the **`concepts`** variable — a list where each item represents one extracted fact.
-- The `try` / `except` block handles the case where the response is not valid JSON (for example, if it was cut off). Rather than letting the notebook crash, the error is caught, a message is printed, and `concepts` is set to an empty list so the rest of the notebook can still run.
+This is the heart of the lab, so it helps to think of it in three parts:
 
-At the end of this cell, `concepts` contains one dictionary per extracted fact, each with a `filename`, `type`, `title`, `tags`, `description`, and `content`.
+- **The instructions.** The notebook first writes out strict instructions telling the AI to extract every fact from the text, keep the original wording, and reply with pure JSON — nothing else.
+- **The request.** It then sends the PDF text along with those instructions to the AI, asking it to stay as factual and consistent as possible rather than creative, and giving it enough room in its reply to list out a large number of facts.
+- **Reading the reply.** Finally, it takes the AI's answer and converts it from plain text into an actual usable list of facts, `concepts`. If the AI's reply comes back broken or incomplete, this step catches the problem instead of letting the notebook crash, and simply continues with an empty list.
+
+By the end of this cell, every fact the AI found exists as its own small entry, ready to be turned into files.
 
 ### Step 6 — Build OKF Files and Update the Index
 
-This step is split across two cells, and the diagram below shows what the second cell does before we look at its code line by line.
+This step is split across two cells. The diagram below shows what the second cell does before we look at it.
 
 ```mermaid
 flowchart TD
@@ -260,10 +243,8 @@ if not os.path.exists(index_path):
 print(f"Output directory ready at: {output_dir}")
 ```
 
-- **`output_dir`** stores the path to the folder where the generated files will be saved.
-- `os.makedirs(output_dir, exist_ok=True)` creates that folder if it doesn't already exist. `exist_ok=True` prevents an error if the folder was already created in a previous run.
-- **`index_path`** stores the full path to the master index file.
-- The `if not os.path.exists(index_path):` check ensures a new index file is only created if one doesn't already exist, so re-running the notebook doesn't overwrite an existing index.
+- This cell makes sure the `output_wiki` folder exists, creating it if it's the first run.
+- It also starts the master index file if one doesn't already exist, without overwriting one from a previous run.
 
 **Cell B — Generating the files:**
 
@@ -296,16 +277,10 @@ description: {concept['description']}
 print("\nPipeline complete! Ready for Lab 2.")
 ```
 
-This loop runs once for every item in `concepts`. On each pass, the variable `concept` holds one fact, and the following steps occur:
-
-1. **Building a safe filename.** `concept['filename'].replace(" ", "_").lower()` replaces spaces with underscores and converts the filename to lowercase for consistency. The `.md` extension is added if it's missing.
-2. **Building the full save path.** `file_path = os.path.join(output_dir, filename)` combines the output folder and filename into the final save location.
-3. **Assembling the OKF content.** The f-string builds the metadata layer (`type`, `title`, `tags`, `description`), followed by a `---` separator, followed by the content layer.
-4. **Saving the file.** `open(file_path, "w", ...)` opens a new file in write mode, and `f.write(okf_content)` saves the content.
-5. **Printing a confirmation** for each file created.
-6. **Updating the index.** `open(index_path, "a", ...)` opens the index in append mode, meaning each pass adds one new line without erasing what's already there. This is what allows the index to accumulate one entry per concept across the entire loop.
-
-Once this loop completes, `output_wiki/` contains one file per fact, along with an `index.md` listing every one of them.
+- This loop runs once for every fact in `concepts`.
+- For each one, it cleans up the filename, builds the OKF-formatted content, and saves it as its own `.md` file.
+- Right after saving, it adds one line about that fact to the master index — so the index grows alongside the files, without ever being rewritten from scratch.
+- Once the loop finishes, `output_wiki/` holds one file per fact, plus a complete `index.md` listing all of them.
 
 ---
 
