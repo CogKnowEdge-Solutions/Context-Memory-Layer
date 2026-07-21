@@ -42,7 +42,7 @@ As an example, this guide itself follows the same idea. If it were stored as an 
 ```yaml
 title: "Lab 1 Guide: Automated Ingestion (Building Structured Knowledge)"
 type: "guide"
-tags: ["llm-wiki", "okf", "lab1", "ingestion", "groq"]
+tags: ["llm-wiki", "okf", "lab1", "ingestion"]
 description: "A step-by-step walkthrough of the Lab 1 notebook: what an LLM Wiki and OKF are, why this approach is used, and what every part of the code does."
 ```
 
@@ -88,7 +88,7 @@ Lab 1 is where this structured knowledge base gets created, starting from a sing
 ```mermaid
 flowchart LR
     A["Messy PDF<br/>SunFactSheet.pdf"] --> B["Extract raw text<br/>using PyPDF2"]
-    B --> C["Send text to Groq<br/>with strict instructions"]
+    B --> C["Send text to the LLM<br/>with strict instructions"]
     C --> D{"Valid JSON<br/>returned?"}
     D -- No --> E["Print error<br/>concepts = empty list"]
     D -- Yes --> F["Loop through<br/>every concept"]
@@ -116,7 +116,7 @@ This line is commented out because it only needs to run once, during initial set
 
 - **PyPDF2** — opens a PDF file and extracts its plain text.
 - **python-dotenv** — reads secret values (such as an API key) from a hidden `.env` file, instead of hardcoding them into the notebook.
-- **groq** — the official library used to communicate with Groq's AI models.
+- The AI provider's client library — used to communicate with the LLM's API.
 - **requests** — a general-purpose library for making internet requests, used internally by some of the other libraries.
 
 ### Step 2 — Import Libraries
@@ -137,7 +137,7 @@ Installing a library makes it available on the machine. Importing it brings it i
 | `json` | Converting JSON-formatted text into a Python dictionary/list |
 | `PyPDF2` | Opening the PDF and reading its pages |
 | `load_dotenv` | Reading values from the `.env` file |
-| `Groq` | The client used to send requests to the AI |
+| The AI client | The client used to send requests to the LLM |
 
 ### Step 3 — Set Up API Keys
 
@@ -148,7 +148,7 @@ load_dotenv("../.env")
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 ```
 
-- This cell loads the secret Groq API key from a hidden `.env` file, and uses it to open a connection to the AI.
+- This cell loads the secret LLM API key from a hidden `.env` file, and uses it to open a connection to the AI.
 - That connection is stored in `client`, which every later call to the AI will use.
 - Keeping the key in a separate `.env` file — instead of typing it directly into the notebook — means the key stays private even if the notebook itself is shared.
 
@@ -174,7 +174,7 @@ print("Text extraction complete! Ready for AI processing.")
 - It then opens the PDF and reads through every page, collecting all the text into one variable, `raw_text`.
 - By the end of this cell, the entire PDF exists as one plain block of text — nothing has been summarized yet, it's just been pulled out of the PDF.
 
-### Step 5 — Extract Concepts with Groq
+### Step 5 — Extract Concepts with the LLM
 
 ```python
 system_prompt = """
