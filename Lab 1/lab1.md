@@ -1,5 +1,7 @@
 # Lab 1 Guide: Automated Ingestion (Building Structured Knowledge)
 
+Before looking at the code, it's worth understanding what we're building and why. Once that's clear, the notebook itself is easy to follow.
+
 ---
 
 ## 1. What is an LLM Wiki?
@@ -50,7 +52,30 @@ Everything below that — the explanations, code walkthroughs, and diagrams that
 
 ---
 
-## 3. Why Use This Approach
+## 3. Concept Files and the Master Index
+
+Every individual fact that gets extracted from a document is saved as its own OKF file — this is what we call a **concept file**. One concept file holds exactly one fact, formatted with the metadata and content layers described above.
+
+Sitting alongside all the concept files is one extra file: **`index.md`**, the **master index**. It doesn't hold any facts itself — it holds one short line per concept file, just its filename and a one-sentence description. It works like a table of contents for the whole knowledge base.
+
+```mermaid
+graph LR
+    I["index.md<br/>(master index)"] --> C1["sun_mass.md<br/>(concept file)"]
+    I --> C2["earth_mass.md<br/>(concept file)"]
+    I --> C3["sun_surface_gravity.md<br/>(concept file)"]
+    I --> C4["... one line per<br/>concept file ..."]
+
+    classDef indexStyle fill:#fff3e0,stroke:#e65100,stroke-width:1px,color:#5c3300
+    classDef fileStyle fill:#f5f5f5,stroke:#616161,stroke-width:1px,color:#212121
+    class I indexStyle
+    class C1,C2,C3,C4 fileStyle
+```
+
+This separation matters because it means nobody — human or AI — has to open every concept file just to find the right one. The master index can be scanned quickly to see what exists, and only the relevant concept file(s) need to be opened in full afterward. This is the same "index first, then read only what's needed" idea referenced in Section 1, made concrete.
+
+---
+
+## 4. Why Use This Approach
 
 A common way AI tools handle large documents is to split them into small, randomly-sized chunks, then retrieve a handful of chunks that appear similar to a given question. This has a well-known weakness: chunking can separate a fact from the context that explains it, and "appears similar" is not the same as "actually answers the question." When the retrieved chunks don't fully cover the answer, the AI tends to fill the gap with a guess — commonly referred to as **hallucination**.
 
@@ -60,7 +85,7 @@ Lab 1 is where this structured knowledge base gets created, starting from a sing
 
 ---
 
-## 4. Pipeline Overview
+## 5. Pipeline Overview
 
 ```mermaid
 flowchart LR
@@ -81,7 +106,7 @@ The pipeline takes an unstructured PDF as input and produces a folder of clean, 
 
 ---
 
-## 5. Code Walkthrough
+## 6. Code Walkthrough
 
 ### Step 1 — Install Required Libraries
 
@@ -282,7 +307,7 @@ print("\nPipeline complete! Ready for Lab 2.")
 
 ---
 
-## 6. Expected Output
+## 7. Expected Output
 
 When the notebook runs successfully, the final cell should print output similar to:
 
@@ -300,6 +325,6 @@ The `output_wiki/` folder should then contain one `.md` file per extracted fact,
 
 ---
 
-## 7. Summary
+## 8. Summary
 
 By the end of Lab 1, an unstructured PDF has been converted into a folder of clean, consistently formatted OKF files, along with a master index describing all of them — generated automatically. This structured knowledge base, along with its master index, is the complete output of this lab.
