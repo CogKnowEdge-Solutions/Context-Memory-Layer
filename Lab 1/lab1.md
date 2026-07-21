@@ -69,7 +69,7 @@ graph LR
     class C1,C2,C3,C4 fileStyle
 ```
 
-This separation matters because it means nobody — human or AI — has to open every concept file just to find the right one. The master index can be scanned quickly to see what exists, and only the relevant concept file(s) need to be opened in full afterward. This is the same "index first, then read only what's needed" idea referenced in Section 1, made concrete.
+This separation matters because it means nobody — human or AI — has to open every concept file just to find the right one. The master index can be scanned quickly to see what exists, and only the relevant concept file(s) need to be opened in full afterward. This is the same "index first, then read only what's needed" idea referenced in Section 1, made concrete — and it's exactly what powers the retrieval steps later in this same lab.
 
 ---
 
@@ -79,11 +79,15 @@ A common way AI tools handle large documents is to split them into small, random
 
 This workshop avoids that problem by generating one complete, self-contained file per fact or concept, along with a master index describing what exists. When a question is asked later, the AI does not guess from fragments — it checks the index, selects the correct file(s), and reads them in full.
 
-Lab 1 is where this structured knowledge base gets created, starting from a single unstructured PDF.
+Lab 1 covers both halves of that idea: building this structured knowledge base from a single unstructured PDF, and then actually querying it to get a grounded, explainable answer.
 
 ---
 
 ## 5. Pipeline Overview
+
+This lab has two connected parts. The first builds the knowledge base. The second queries it.
+
+**Part A — Ingestion (Steps 1–6):** an unstructured PDF is turned into a folder of clean OKF files, plus a master index.
 
 ```mermaid
 flowchart LR
@@ -100,7 +104,20 @@ flowchart LR
     class A,B,C,D,E,F,G,H,I defaultStyle
 ```
 
-The pipeline takes an unstructured PDF as input and produces a folder of clean, indexed OKF files as output. The rest of this guide walks through the notebook that implements this pipeline, cell by cell.
+**Part B — Retrieval (Steps 7–10):** a question is answered using only the relevant files from that knowledge base, with a visible explanation of how the answer was reached.
+
+```mermaid
+flowchart LR
+    Q["A question is asked"] --> R1["Phase 1: the LLM reads<br/>index.md and picks<br/>the relevant file(s)"]
+    R1 --> L["Only those file(s)<br/>are opened and read in full"]
+    L --> R2["Phase 2: the LLM answers<br/>using just that content"]
+    R2 --> T["The reasoning, sources,<br/>and answer are all shown"]
+
+    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    class Q,R1,L,R2,T defaultStyle
+```
+
+The rest of this guide walks through the notebook that implements both parts, cell by cell.
 
 ---
 
@@ -149,7 +166,7 @@ client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 ```
 
 - This cell loads the secret LLM API key from a hidden `.env` file, and uses it to open a connection to the AI.
-- That connection is stored in `client`, which every later call to the AI will use.
+- That connection is stored in `client`, which every later call to the AI will use — including the retrieval steps later in this same notebook.
 - Keeping the key in a separate `.env` file — instead of typing it directly into the notebook — means the key stays private even if the notebook itself is shared.
 
 ### Step 4 — Locate and Read the Document
@@ -224,7 +241,7 @@ except json.JSONDecodeError:
     concepts = []
 ```
 
-This is the heart of the lab, so it helps to think of it in three parts:
+This is the heart of the ingestion half of the lab, so it helps to think of it in three parts:
 
 - **The instructions.** The notebook first writes out strict instructions telling the AI to extract every fact from the text, keep the original wording, and reply with pure JSON — nothing else.
 - **The request.** It then sends the PDF text along with those instructions to the AI, asking it to stay as factual and consistent as possible rather than creative, and giving it enough room in its reply to list out a large number of facts.
@@ -295,19 +312,154 @@ description: {concept['description']}
     with open(index_path, "a", encoding="utf-8") as f:
         f.write(f"- **{filename}**: {concept['description']}\n")
 
-print("\nPipeline complete! Ready for Lab 2.")
 ```
 
 - This loop runs once for every fact in `concepts`.
 - For each one, it cleans up the filename, builds the OKF-formatted content, and saves it as its own `.md` file.
 - Right after saving, it adds one line about that fact to the master index — so the index grows alongside the files, without ever being rewritten from scratch.
-- Once the loop finishes, `output_wiki/` holds one file per fact, plus a complete `index.md` listing all of them.
+- Once the loop finishes, `output_wiki/` holds one file per fact, plus a complete `index.md` listing all of them. This is the exact knowledge base that the retrieval steps below will now query.
+
+### Step 7 — Define the Query
+
+```python
+# Set the question you want to ask based on the PDF data
+user_query = "What is the magnetic field strength of the Sun's polar field, its sunspots, and its prominences?"
+
+print(f"Question: '{user_query}'")
+```
+
+This cell simply defines the question being asked, storing it in `user_query`. Every step from here onward uses this one question to demonstrate how the knowledge base built in Steps 1–6 can actually be queried and answered.
+
+### Step 8 — Two-Step Retrieval Using the Master Index (Phase 1: Routing)
+
+```python
+index_path = "../output_wiki/index.md"
+with open(index_path, "r", encoding="utf-8") as f:
+    index_content = f.read()
+
+index_system_prompt = """
+You are a retrieval assistant. Read the provided Table of Contents and select the files needed to answer the user's question.
+You MUST respond in strict JSON format matching this schema:
+{
+  "files_to_read": ["filename1.md", "filename2.md"]
+}
+Output ONLY the JSON.
+"""
+
+print("Phase 1: Asking the LLM to review index.md and select relevant files...")
+response_1 = client.chat.completions.create(
+    model="llama-3.3-70b-versatile",
+    messages=[
+        {"role": "system", "content": index_system_prompt},
+        {"role": "user", "content": f"Table of Contents:\n{index_content}\n\nUser Question: {user_query}"}
+    ],
+    temperature=0.0,
+    response_format={"type": "json_object"}
+)
+
+retrieval_data = json.loads(response_1.choices[0].message.content)
+selected_files = retrieval_data.get("files_to_read", [])
+
+print(f"Success! The LLM requested {len(selected_files)} file(s):")
+for file in selected_files:
+    print(f" - {file}")
+```
+
+This step doesn't try to answer the question yet — it's just figuring out where to look.
+
+- The full index built back in Step 6 is loaded, along with the user's question.
+- The AI is given one narrow job here: act like a librarian, look at the table of contents, and point out which specific file(s) actually cover the topic being asked about.
+- The AI replies with a short, clean list of just the filenames it thinks are relevant — nothing has been opened or read in full yet.
+
+```mermaid
+flowchart LR
+    Q["user_query"] --> P1["Phase 1: LLM reads<br/>index.md + the question"]
+    P1 --> D["LLM decides which<br/>files are relevant"]
+    D --> S["selected_files"]
+
+    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    class Q,P1,D,S defaultStyle
+```
+
+### Step 9 — Read Selected Files and Generate the Answer (Phase 2: Answering)
+
+```python
+output_dir = "../output_wiki"
+loaded_context = ""
+
+for filename in selected_files:
+    file_path = os.path.join(output_dir, filename)
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as f:
+            loaded_context += f"--- START OF {filename} ---\n{f.read()}\n--- END OF {filename} ---\n\n"
+    else:
+        print(f"Warning: {filename} not found on disk.")
+
+qa_system_prompt = """
+You are an explainable AI system answering user questions using ONLY the provided text from the markdown files.
+
+You MUST respond in strict JSON format with these exact keys:
+1. "trace_path": A list of natural language sentences explaining your step-by-step logical thinking process.
+2. "sources_used": A list of the specific filenames you used to get the answer.
+3. "answer": The direct, clear, and concise answer to the user's question.
+"""
+
+print("\nPhase 2: Sending the selected file contents to generate the final answer...")
+response_2 = client.chat.completions.create(
+    model="llama-3.3-70b-versatile",
+    messages=[
+        {"role": "system", "content": qa_system_prompt},
+        {"role": "user", "content": f"Provided Context:\n{loaded_context}\n\nUser Question: {user_query}"}
+    ],
+    temperature=0.0,
+    response_format={"type": "json_object"}
+)
+```
+
+Now that the relevant file(s) have been picked out, this step opens them for real and gets an actual answer.
+
+- Only the files chosen in Step 8 are opened, and their full content is collected together, clearly labeled by filename.
+- That full content is sent to the AI along with the original question, but with a different instruction this time: don't just give an answer, show the reasoning behind it.
+- The AI is asked to return three things together: the reasoning it followed, the exact files it relied on, and the final answer — which is what makes the result explainable instead of just a plain, unverifiable reply.
+
+```mermaid
+flowchart LR
+    S["selected_files"] --> L["Open each file,<br/>build loaded_context"]
+    L --> P2["Phase 2: LLM reads<br/>loaded_context + the question"]
+    P2 --> R["Structured reply:<br/>trace_path, sources_used, answer"]
+
+    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    class S,L,P2,R defaultStyle
+```
+
+### Step 10 — View the Explainability Trace
+
+```python
+final_result = json.loads(response_2.choices[0].message.content)
+
+print("\nEXPLAINABILITY TRACE\n")
+for step in final_result.get("trace_path", []):
+    print(f"-> {step}")
+
+print("\nSOURCES CITED\n")
+for source in final_result.get("sources_used", []):
+    print(f"- {source}")
+
+print("\nFINAL ANSWER\n")
+print(final_result.get("answer"))
+```
+
+This last cell doesn't generate anything new — it just displays what the AI produced in Step 9 in a clean, readable way.
+
+- The reasoning behind the answer is printed first, step by step.
+- The exact files used as sources are listed next, so the answer can be traced back to something real.
+- The final answer is printed last, now backed by a visible trail of how it was reached instead of just appearing on its own.
 
 ---
 
 ## 7. Expected Output
 
-When the notebook runs successfully, the final cell should print output similar to:
+**Ingestion (Steps 1–6)** should print one `Created:` line per extracted fact, followed by a completion message:
 
 ```
 Created: sun_mass.md
@@ -321,8 +473,45 @@ Pipeline complete! Ready for Lab 2.
 
 The `output_wiki/` folder should then contain one `.md` file per extracted fact, along with an `index.md` listing each file with its description.
 
+**Retrieval (Steps 7–10)** should print the question, the files selected by Phase 1, and the full explainability trace from Phase 2:
+
+```
+Question: 'What is the magnetic field strength of the Sun's polar field, its sunspots, and its prominences?'
+
+Phase 1: Asking the LLM to review index.md and select relevant files...
+Success! The LLM requested 3 file(s):
+ - sun_polar_field_magnetic_field_strength.md
+ - sun_sunspots_magnetic_field_strength.md
+ - sun_prominences_magnetic_field_strength.md
+
+Phase 2: Sending the selected file contents to generate the final answer...
+
+EXPLAINABILITY TRACE
+
+-> The user is asking for the magnetic field strength of the Sun's polar field, sunspots, and prominences.
+-> To find the magnetic field strength of the Sun's polar field, we need to look at the information provided in the sun_polar_field_magnetic_field_strength.md file.
+-> According to the sun_polar_field_magnetic_field_strength.md file, the magnetic field strength of the Sun's polar field is 1-2 Gauss.
+-> To find the magnetic field strength of the Sun's sunspots, we need to look at the information provided in the sun_sunspots_magnetic_field_strength.md file.
+-> According to the sun_sunspots_magnetic_field_strength.md file, the magnetic field strength of the Sun's sunspots is 3000 Gauss.
+-> To find the magnetic field strength of the Sun's prominences, we need to look at the information provided in the sun_prominences_magnetic_field_strength.md file.
+-> According to the sun_prominences_magnetic_field_strength.md file, the magnetic field strength of the Sun's prominences is 10-100 Gauss.
+-> Now, we can provide the magnetic field strength of the Sun's polar field, sunspots, and prominences as 1-2 Gauss, 3000 Gauss, and 10-100 Gauss respectively.
+
+SOURCES CITED
+
+- sun_polar_field_magnetic_field_strength.md
+- sun_sunspots_magnetic_field_strength.md
+- sun_prominences_magnetic_field_strength.md
+
+FINAL ANSWER
+
+The magnetic field strength of the Sun's polar field is 1-2 Gauss, its sunspots is 3000 Gauss, and its prominences is 10-100 Gauss.
+```
+
+Notice that Phase 1 correctly picked exactly the three files relevant to the question — nothing more, nothing less — and Phase 2's answer is fully traceable back to those same three files.
+
 ---
 
 ## 8. Summary
 
-By the end of Lab 1, an unstructured PDF has been converted into a folder of clean, consistently formatted OKF files, along with a master index describing all of them — generated automatically. This structured knowledge base, along with its master index, is the complete output of this lab.
+By the end of Lab 1, an unstructured PDF has been converted into a folder of clean, consistently formatted OKF files, along with a master index describing all of them — generated automatically. That same knowledge base is then queried end-to-end: a question is routed to the right file(s), those files are read in full, and a final answer is produced along with a visible trace of how it was reached. This structured, queryable knowledge base — and the explainable retrieval process built on top of it — is the complete output of this lab.
