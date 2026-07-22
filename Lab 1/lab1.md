@@ -159,7 +159,7 @@ Installing a library makes it available on the machine. Importing it brings it i
 ### Step 3 — Set Up API Keys
 
 ```python
-load_dotenv("../.env")
+load_dotenv(".env")
 
 # Initialize the Native Groq Client
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
@@ -172,7 +172,7 @@ client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 ### Step 4 — Locate and Read the Document
 
 ```python
-PDF_PATH = "../SunFactSheet.pdf"
+PDF_PATH = "data/SunFactSheet.pdf"
 
 if os.path.exists(PDF_PATH):
     print(f"Success: Found the document at '{PDF_PATH}'")
@@ -269,7 +269,7 @@ flowchart TD
 **Cell A — Preparing the output folder and index file:**
 
 ```python
-output_dir = "../output_wiki"
+output_dir = "output_wiki"
 os.makedirs(output_dir, exist_ok=True)
 
 index_path = os.path.join(output_dir, "index.md")
@@ -344,7 +344,7 @@ flowchart LR
 ```
 
 ```python
-index_path = "../output_wiki/index.md"
+index_path = "output_wiki/index.md"
 with open(index_path, "r", encoding="utf-8") as f:
     index_content = f.read()
 
@@ -395,7 +395,7 @@ flowchart LR
 ```
 
 ```python
-output_dir = "../output_wiki"
+output_dir = "output_wiki"
 loaded_context = ""
 
 for filename in selected_files:
