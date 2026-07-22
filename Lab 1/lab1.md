@@ -126,7 +126,7 @@ The rest of this guide walks through the notebook that implements both parts, ce
 ### Step 1 — Install Required Libraries
 
 ```python
-# !pip install PyPDF2 python-dotenv groq requests
+!pip install PyPDF2 python-dotenv groq requests
 ```
 
 This line is commented out because it only needs to run once, during initial setup — not every time the notebook runs. Each library serves a specific purpose:
@@ -311,7 +311,6 @@ description: {concept['description']}
     
     with open(index_path, "a", encoding="utf-8") as f:
         f.write(f"- **{filename}**: {concept['description']}\n")
-
 ```
 
 - This loop runs once for every fact in `concepts`.
@@ -331,6 +330,18 @@ print(f"Question: '{user_query}'")
 This cell simply defines the question being asked, storing it in `user_query`. Every step from here onward uses this one question to demonstrate how the knowledge base built in Steps 1–6 can actually be queried and answered.
 
 ### Step 8 — Two-Step Retrieval Using the Master Index (Phase 1: Routing)
+
+This step doesn't try to answer the question yet — it's just figuring out where to look. The diagram below shows that decision flow before we look at the code.
+
+```mermaid
+flowchart LR
+    Q["user_query"] --> P1["Phase 1: LLM reads<br/>index.md + the question"]
+    P1 --> D["LLM decides which<br/>files are relevant"]
+    D --> S["selected_files"]
+
+    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    class Q,P1,D,S defaultStyle
+```
 
 ```python
 index_path = "../output_wiki/index.md"
@@ -365,23 +376,23 @@ for file in selected_files:
     print(f" - {file}")
 ```
 
-This step doesn't try to answer the question yet — it's just figuring out where to look.
-
-- The full index built back in Step 6 is loaded, along with the user's question.
+- The full index built back in Step 6 is loaded, along with the user's question. Note `index_path` is set again here — this is deliberate, so this step can be run on its own as long as `output_wiki/index.md` already exists on disk, without depending on Step 6 still being in memory.
 - The AI is given one narrow job here: act like a librarian, look at the table of contents, and point out which specific file(s) actually cover the topic being asked about.
 - The AI replies with a short, clean list of just the filenames it thinks are relevant — nothing has been opened or read in full yet.
 
+### Step 9 — Read Selected Files and Generate the Answer (Phase 2: Answering)
+
+Now that the relevant file(s) have been picked out, this step opens them for real and gets an actual answer. The diagram below shows that flow before the code.
+
 ```mermaid
 flowchart LR
-    Q["user_query"] --> P1["Phase 1: LLM reads<br/>index.md + the question"]
-    P1 --> D["LLM decides which<br/>files are relevant"]
-    D --> S["selected_files"]
+    S["selected_files"] --> L["Open each file,<br/>build loaded_context"]
+    L --> P2["Phase 2: LLM reads<br/>loaded_context + the question"]
+    P2 --> R["Structured reply:<br/>trace_path, sources_used, answer"]
 
     classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
-    class Q,P1,D,S defaultStyle
+    class S,L,P2,R defaultStyle
 ```
-
-### Step 9 — Read Selected Files and Generate the Answer (Phase 2: Answering)
 
 ```python
 output_dir = "../output_wiki"
@@ -416,21 +427,9 @@ response_2 = client.chat.completions.create(
 )
 ```
 
-Now that the relevant file(s) have been picked out, this step opens them for real and gets an actual answer.
-
-- Only the files chosen in Step 8 are opened, and their full content is collected together, clearly labeled by filename.
+- Only the files chosen in Step 8 are opened, and their full content is collected together, clearly labeled by filename. Note `output_dir` is set again here for the same reason as Step 8 — so this cell works standalone.
 - That full content is sent to the AI along with the original question, but with a different instruction this time: don't just give an answer, show the reasoning behind it.
 - The AI is asked to return three things together: the reasoning it followed, the exact files it relied on, and the final answer — which is what makes the result explainable instead of just a plain, unverifiable reply.
-
-```mermaid
-flowchart LR
-    S["selected_files"] --> L["Open each file,<br/>build loaded_context"]
-    L --> P2["Phase 2: LLM reads<br/>loaded_context + the question"]
-    P2 --> R["Structured reply:<br/>trace_path, sources_used, answer"]
-
-    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
-    class S,L,P2,R defaultStyle
-```
 
 ### Step 10 — View the Explainability Trace
 
@@ -459,7 +458,7 @@ This last cell doesn't generate anything new — it just displays what the AI pr
 
 ## 7. Expected Output
 
-**Ingestion (Steps 1–6)** should print one `Created:` line per extracted fact, followed by a completion message:
+**Ingestion (Steps 1–6)** should print one `Created:` line per extracted fact:
 
 ```
 Created: sun_mass.md
@@ -467,13 +466,11 @@ Created: earth_mass.md
 Created: sun_to_earth_mass_ratio.md
 ...
 Created: sun_photosphere_composition.md
-
-Pipeline complete! Ready for Lab 2.
 ```
 
 The `output_wiki/` folder should then contain one `.md` file per extracted fact, along with an `index.md` listing each file with its description.
 
-**Retrieval (Steps 7–10)** should print the question, the files selected by Phase 1, and the full explainability trace from Phase 2:
+**Retrieval (Steps 7–10)** should print the question, the files selected by Phase 1, and the explainability trace from Phase 2:
 
 ```
 Question: 'What is the magnetic field strength of the Sun's polar field, its sunspots, and its prominences?'
@@ -488,23 +485,16 @@ Phase 2: Sending the selected file contents to generate the final answer...
 
 EXPLAINABILITY TRACE
 
--> The user is asking for the magnetic field strength of the Sun's polar field, sunspots, and prominences.
--> To find the magnetic field strength of the Sun's polar field, we need to look at the information provided in the sun_polar_field_magnetic_field_strength.md file.
--> According to the sun_polar_field_magnetic_field_strength.md file, the magnetic field strength of the Sun's polar field is 1-2 Gauss.
--> To find the magnetic field strength of the Sun's sunspots, we need to look at the information provided in the sun_sunspots_magnetic_field_strength.md file.
--> According to the sun_sunspots_magnetic_field_strength.md file, the magnetic field strength of the Sun's sunspots is 3000 Gauss.
--> To find the magnetic field strength of the Sun's prominences, we need to look at the information provided in the sun_prominences_magnetic_field_strength.md file.
--> According to the sun_prominences_magnetic_field_strength.md file, the magnetic field strength of the Sun's prominences is 10-100 Gauss.
--> Now, we can provide the magnetic field strength of the Sun's polar field, sunspots, and prominences as 1-2 Gauss, 3000 Gauss, and 10-100 Gauss respectively.
+-> To find the polar field's strength, look at sun_polar_field_magnetic_field_strength.md: 1-2 Gauss.
+-> To find the sunspots' strength, look at sun_sunspots_magnetic_field_strength.md: 3000 Gauss.
+-> To find the prominences' strength, look at sun_prominences_magnetic_field_strength.md: 10-100 Gauss.
 
 SOURCES CITED
-
 - sun_polar_field_magnetic_field_strength.md
 - sun_sunspots_magnetic_field_strength.md
 - sun_prominences_magnetic_field_strength.md
 
 FINAL ANSWER
-
 The magnetic field strength of the Sun's polar field is 1-2 Gauss, its sunspots is 3000 Gauss, and its prominences is 10-100 Gauss.
 ```
 
