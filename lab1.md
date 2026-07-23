@@ -421,7 +421,7 @@ This loop runs once for every fact. For each one, it cleans up the filename, wri
 
 ```python
 # Set the question you want to ask based on the PDF data
-user_query = "What is the magnetic field strength of the Sun's polar field, its sunspots, and its prominences?"
+user_query = "What is the central temperature of the Sun, what is the chemical composition of its photosphere, and what is the magnetic field strength of its sunspots?"
 
 print(f"Question: '{user_query}'")
 ```
