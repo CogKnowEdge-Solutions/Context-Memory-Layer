@@ -24,7 +24,7 @@ This is useful for:
 
 | Item | Detail |
 |------|--------|
-| **The PDF** | A source document made up of many small facts (used here: NASA's Sun Fact Sheet), downloaded automatically from a link |
+| **The PDF** | A source document made up of many small, distinct facts, downloaded automatically from a link |
 | **Your question** | A natural-language question about something in the document |
 | **AWS Bedrock Credentials** | Access Key ID, Secret Access Key, Endpoint URL, Region — used to call the LLM |
 
@@ -36,7 +36,7 @@ This is useful for:
 
 ```mermaid
 flowchart LR
-    A["Messy PDF<br/>SunFactSheet.pdf"] --> B["Extract raw text<br/>using PyPDF2"]
+    A["Messy PDF<br/>your_document.pdf"] --> B["Extract raw text<br/>using PyPDF2"]
     B --> C["Send text to the LLM<br/>with strict instructions"]
     C --> D{"Valid JSON<br/>returned?"}
     D -- No --> E["Print error<br/>concepts = empty list"]
@@ -106,11 +106,11 @@ The index doesn't hold any facts itself — just one short line per file, its fi
 **Building the knowledge base** prints one line per fact it saved:
 
 ```
-Created: sun_mass.md
-Created: earth_mass.md
-Created: sun_to_earth_mass_ratio.md
+Created: fact_one.md
+Created: fact_two.md
+Created: fact_three.md
 ...
-Created: sun_photosphere_composition.md
+Created: fact_n.md
 ```
 
 Alongside this, an `output_wiki/` folder is created, with one file per fact and one `index.md` listing all of them.
@@ -118,32 +118,32 @@ Alongside this, an `output_wiki/` folder is created, with one file per fact and 
 **Querying the knowledge base** prints the question, which files were picked, and a full explanation of how the answer was reached:
 
 ```
-Question: 'What is the magnetic field strength of the Sun's polar field, its sunspots, and its prominences?'
+Question: '<your question>'
 
 Phase 1: Asking the LLM to review index.md and select relevant files...
-Success! The LLM requested 3 file(s):
- - sun_polar_field_magnetic_field_strength.md
- - sun_sunspots_magnetic_field_strength.md
- - sun_prominences_magnetic_field_strength.md
+Success! The LLM requested N file(s):
+ - relevant_file_1.md
+ - relevant_file_2.md
+ - relevant_file_3.md
 
 Phase 2: Sending the selected file contents to generate the final answer...
 
 EXPLAINABILITY TRACE
 
--> To find the polar field's strength, look at sun_polar_field_magnetic_field_strength.md: 1-2 Gauss.
--> To find the sunspots' strength, look at sun_sunspots_magnetic_field_strength.md: 3000 Gauss.
--> To find the prominences' strength, look at sun_prominences_magnetic_field_strength.md: 10-100 Gauss.
+-> Reasoning step 1, pointing to a specific file and fact.
+-> Reasoning step 2, pointing to a specific file and fact.
+-> Reasoning step 3, pointing to a specific file and fact.
 
 SOURCES CITED
-- sun_polar_field_magnetic_field_strength.md
-- sun_sunspots_magnetic_field_strength.md
-- sun_prominences_magnetic_field_strength.md
+- relevant_file_1.md
+- relevant_file_2.md
+- relevant_file_3.md
 
 FINAL ANSWER
-The magnetic field strength of the Sun's polar field is 1-2 Gauss, its sunspots is 3000 Gauss, and its prominences is 10-100 Gauss.
+The direct answer, built from the facts in the cited files.
 ```
 
-Notice that only the three files actually relevant to the question were picked — nothing more, nothing less — and the final answer can be traced straight back to those same three files.
+Notice that only the files actually relevant to the question get picked — nothing more, nothing less — and the final answer can be traced straight back to those same files.
 
 ---
 
@@ -421,7 +421,7 @@ This loop runs once for every fact. For each one, it cleans up the filename, wri
 
 ```python
 # Set the question you want to ask based on the PDF data
-user_query = "What is the central temperature of the Sun, what is the chemical composition of its photosphere, and what is the magnetic field strength of its sunspots?"
+user_query = "What is the magnetic field strength of the Sun's polar field, its sunspots, and its prominences?"
 
 print(f"Question: '{user_query}'")
 ```
