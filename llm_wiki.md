@@ -211,6 +211,9 @@ import PyPDF2
 from dotenv import load_dotenv
 from langchain_aws import ChatBedrockConverse
 import requests
+
+# --- ALTERNATIVE: If using Azure OpenAI instead of AWS Bedrock, uncomment the line below ---
+# from langchain_openai import AzureChatOpenAI
 ```
 
 | Import | Purpose |
@@ -233,12 +236,26 @@ os.environ["AWS_REGION"]            = "ap-south-1"
 
 print("AWS Bedrock credentials configured.")
 
+# --- ALTERNATIVE: If using Azure OpenAI instead of AWS Bedrock, comment out the AWS block
+# above and uncomment the two lines below (only the API key and endpoint are needed) ---
+# os.environ["AZURE_OPENAI_API_KEY"]  = "YOUR_AZURE_OPENAI_API_KEY"
+# os.environ["AZURE_OPENAI_ENDPOINT"] = "YOUR_AZURE_OPENAI_ENDPOINT"
+
 # Initialize the ChatBedrockConverse model
 llm = ChatBedrockConverse(
     model="global.amazon.nova-2-lite-v1:0",
     temperature=0.0,
     max_tokens=8000
 )
+
+# --- ALTERNATIVE: If using Azure OpenAI instead of AWS Bedrock, comment out the block above
+# and uncomment the block below ---
+# llm = AzureChatOpenAI(
+#     azure_deployment="gpt-5-mini",   # your Azure deployment name for gpt-5-mini
+#     api_version="2024-12-01-preview",
+#     temperature=0.0,
+#     max_tokens=8000
+# )
 ```
 
 This one LLM connection is reused for everything later in the notebook — extracting facts, picking relevant files, and answering the question.
