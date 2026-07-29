@@ -208,7 +208,6 @@ The explainability section always describes the exact chain of relationships use
 | **File Downloading** | `requests` — grabs the PDF from a link and saves it locally |
 | **Entity/Relationship Extraction** | LLM (`openai/gpt-oss-20b:free`) — reads text and returns structured triples |
 | **Graph Storage** | `NetworkX` (`DiGraph`) — stores entities as nodes and relationships as directed edges |
-| **Graph Visualization** | `matplotlib` — available for optionally drawing the graph |
 | **LLM (Answering)** | `openai/gpt-oss-20b:free` — answers using only the retrieved graph facts |
 | **Environment** | API key entered manually at runtime via `input()` |
 
@@ -245,12 +244,11 @@ The cell below installs all required Python packages:
 | `networkx` | **Graph storage** — builds and traverses the knowledge graph |
 | `requests` | **File downloading** and later calls to the LLM API |
 | `PyPDF2` | **PDF text extraction** — pulls raw text out of the PDF |
-| `matplotlib` | Available for optionally visualizing the graph |
 
 > **Note:** Run this cell first — it only needs to be run once per session.
 
 ```python
-!pip install networkx requests PyPDF2 matplotlib
+!pip install networkx requests PyPDF2 
 ```
 
 ## Import Libraries
@@ -261,7 +259,6 @@ import json
 import requests
 import PyPDF2
 import networkx as nx
-import matplotlib.pyplot as plt
 ```
 
 | Import | Purpose |
@@ -271,7 +268,6 @@ import matplotlib.pyplot as plt
 | `requests` | Downloads the PDF, and later calls the LLM API |
 | `PyPDF2` | Extracts raw text from the PDF |
 | `networkx` | Builds and traverses the knowledge graph |
-| `matplotlib.pyplot` | Available for optionally drawing the graph |
 
 ## Configure the LLM API Key
 
