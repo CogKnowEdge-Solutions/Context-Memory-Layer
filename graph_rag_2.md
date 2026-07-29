@@ -6,11 +6,11 @@
 
 A normal RAG pipeline finds chunks of text that are *similar* to a question and hands them to an LLM. But similarity isn't the same as connection — it can miss how one fact actually links to another, especially when the answer depends on following a chain of relationships rather than just matching keywords.
 
-The previous lab solved this by building a knowledge graph in memory, using NetworkX. That works well for a single notebook session, but the graph disappears the moment the notebook stops running, and there's no way to browse it visually or query it from outside Python.
+Building the knowledge graph purely in memory, using a library like NetworkX, works well for a single notebook session — but the graph disappears the moment the notebook stops running, and there's no way to browse it visually or query it from outside Python.
 
-This lab solves that by storing the same kind of knowledge graph inside **Neo4j**, a dedicated graph database. It reads a PDF, asks an LLM to pull out entities and how they relate to each other, and writes those relationships into Neo4j using **Cypher**, the query language Neo4j understands. When a question comes in, the pipeline searches the database for the right starting point, pulls out every directly connected fact using a Cypher query, and only then asks the LLM to answer — along with a clear, step-by-step trace of how it got there. Because the graph lives in a real database, it persists between sessions and can be opened and explored visually in the Neo4j browser.
+This document covers a version that solves that by storing the same kind of knowledge graph inside **Neo4j**, a dedicated graph database. It reads a PDF, asks an LLM to pull out entities and how they relate to each other, and writes those relationships into Neo4j using **Cypher**, the query language Neo4j understands. When a question comes in, the pipeline searches the database for the right starting point, pulls out every directly connected fact using a Cypher query, and only then asks the LLM to answer — along with a clear, step-by-step trace of how it got there. Because the graph lives in a real database, it persists between sessions and can be opened and explored visually in the Neo4j browser.
 
-**This lab has two connected parts:**
+**This pipeline has two connected parts:**
 
 1. **Building the knowledge graph** — turning raw PDF text into entities and relationships, and writing them into Neo4j.
 2. **Querying the graph** — asking a question, running Cypher queries to find connected facts, and getting a clear, explainable answer back from the LLM.
@@ -57,7 +57,7 @@ MERGE (s)-[:RELIES_ON]->(t)
 
 `MERGE` means "find this if it already exists, otherwise create it" — which is exactly what's needed when a graph is built up gradually from extracted facts, since the same entity can be mentioned more than once without creating duplicates.
 
-This lab uses **Neo4j Aura**, Neo4j's cloud-hosted version, so no local database installation is required. The Python code connects to it over the network using a URI, username, and password, in the same way a client connects to any remote database.
+This walkthrough uses **Neo4j Aura**, Neo4j's cloud-hosted version, so no local database installation is required. The Python code connects to it over the network using a URI, username, and password, in the same way a client connects to any remote database.
 
 ---
 
@@ -191,7 +191,7 @@ flowchart LR
     classDef hop fill:#ffe08a,stroke:#d68f00,stroke-width:2px,color:#1a1a1a;
 ```
 
-The question mentions "Transformer," so the Cypher query is run with `Transformer` as the starting node. Unlike the in-memory version, which could walk two hops outward, this Neo4j version's query pulls back only the **direct** neighbors of the matched node — Attention Mechanism, Encoder, Decoder, and Positional Encoding — in a single query, using the pattern `(n:Concept {name: $name})-[r]-(m:Concept)`. Each of those connections is already enough context: the direct relationship `Transformer --[RELIES_ON]--> Attention Mechanism` answers the question outright.
+The question mentions "Transformer," so the Cypher query is run with `Transformer` as the starting node. This query pulls back only the **direct** neighbors of the matched node — Attention Mechanism, Encoder, Decoder, and Positional Encoding — in a single step, using the pattern `(n:Concept {name: $name})-[r]-(m:Concept)`. Each of those connections is already enough context: the direct relationship `Transformer --[RELIES_ON]--> Attention Mechanism` answers the question outright.
 
 Every row the query returns gets turned into a simple, plain-English fact — the kind of sentence a person would say out loud, like "Transformer relies on the Attention Mechanism." All of these facts are then handed to the LLM together with the original question, and it picks out the one that actually answers it: *"The Transformer relies on the Attention Mechanism."*
 
@@ -280,7 +280,7 @@ The explainability section always describes the exact chain of relationships use
 
 **Entity & Relationship Extraction** means asking an LLM to read plain text and identify the "who/what" (entities) and "how they connect" (relationships), turning unstructured text into structured `source -> relation -> target` triples.
 
-**Graph Traversal** is the act of starting at one node and following its relationships outward to discover what's connected to it. In this lab, the Cypher query pulls back every relationship directly attached to the matched node in a single step.
+**Graph Traversal** is the act of starting at one node and following its relationships outward to discover what's connected to it. Here, the Cypher query pulls back every relationship directly attached to the matched node in a single step.
 
 **Graph RAG** stands for **Graph-based Retrieval-Augmented Generation** — instead of retrieving similar-looking text chunks, the relevant *connected facts* are retrieved from the graph first, and the LLM is asked to answer using only those facts, with a clear trace of which relationships were followed.
 
@@ -294,6 +294,25 @@ The explainability section always describes the exact chain of relationships use
 - **An LLM API Key** — used to call the LLM for extraction and answering.
 - **A Neo4j Aura instance** — a free cloud instance can be created at [neo4j.com/aura](https://neo4j.com/aura), which provides the URI, username, and password needed below.
 - **High-level understanding** of what a knowledge graph and RAG are (covered above).
+
+---
+
+# Getting Neo4j Credentials
+
+The pipeline needs three values to connect to Neo4j: a **URI**, a **username**, and a **password**. Here's how to get all three from a free Neo4j Aura instance:
+
+1. Go to [neo4j.com/aura](https://neo4j.com/aura) and sign up, or log in if an account already exists.
+2. From the Aura console, click **Create instance** and choose the **free tier**.
+3. Give the instance a name and confirm creation. Aura will generate the database and show a screen with the connection details.
+4. On that screen, **download or copy the generated password immediately** — Aura shows it only once. If it's missed, the password has to be reset from the instance's settings page.
+5. Once the instance finishes provisioning (usually under a minute), open it from the console. The **Connection URI** is shown on the instance's overview page, and typically looks like:
+   ```
+   neo4j+s://xxxxxxxx.databases.neo4j.io
+   ```
+6. The **username** is `neo4j` by default unless it was changed during setup.
+7. Store all three values — URI, username, password — as environment variables (`NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`) rather than pasting them directly into the notebook, so they aren't exposed if the file is shared.
+
+Once these three values are set, the driver connection shown in the next section will pick them up automatically.
 
 ---
 
@@ -350,7 +369,7 @@ driver.verify_connectivity()
 print("Success: Connected to Neo4j Database!")
 ```
 
-> **Note:** Credentials are read from environment variables here rather than typed directly into the notebook, so the Neo4j password and LLM API key are never stored in plain text inside the file itself. `verify_connectivity()` immediately checks that the URI, username, and password are correct, so any connection problem is caught before the rest of the notebook runs.
+> **Note:** Replace `"your-api-key"`, `"YOUR-NEO4J_URI"`, `"YOUR-NEO4J_USER"`, and `"YOUR-NEO4J_PASSWORD"` with the actual values from the LLM provider and the Neo4j Aura instance created earlier. To avoid pasting these directly into the notebook, they can instead be loaded with `os.getenv("VARIABLE_NAME")` after setting them as environment variables — for example, `OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")` — which keeps the actual credentials out of the file itself. `verify_connectivity()` immediately checks that the URI, username, and password are correct, so any connection problem is caught before the rest of the notebook runs.
 
 ---
 
@@ -629,7 +648,7 @@ widget.show_cypher("MATCH (n)-[r]->(m) RETURN n, r, m")
 
 # What We Learnt
 
-By the end of this lab, a PDF has been turned into a knowledge graph — built automatically from LLM-based entity extraction, and written into a real graph database rather than held in memory. That graph is then queried end-to-end using Cypher: a question is matched to a node, its connected facts are pulled directly from Neo4j, and a final answer is produced along with a visible, step-by-step trail of how it was reached.
+By the end of this walkthrough, a PDF has been turned into a knowledge graph — built automatically from LLM-based entity extraction, and written into a real graph database rather than held in memory. That graph is then queried end-to-end using Cypher: a question is matched to a node, its connected facts are pulled directly from Neo4j, and a final answer is produced along with a visible, step-by-step trail of how it was reached.
 
 **Key takeaways:**
 - **Graphs capture connections that plain text search can miss** — following an actual relationship path can answer questions that simple keyword or similarity matching would struggle with.
