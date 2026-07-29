@@ -335,14 +335,14 @@ from neo4j import GraphDatabase
 
 ```python
 # --- LLM Configuration ---
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_API_KEY = "your-api-key"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 TEXT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
 
 # --- Neo4j Aura Configuration ---
-NEO4J_URI = os.getenv("NEO4J_URI")
-NEO4J_USER = os.getenv("NEO4J_USER")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
+NEO4J_URI = "YOUR-NEO4J_URI"
+NEO4J_USER = "YOUR-NEO4J_USER"
+NEO4J_PASSWORD = "YOUR-NEO4J_PASSWORD"
 
 # Open a persistent connection to the database
 driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
