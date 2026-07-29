@@ -460,6 +460,7 @@ def traverse_subgraph(graph, start_entity, radius=2):
         return []
 
     target_node = matching_nodes[0]
+    # BFS out to `radius` hops to pull in a local neighborhood of the entity
     sub_nodes = nx.single_source_shortest_path_length(graph, target_node, cutoff=radius).keys()
     subgraph = graph.subgraph(sub_nodes)
 
@@ -483,6 +484,7 @@ This step ties everything together: find the entity, gather its connected facts,
 def execute_graph_rag(question):
     """A fully generalized Graph RAG pipeline."""
 
+    # Step 1: Identify which known graph entity the question refers to
     target_entity = find_node_in_question(question, G)
 
     if not target_entity:
@@ -490,12 +492,14 @@ def execute_graph_rag(question):
 
     print(f"[System Log] Auto-detected focus concept: '{target_entity}'")
 
+    # Step 2: Retrieve connected facts (subgraph) around the detected entity
     retrieved_facts = traverse_subgraph(G, target_entity, radius=2)
     if not retrieved_facts:
         return f"Found the concept '{target_entity}', but no relationships are connected to it."
 
     facts_block = "\n".join([f"- {f}" for f in retrieved_facts])
 
+    # Step 3: Build a grounded prompt so the LLM answers only from retrieved graph facts
     prompt = f"""
     You are an expert AI research assistant using a Knowledge Graph.
     Answer the question using ONLY the connected relationship paths provided below.
@@ -522,6 +526,7 @@ def execute_graph_rag(question):
     }
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}"}
 
+    # Step 4: Call the LLM and return its answer
     try:
         resp = requests.post(OPENROUTER_URL, headers=headers, json=payload)
         resp.raise_for_status()
