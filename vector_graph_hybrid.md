@@ -73,16 +73,16 @@ This diagram shows what happens at question time: the question itself is embedde
 
 ### Building a Sample Graph, With Embeddings
 
-Before any question can be asked, the document has to actually turn into a graph with vectors sitting on it. Here's what that looks like for a few facts pulled from the Transformer paper:
+Before any question can be asked, the document has to actually turn into a graph with vectors sitting on it. Here's what that looks like using a few generic stand-in concepts:
 
-**Step 1 — the document goes in, and the LLM pulls out nodes and relationships:**
+**Step 1 — the document goes in, and the LLM reads it to identify individual entities:**
 
 ```mermaid
 flowchart LR
     Doc["Document text<br/>(PDF)"] --> LLM["LLM extraction"]
-    LLM --> N1["Sequence Transduction<br/>Models"]
-    LLM --> N2["Recurrent Neural<br/>Networks"]
-    LLM --> N3["Encoder"]
+    LLM --> N1["Concept 1"]
+    LLM --> N2["Concept 2"]
+    LLM --> N3["Concept 3"]
 
     classDef docStyle fill:#fff3cd,stroke:#d68f00,stroke-width:1px,color:#1a1a1a
     classDef nodeStyle fill:#e7f1ff,stroke:#1d6fa5,stroke-width:1px,color:#0b1f33
@@ -90,18 +90,20 @@ flowchart LR
     class N1,N2,N3 nodeStyle
 ```
 
-**Step 2 — those nodes and relationships are written into Neo4j, forming the graph:**
+At this point, the LLM has only picked out *what the entities are* — it hasn't yet said how they relate to each other, which is why the three boxes above aren't connected to one another. That's why they're drawn separately, each pointing back to the extraction step rather than to each other.
+
+**Step 2 — the LLM also identifies how those entities relate to each other, and everything is written into Neo4j — now the connections appear:**
 
 ```mermaid
 graph LR
-    N1["Sequence Transduction<br/>Models"]
-    N2["Recurrent Neural<br/>Networks"]
-    N3["Encoder"]
-    N4["Decoder"]
+    N1["Concept 1"]
+    N2["Concept 2"]
+    N3["Concept 3"]
+    N4["Concept 4"]
 
-    N1 -->|BASED_ON| N2
-    N1 -->|INCLUDES| N3
-    N1 -->|INCLUDES| N4
+    N1 -->|RELATION_A| N2
+    N1 -->|RELATION_B| N3
+    N1 -->|RELATION_B| N4
 
     classDef nodeStyle fill:#e7f1ff,stroke:#1d6fa5,stroke-width:1px,color:#0b1f33
     class N1,N2,N3,N4 nodeStyle
@@ -111,14 +113,14 @@ graph LR
 
 ```mermaid
 graph LR
-    N1["Sequence Transduction Models<br/>embedding: [0.02, -0.11, ...]"]
-    N2["Recurrent Neural Networks<br/>embedding: [0.08, 0.04, ...]"]
-    N3["Encoder<br/>embedding: [-0.05, 0.19, ...]"]
-    N4["Decoder<br/>embedding: [-0.06, 0.17, ...]"]
+    N1["Concept 1<br/>embedding: [0.02, -0.11, ...]"]
+    N2["Concept 2<br/>embedding: [0.08, 0.04, ...]"]
+    N3["Concept 3<br/>embedding: [-0.05, 0.19, ...]"]
+    N4["Concept 4<br/>embedding: [-0.06, 0.17, ...]"]
 
-    N1 -->|BASED_ON| N2
-    N1 -->|INCLUDES| N3
-    N1 -->|INCLUDES| N4
+    N1 -->|RELATION_A| N2
+    N1 -->|RELATION_B| N3
+    N1 -->|RELATION_B| N4
 
     classDef vecStyle fill:#e9f9ee,stroke:#2f8d46,stroke-width:2px,color:#0b3d2e
     class N1,N2,N3,N4 vecStyle
@@ -128,25 +130,41 @@ The graph itself doesn't change shape in this last step — no new nodes or rela
 
 ### How One Hybrid Query Finds Its Answer
 
-The real strength of this approach is that vector search and graph traversal happen inside a **single Cypher query**, not two separate steps. Here's what that looks like for the question *"What models or mechanisms are discussed in the document?"*
+The real strength of this approach is that vector search and graph traversal happen inside a **single Cypher query**, not two separate steps. Here's what that looks like for the question *"What models or mechanisms are discussed in the document?"* — using the actual seed nodes and relationships this query returned:
 
 ```mermaid
 flowchart LR
     Qv["question vector"] --> Idx["vector index:<br/>concept_embeddings"]
-    Idx -->|closest match, score 0.68| Seed["Sequence Transduction Models"]
 
-    Seed -->|BASED_ON| RNN["Recurrent Neural Networks"]
-    Seed -->|BASED_ON| CNN["Convolutional Neural Networks"]
-    Seed -->|INCLUDES| Enc["Encoder"]
-    Seed -->|INCLUDES| Dec["Decoder"]
+    Idx -->|closest match, score 0.68| Seed1["Sequence Transduction Models"]
+    Idx -->|second closest, score 0.65| Seed2["Google Research"]
+
+    Seed1 -->|BASED_ON| N1["Recurrent Neural Networks"]
+    Seed1 -->|BASED_ON| N2["Convolutional Neural Networks"]
+    Seed1 -->|INCLUDES| N3["Encoder"]
+    Seed1 -->|INCLUDES| N4["Decoder"]
+    Seed2 -->|AUTHORS_AFFILIATED_WITH| N5["Attention Is All You Need"]
+
+    N1 --> Merge["All 5 facts merged<br/>into one context block"]
+    N2 --> Merge
+    N3 --> Merge
+    N4 --> Merge
+    N5 --> Merge
+
+    Merge --> LLM["LLM"]
+    LLM --> Final["Final Answer"]
 
     classDef seedStyle fill:#ffe08a,stroke:#d68f00,stroke-width:2px,color:#1a1a1a
-    classDef neighborStyle fill:#e7f1ff,stroke:#1d6fa5,stroke-width:1px,color:#0b1f33
-    class Seed seedStyle
-    class RNN,CNN,Enc,Dec neighborStyle
+    classDef traversedStyle fill:#e7f1ff,stroke:#1d6fa5,stroke-width:1px,color:#0b1f33
+    classDef mergeStyle fill:#e9f9ee,stroke:#2f8d46,stroke-width:2px,color:#0b3d2e
+    class Seed1,Seed2 seedStyle
+    class N1,N2,N3,N4,N5 traversedStyle
+    class Merge,LLM,Final mergeStyle
 ```
 
-The vector index doesn't return an exact keyword match — it returns the node whose stored vector is *closest in meaning* to the question, along with a similarity score between 0 and 1. In this case, "Sequence Transduction Models" scores 0.68 as the closest seed. The same Cypher query then immediately expands outward from that seed to whatever it's directly connected to, so the final result isn't just one node — it's the seed plus its relationships, all pulled back together in one pass.
+The vector index doesn't return an exact keyword match — it returns the nodes whose stored vectors are *closest in meaning* to the question, each with a similarity score between 0 and 1. Since `top_k` was set to more than one, two seeds came back here: "Sequence Transduction Models" at 0.68, and "Google Research" at 0.65.
+
+From "Sequence Transduction Models," the query doesn't pick just one connected node — it follows **every** direct connection at once: Recurrent Neural Networks, Convolutional Neural Networks, Encoder, and Decoder are all pulled in together, which is why all four are highlighted in blue. The same happens from "Google Research," which pulls in "Attention Is All You Need." None of these five facts is skipped or chosen over another — all five get combined into a single block of context, which is what actually gets handed to the LLM. The LLM then reads that combined context and produces the one final answer shown earlier in the Output section.
 
 ---
 
