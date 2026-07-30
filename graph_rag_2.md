@@ -325,11 +325,12 @@ The cell below installs all required Python packages:
 | `neo4j` | **Database driver** — connects to Neo4j Aura and runs Cypher queries |
 | `requests` | **File downloading** and later calls to the LLM API |
 | `PyPDF2` | **PDF text extraction** — pulls raw text out of the PDF |
+| `yfiles-jupyter-graphs-for-neo4j` | **Graph visualization** — renders the Neo4j graph as an interactive widget inside the notebook |
 
 > **Note:** Run this cell first — it only needs to be run once per session.
 
 ```python
-!pip install neo4j requests PyPDF2
+!pip install neo4j requests PyPDF2 yfiles-jupyter-graphs-for-neo4j
 ```
 
 ## Import Libraries
