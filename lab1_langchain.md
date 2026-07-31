@@ -350,7 +350,7 @@ embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
 ---
 
-### Step 3 — Initialize Storage Architecture
+### Step 3 — Initialize Storage Architecture or Use Existing if already made
 
 ```python
 # Qdrant Cloud holds the child & summary VECTORS (the semantic search index)
@@ -367,7 +367,22 @@ store = InMemoryByteStore()
 id_key = "doc_id"
 ```
 
+```python
+# Use this instead of the cell above ONLY if you already ran this notebook before and the vectors already exist in Qdrant. Comment out the cell above and uncomment this one.
+# vectorstore = QdrantVectorStore.from_existing_collection(
+#     embedding=embeddings,
+#     url="your-endpoint",
+#     api_key="your-api-key",
+#     collection_name="multi_vector_collection"
+# )
+#
+# store = InMemoryByteStore()
+# id_key = "doc_id"
+```
+
 This cell connects the pipeline to Qdrant Cloud and sets up the storage that backs the multi-vector retriever. `QdrantVectorStore.from_texts(...)` opens — or creates, if it doesn't already exist — a Qdrant collection named `multi_vector_collection` on the cluster at the given `url`, authenticating with the cluster's `api_key`. The `texts=["Initialize"]` argument seeds the collection with one throwaway vector, purely so the collection is created before the real documents are added later. The `embedding=embeddings` argument tells Qdrant which embedding model produced the vectors being stored. `store` is an `InMemoryByteStore` that will hold the full parent documents, and `id_key = "doc_id"` names the metadata field that will link every vector back to its parent.
+
+The second cell is the alternative for when the collection is **already stored in the cloud** — for example, from a previous run of this notebook. `QdrantVectorStore.from_existing_collection(...)` connects to that existing `multi_vector_collection` using the same `url` and `api_key`, without creating a new one or re-seeding it. It sets up the exact same `store` and `id_key`, so nothing downstream changes. This cell is **commented out by default** because the first-time setup needs to create the collection; only use it if you already ran the notebook before, in which case you comment out the cell above and uncomment this one.
 
 ---
 
@@ -422,9 +437,15 @@ A `chunk_size` of 10,000 characters is large enough to hold several paragraphs o
 child_splitter = RecursiveCharacterTextSplitter(chunk_size=400, chunk_overlap=50)
 child_docs = []
 
+import hashlib
+
+def stable_id(text):
+    """Deterministic ID derived from the chunk text, so the same chunk always gets the same ID across runs."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
 for doc in parent_docs:
-    # Give each parent a unique ID, then tag every child with that same ID
-    _id = str(uuid.uuid4())
+    # Give each parent a stable ID, then tag every child with that same ID
+    _id = stable_id(doc.page_content)
     doc.metadata["doc_id"] = _id
     
     child_splits = child_splitter.split_documents([doc])
@@ -436,7 +457,7 @@ for doc in parent_docs:
 print(f"Created {len(child_docs)} Child Documents.")
 ```
 
-This is where the link between parents and children is actually created: a fresh `uuid` is generated for each parent, stamped onto the parent itself, and then copied onto every child cut out of it. By the end of this step, every parent has a unique `doc_id`, and every one of its children carries that exact same ID in its metadata.
+This is where the link between parents and children is actually created: instead of a random `uuid`, each parent gets a deterministic ID derived from its own text. The `stable_id(text)` helper hashes the chunk content with SHA-256, so the same chunk always produces the same `doc_id` — even across different runs of the notebook. That ID is stamped onto the parent itself and then copied onto every child cut out of it. By the end of this step, every parent has a stable `doc_id`, and every one of its children carries that exact same ID in its metadata.
 
 ---
 
@@ -490,7 +511,7 @@ retriever = MultiVectorRetriever(
 # Store the full parent Documents in the docstore (auto-serialized into the ByteStore)
 retriever.docstore.mset([(doc.metadata[id_key], doc) for doc in parent_docs])
 
-# Embed the children and summaries into Qdrant; all point to a parent via doc_id
+# First-time setup: uploads vectors to Qdrant. If you already ran this notebook before and data already exists in Qdrant, comment out these two lines to avoid uploading duplicates.
 retriever.vectorstore.add_documents(child_docs)
 retriever.vectorstore.add_documents(summary_docs)
 
