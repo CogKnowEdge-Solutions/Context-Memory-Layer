@@ -30,6 +30,7 @@ This is useful for:
 | **Your question** | A natural-language question about the document |
 | **LLM API Key** | Used to generate summaries and the final answer |
 | **Embedding model** | Runs locally — no API key needed, downloaded automatically the first time it's used |
+| **Qdrant Cloud cluster (URL + API key)** | Hosts the vector store that holds the child and summary embeddings |
 
 ---
 
@@ -135,6 +136,20 @@ flowchart TB
 
 ---
 
+# Qdrant Overview
+
+**What is Qdrant?**
+
+Qdrant is an open-source vector database — a database built specifically for storing embeddings (the numeric vectors that represent text) and for finding the ones closest to a query vector. Instead of matching exact text, it measures how semantically similar vectors are, so a question phrased differently from the stored text can still find the right content. In this lab, Qdrant is the search layer: it stores the small child chunks and the summaries as vectors, so a question can quickly retrieve the best matches before the retriever swaps them for their full parent documents.
+
+The connection is made in Step 3, where `QdrantVectorStore.from_texts(...)` takes three pieces of information:
+
+- `url` — the address of your Qdrant Cloud cluster, i.e. where the vectors live.
+- `api_key` — the secret key that authorizes your code to read from and write to that cluster.
+- `collection_name` — the name of the "collection" (a Qdrant collection is roughly a table of vectors) that stores the children and summaries.
+
+---
+
 # Output
 
 **Extracting the document** prints the total character count:
@@ -171,18 +186,14 @@ Multi-vector search index ready.
 
 ```
 ### Final Answer
-A self-attention layer has a per-layer computational complexity of
-O(n²·d), whereas a recurrent layer has a complexity of O(n·d²).
+A self-attention layer has a per-layer computational complexity of **O(n² · d)**, whereas a recurrent layer has a complexity of **O(n · d²)**. Thus, self-attention scales quadratically with sequence length but linearly with representation dimension, while recurrent layers scale linearly with sequence length but quadratically with representation dimension.
 
 ### AI Tracing & Explainability
-I extracted the complexity figures from Table 1 in the provided context.
-- The table lists "Self-Attention" with complexity O(n² · d).
-- It lists "Recurrent" with complexity O(n · d²).
+I extracted the complexity figures from Table 1 in the provided context. The table lists:
+- **Self-Attention**: complexity per layer = **O(n² · d)**.
+- **Recurrent**: complexity per layer = **O(n · d²)**.
 
-These expressions directly answer the question by comparing the two layer
-types. The context also notes that self-attention is faster than recurrent
-when the sequence length n is smaller than the representation dimension d,
-but the core comparison is the two Big-O terms above.
+These entries directly answer the question by comparing the two mechanisms. No additional text was copied; I simply referenced the table's values and explained the scaling relationship.
 ```
 
 Notice the explainability trace references a specific table from the source document — something only visible because the full parent chunk (not just a small child fragment) was passed to the LLM as context.
@@ -198,7 +209,7 @@ Notice the explainability trace references a specific table from the source docu
 | **Text Splitting** | `langchain-text-splitters` (`RecursiveCharacterTextSplitter`) — used twice, once for large parent chunks and once for small child chunks |
 | **Summarization** | LLM (`openai/gpt-oss-20b:free`), via an LCEL chain built with `langchain-core` |
 | **Embedding Model** | `sentence-transformers` / `all-MiniLM-L6-v2`, via `langchain-huggingface` — runs locally |
-| **Vector Store** | `Qdrant`, via `langchain-qdrant` — an in-memory vector database holding only the children and summaries |
+| **Vector Store** | `Qdrant` Cloud, via `langchain-qdrant` — a hosted vector database holding only the children and summaries, accessed with a cluster `url` and `api_key` |
 | **Document Store** | `InMemoryByteStore` — holds the full parent documents, keyed by ID |
 | **Retrieval Logic** | `MultiVectorRetriever`, from `langchain-classic` — searches the vector store, then swaps each match for its linked parent |
 | **Prompt & Chain Orchestration** | `langchain-core` — `ChatPromptTemplate`, `RunnablePassthrough`, `RunnableParallel`, and `StrOutputParser`, chained together with the `\|` operator |
@@ -229,18 +240,19 @@ Notice the explainability trace references a specific table from the source docu
 - **Basic familiarity** with Python (functions, loops, `import` statements).
 - **A general sense of what RAG and embeddings are** — retrieving relevant text using vector similarity before asking an LLM to answer.
 - **An LLM API Key** — used for summarization and for generating the final answer.
+- **A Qdrant Cloud cluster** — you'll need its URL and API key to host the vector store (see "Getting Qdrant Credentials" below).
 
 ---
 
-# Getting an OpenRouter API Key
+# Getting Qdrant Credentials
 
-1. Go to [openrouter.ai](https://openrouter.ai) and sign up, or log in if an account already exists.
-2. From the dashboard, open the **Keys** section.
-3. Click **Create Key**, give it a name, and confirm.
-4. **Copy the key immediately** — it's shown in full only once. If it's missed, a new key has to be created.
-5. Store the key as an environment variable (`OPENROUTER_API_KEY`) rather than pasting it directly into the notebook, so it isn't exposed if the file is shared.
+1. Go to [cloud.qdrant.io](https://cloud.qdrant.io) and sign up, or log in if you already have an account.
+2. Click **Create Cluster** to set up a new cluster. A free tier is available for testing and is enough for this lab.
+3. Choose a cloud provider and region, give the cluster a name, and confirm. Creating it takes a minute or two while the cluster provisions.
+4. Once the cluster is ready, open its **Overview** page and copy the **Cluster URL** — it looks like `https://<cluster-id>.cloud.qdrant.io:6333`. This value replaces the `"your-endpoint"` placeholder in Step 3.
+5. Open the cluster's **Access Control** (or **API Keys**) tab. Copy the existing API key, or create a new one. This value replaces the `"your-api-key"` placeholder in Step 3.
 
-Once the key is set, the LLM configuration in the next section will pick it up automatically.
+> **Tip:** Keep the key out of the notebook itself by loading it from an environment variable, e.g. `api_key=os.getenv("QDRANT_API_KEY")`, so it isn't exposed if the file is shared.
 
 ---
 
@@ -338,7 +350,28 @@ embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
 ---
 
-### Step 3 — Download & Extract Document
+### Step 3 — Initialize Storage Architecture
+
+```python
+# Qdrant Cloud holds the child & summary VECTORS (the semantic search index)
+vectorstore = QdrantVectorStore.from_texts(
+    texts=["Initialize"], 
+    embedding=embeddings, 
+    url="your-endpoint",
+    api_key="your-api-key",
+    collection_name="multi_vector_collection"
+)
+
+# Will hold the full parent documents, keyed by doc_id, once the retriever wraps it
+store = InMemoryByteStore()
+id_key = "doc_id"
+```
+
+This cell connects the pipeline to Qdrant Cloud and sets up the storage that backs the multi-vector retriever. `QdrantVectorStore.from_texts(...)` opens — or creates, if it doesn't already exist — a Qdrant collection named `multi_vector_collection` on the cluster at the given `url`, authenticating with the cluster's `api_key`. The `texts=["Initialize"]` argument seeds the collection with one throwaway vector, purely so the collection is created before the real documents are added later. The `embedding=embeddings` argument tells Qdrant which embedding model produced the vectors being stored. `store` is an `InMemoryByteStore` that will hold the full parent documents, and `id_key = "doc_id"` names the metadata field that will link every vector back to its parent.
+
+---
+
+### Step 4 — Download & Extract Document
 
 ```python
 # Attention is All You Need paper (source document for this lab)
@@ -365,7 +398,7 @@ Unlike the shorter previews used in some other pipelines, this step reads every 
 
 ---
 
-### Step 4 — Generate Parent Documents
+### Step 5 — Generate Parent Documents
 
 ```python
 # Parent chunks are LARGE (~10k chars) so the LLM has full context to answer from
@@ -382,7 +415,7 @@ A `chunk_size` of 10,000 characters is large enough to hold several paragraphs o
 
 ---
 
-### Step 5 — Generate Child Documents
+### Step 6 — Generate Child Documents
 
 ```python
 # Child chunks are SMALL (~400 chars) so they embed precisely for semantic search
@@ -407,7 +440,7 @@ This is where the link between parents and children is actually created: a fresh
 
 ---
 
-### Step 6 — Define and Execute Summarization Pipeline
+### Step 7 — Define and Execute Summarization Pipeline
 
 ```python
 # Prompt: compress a parent chunk into a short summary while keeping key terms
@@ -444,27 +477,6 @@ print(f"Generated {len(summary_docs)} Summaries.")
 
 ---
 
-### Step 7 — Initialize Storage Architecture
-
-```python
-# In-memory Qdrant holds the child & summary VECTORS (the semantic search index)
-vectorstore = QdrantVectorStore.from_texts(
-    # Dummy seed text — Qdrant needs at least one vector to create the collection
-    texts=["Initialize"], 
-    embedding=embeddings, 
-    location=":memory:",
-    collection_name="multi_vector_collection"
-)
-
-# Will hold the full parent documents, keyed by doc_id, once the retriever wraps it
-store = InMemoryByteStore()
-id_key = "doc_id"
-```
-
-Qdrant needs at least one vector before its collection technically exists, which is why a throwaway `"Initialize"` text is embedded first, purely to create the collection — it plays no role in retrieval afterward. `store` is where the full parent documents will actually live, and `id_key` names the metadata field — `doc_id` — that links everything together.
-
----
-
 ### Step 8 — Configure Multi-Vector Retriever
 
 ```python
@@ -485,7 +497,7 @@ retriever.vectorstore.add_documents(summary_docs)
 print("Multi-vector search index ready.")
 ```
 
-This is where the two storage systems set up in Step 7 are wired together into one retriever. `retriever.docstore.mset(...)` saves every parent, keyed by its `doc_id`, into the byte store. `add_documents` then embeds the children and summaries into Qdrant, each still carrying the `doc_id` that connects it back to its parent. `search_kwargs={"k": 2}` means every query returns the top 2 closest matches, whether those happen to be children, summaries, or a mix of both.
+This is where the two storage systems set up in Step 3 are wired together into one retriever. `retriever.docstore.mset(...)` saves every parent, keyed by its `doc_id`, into the byte store. `add_documents` then embeds the children and summaries into Qdrant, each still carrying the `doc_id` that connects it back to its parent. `search_kwargs={"k": 2}` means every query returns the top 2 closest matches, whether those happen to be children, summaries, or a mix of both.
 
 ---
 
