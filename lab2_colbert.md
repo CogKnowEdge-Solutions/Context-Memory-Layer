@@ -8,7 +8,13 @@ In standard RAG, every text chunk is squeezed into a single dense vector. That w
 
 ColBERT takes a completely different approach. Instead of keeping **one vector per chunk**, it keeps **one vector per TOKEN**. This means every single word in the chunk gets its own separate vector, so the fine-grained meaning of every word is preserved. Nothing gets averaged out.
 
-But keeping a vector per token creates a new problem: how do you compare two sets of vectors? This is solved with **MaxSim (late interaction)**. When a question arrives, every query token vector is compared against every document token vector. For each query token, we take the **maximum** similarity score across all document tokens. Then we add up all those maxima to get one final score for the chunk. This rewards a chunk for having individual tokens that strongly match specific query tokens — not just for being broadly similar overall.
+But keeping a vector per token creates a new problem: how do you compare two sets of vectors? This is solved with **MaxSim** — short for **Max**imum **Sim**ilarity — the "late interaction" method ColBERT uses. MaxSim is just one three-step rule:
+
+1. Compare **every** query token against **every** document token.
+2. For each query token, keep only its single **maximum** (best) score — the one document token it matched most strongly.
+3. **Add** those maxima together to get one final score for the chunk.
+
+A chunk scores well when a few of its tokens match the query's tokens very precisely, even if the rest of the chunk is unrelated. Whenever you see "MaxSim" later in this document, it always means this same three-step rule.
 
 **This pipeline has four connected parts:**
 
@@ -98,39 +104,42 @@ In standard RAG, a chunk with many ideas gets flattened into one averaged number
 
 ### How MaxSim Scoring Works
 
-MaxSim compares every query token to every document token, keeps the best match for each query token, then adds them up:
+In plain words, MaxSim = **Max**imum **Sim**ilarity, and it answers one question: *"How strongly do my question's words match the best words in this chunk?"* It runs in three steps:
+
+1. **Score every pair** — each query token is compared with each document token, producing one similarity score for every combination.
+2. **Pick each query token's best** — for every query token, keep only the single highest score.
+3. **Sum the best scores** — add those winners together. The total is the chunk's MaxSim score.
+
+**Analogy:** the query is a list of clues, and the chunk is a shelf of words. Each clue finds the single word on the shelf it matches best and reports the strength of that match. The chunk's score is the sum of all the clues' best matches.
+
+Here is the whole process in one picture — just three steps in a row, no crossing arrows:
 
 ```mermaid
 flowchart TB
-    Q["Query tokens<br/>q1: pre-training<br/>q2: task"] --> GRID
+    Q["Query tokens<br/>q1: pre-training<br/>q2: task"] --> PAIRS["Step 1 — compare EVERY query token<br/>with EVERY document token<br/>(2 × 3 = 6 similarity scores)"]
 
-    subgraph GRID["Similarity grid"]
-        D1["d1: masked"] --> S11["score(q1, d1) = 0.1"]
-        D1 --> S21["score(q2, d1) = 0.9"]
-        D2["d2: language"] --> S12["score(q1, d2) = 0.2"]
-        D2 --> S22["score(q2, d2) = 0.3"]
-        D3["d3: models"] --> S13["score(q1, d3) = 0.8"]
-        D3 --> S23["score(q2, d3) = 0.1"]
-    end
+    PAIRS --> BEST["Step 2 — each query token keeps<br/>its SINGLE best match<br/>q1 → 0.8 (vs 'models')<br/>q2 → 0.9 (vs 'masked')"]
 
-    S11 --> MAX1["Max for q1 = 0.8 (best: d3)"]
-    S12 --> MAX1
-    S13 --> MAX1
-    S21 --> MAX2["Max for q2 = 0.9 (best: d1)"]
-    S22 --> MAX2
-    S23 --> MAX2
-    MAX1 --> SUM["Final MaxSim score = 0.8 + 0.9 = 1.7"]
-    MAX2 --> SUM
+    BEST --> SUM["Step 3 — add the winners together<br/>MaxSim score = 0.8 + 0.9 = 1.7"]
 
-    classDef queryStyle fill:#fff3cd,stroke:#d68f00,stroke-width:2px,color:#1a1a1a
-    classDef gridStyle fill:#e7f1ff,stroke:#1d6fa5,stroke-width:1px,color:#0b1f33
-    classDef sumStyle fill:#e9f9ee,stroke:#2f8d46,stroke-width:2px,color:#0b3d2e
-    class Q queryStyle
-    class D1,D2,D3,S11,S12,S13,S21,S22,S23 gridStyle
-    class MAX1,MAX2,SUM sumStyle
+    classDef qStyle fill:#fff3cd,stroke:#d68f00,stroke-width:2px,color:#1a1a1a
+    classDef pStyle fill:#e7f1ff,stroke:#1d6fa5,stroke-width:1px,color:#0b1f33
+    classDef sStyle fill:#e9f9ee,stroke:#2f8d46,stroke-width:2px,color:#0b3d2e
+    class Q qStyle
+    class PAIRS,BEST pStyle
+    class SUM sStyle
 ```
 
-Each query token looks at ALL document tokens, but only its single best match counts. The query token "task" matches "masked" strongly, and "pre-training" matches "models" strongly. Even though the other comparisons are weak, the chunk still scores high because a few tokens matched precisely. This is exactly why ColBERT can find a chunk that shares only a couple of key words with the question.
+**The same numbers as a table.** Step 1 fills in this grid — rows are query tokens, columns are document tokens, each cell is the similarity of that one pair:
+
+| Query token ↓ / Doc token → | d1: masked | d2: language | d3: models | Best match (kept) |
+|---|---|---|---|---|
+| **q1: pre-training** | 0.1 | 0.2 | **0.8** | **0.8** |
+| **q2: task** | **0.9** | 0.3 | 0.1 | **0.9** |
+
+Step 2 reads the grid row by row: for q1 the best cell is 0.8 (vs *models*); for q2 the best cell is 0.9 (vs *masked*). Every other cell is discarded. Step 3 adds the two winners: **0.8 + 0.9 = 1.7**, and that single number is the chunk's MaxSim score.
+
+**Why this beats one averaged vector:** with a single vector per chunk, a score like 1.7 could never be computed — all those words would already be blurred into one number. With MaxSim, the chunk scores high because *pre-training* matched *models* strongly and *task* matched *masked* strongly, even though every other word in the chunk is irrelevant to the question. That is exactly why ColBERT can find a chunk that shares only a couple of precise words with the question.
 
 ### Walking Through a Sample Retrieval
 
@@ -185,7 +194,7 @@ Normally a Qdrant collection stores one vector per point. This lab needs more, b
 - `distance=models.Distance.COSINE` — single-token similarity is measured with cosine similarity.
 - `comparator=models.MultiVectorComparator.MAX_SIM` — whole-chunk scoring is done with MaxSim, the ColBERT late-interaction method.
 
-This is the special part of the whole lab: the comparator is what makes Qdrant behave like ColBERT.
+This is the special part of the whole lab: the comparator is what makes Qdrant behave like ColBERT — it ranks every point with the same three-step MaxSim rule described in *How MaxSim Scoring Works* above.
 
 ---
 
