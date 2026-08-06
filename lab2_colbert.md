@@ -175,26 +175,21 @@ flowchart TB
 
 ---
 
-# Qdrant Overview
+# ColBERT Overview
 
-**What is Qdrant?**
+**What is ColBERT?**
 
-Qdrant is an open-source vector database — a database built specifically for storing embeddings (the numeric vectors that represent text) and for finding the ones closest to a query vector. Instead of matching exact text, it measures how semantically similar vectors are. In this lab, Qdrant is the search layer: it stores ColBERT's token matrices so a question can quickly find the closest chunks.
+ColBERT is an AI model that turns text into vectors. What makes it special is how it works. Most models take a whole chunk of text and squeeze it into a single vector. ColBERT does not do that. Instead, it gives every single word its own vector. So a chunk becomes a small matrix, where each row is the vector of one word.
 
-The connection is made in Step 3, where `QdrantClient(...)` takes two pieces of information:
+Because of this, nothing gets mixed together. If a chunk talks about many different ideas, every word still keeps its own meaning. This makes it much easier to find one small detail that is hiding inside a long chunk.
 
-- `url` — the address of your Qdrant Cloud cluster, i.e. where the token matrices live.
-- `api_key` — the secret key that authorizes your code to read from and write to that cluster.
+**How does ColBERT search?**
 
-**What is a multivector collection?**
+ColBERT uses a method called **late interaction**. The word "late" means that the question and the documents are turned into vectors separately, and only after that are they compared. The comparing step is called **MaxSim** — which stands for "Maximum Similarity". It works in a simple way: for each word in the question, it finds the word in the chunk that matches it best. Then it adds those best matches together to get one final score. A chunk scores well if even a few of its words match the question's words very closely.
 
-Normally a Qdrant collection stores one vector per point. This lab needs more, because each chunk holds many token vectors. So the collection is created with `models.MultiVectorConfig`, which tells Qdrant to treat every point as a matrix. Three settings matter:
+**Why is ColBERT used in this lab?**
 
-- `size=128` — every token vector has 128 dimensions (the size ColBERT produces).
-- `distance=models.Distance.COSINE` — single-token similarity is measured with cosine similarity.
-- `comparator=models.MultiVectorComparator.MAX_SIM` — whole-chunk scoring is done with MaxSim, the ColBERT late-interaction method.
-
-This is the special part of the whole lab: the comparator is what makes Qdrant behave like ColBERT — it ranks every point with the same three-step MaxSim rule described in *How MaxSim Scoring Works* above.
+The storage part is already explained in Lab 1, so we do not repeat it here. What is new in this lab is the kind of data we store. In Lab 1, each chunk became one single vector. Here, each chunk becomes a full matrix of word vectors. Qdrant supports this through **multivector collections**, which can hold more than one vector per item. This lets Qdrant store the whole token matrix of a chunk and compare it using the MaxSim method instead of the usual cosine similarity. In short, ColBERT decides what we store, and Qdrant decides where it is kept.
 
 ---
 
