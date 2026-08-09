@@ -120,6 +120,7 @@ carematch/
 │
 ├── api/                    The doorway — turns the reasoning engine into a web service
 │   ├── main.py               All the API endpoints (register a trial, run a check, record a decision)
+│   ├── db.py                 SQLite persistence — trials, assessments, decisions survive restarts
 │   ├── test_api.py           Automated tests for the API itself
 │   ├── Dockerfile
 │   └── requirements.txt
@@ -139,7 +140,7 @@ carematch/
 │
 ├── run_evaluation.py       The 12-patient accuracy test script (see project_summary.md for results)
 ├── docker-compose.yml      Starts everything (API, dashboard, monitoring) with one command
-├── prometheus.yml          Tells Prometheus which service to watch
+├── prometheus_config.yml   Tells Prometheus which service to watch (and to watch itself)
 └── README.md               You are here (lives at the project root, not inside docs/)
 ```
 

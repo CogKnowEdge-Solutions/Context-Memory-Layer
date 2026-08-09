@@ -3,15 +3,22 @@ Tests the API's HTTP layer: routing, validation, trial registration/lookup,
 and error handling. Forces LLM_MODE=fake so these never cost anything or
 touch the network -- they prove the plumbing works, not reasoning quality
 (that's Phase 1's job, already proven separately).
+
+Also: since the API now persists to SQLite, tests run against a throwaway
+temp DB (never the real one), and one test proves the data really lands on
+disk by re-opening the file with a brand-new connection -- the storage-layer
+half of the "survives a hard kill" proof.
 """
 
 import os
+import tempfile
 
 os.environ["LLM_MODE"] = "fake"
+os.environ["CAREMATCH_DB_PATH"] = os.path.join(tempfile.mkdtemp(), "carematch-test.db")
 
-from fastapi.testclient import TestClient
+from fastapi.testclient import TestClient  # noqa: E402
 
-from main import app
+from main import app  # noqa: E402
 
 client = TestClient(app)
 
@@ -252,3 +259,66 @@ def test_invalid_rule_id_format_is_rejected_at_registration():
         },
     )
     assert r.status_code == 422
+
+
+def test_data_persists_across_a_fresh_database_connection():
+    """The storage-layer half of the persistence proof: everything the API
+    wrote must be readable back through a brand-new sqlite3 connection --
+    exactly what a freshly-started process would do. This exercises the
+    full join across trials -> rules and assessments -> rule_results ->
+    decisions, not just one table in isolation."""
+    import sqlite3
+
+    import db
+
+    client.post(
+        "/trials",
+        json={
+            "trial_id": "T-PERSIST-1",
+            "trial_name": "Persistent Trial",
+            "rules": [
+                {"rule_id": "INC-01", "rule_text": "Patient must be 50 or older", "category": "inclusion"},
+                {"rule_id": "EXC-01", "rule_text": "Patient is taking Warfarin", "category": "exclusion"},
+            ],
+        },
+    )
+    assess_resp = client.post(
+        "/assess",
+        json={"trial_id": "T-PERSIST-1", "patient_id": "P-1", "patient_record": "some record"},
+    )
+    assessment_id = assess_resp.json()["assessment_id"]
+    client.post(f"/assessments/{assessment_id}/decision", json={"decision": "overridden"})
+
+    # New connection to the SAME file -- no reference to anything main.py
+    # or the TestClient still holds in memory.
+    conn = sqlite3.connect(db.DB_PATH)
+    try:
+        trial = conn.execute("SELECT trial_id, trial_name FROM trials WHERE trial_id='T-PERSIST-1'").fetchone()
+        assert trial is not None
+        assert trial[1] == "Persistent Trial"
+
+        rules = conn.execute("SELECT rule_id FROM rules WHERE trial_id='T-PERSIST-1'").fetchall()
+        assert {r[0] for r in rules} == {"INC-01", "EXC-01"}
+
+        assessment = conn.execute(
+            "SELECT assessment_id, trial_id, patient_id FROM assessments WHERE assessment_id=?",
+            (assessment_id,),
+        ).fetchone()
+        assert assessment is not None
+        assert assessment[1] == "T-PERSIST-1"
+        assert assessment[2] == "P-1"
+
+        rule_results = conn.execute(
+            "SELECT rule_id, status FROM rule_results WHERE assessment_id=?",
+            (assessment_id,),
+        ).fetchall()
+        assert len(rule_results) == 2
+        assert {rr[0] for rr in rule_results} == {"INC-01", "EXC-01"}
+
+        decision = conn.execute(
+            "SELECT decision FROM decisions WHERE assessment_id=?", (assessment_id,)
+        ).fetchone()
+        assert decision is not None
+        assert decision[0] == "overridden"
+    finally:
+        conn.close()

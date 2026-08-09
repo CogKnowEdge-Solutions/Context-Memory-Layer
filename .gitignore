@@ -10,6 +10,9 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
+# ---- Local SQLite database (persisted in the container via a named volume) ----
+api/data/
+
 # ---- VS Code ----
 # Ignore .vscode folders generally, but keep api/.vscode/settings.json --
 # it fixes a Pylance false-positive on main.py's sibling import of

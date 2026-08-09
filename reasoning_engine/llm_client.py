@@ -280,3 +280,28 @@ def call_real_llm(rule_text: str, patient_record: str, category: str) -> dict:
             f"Model did not return valid JSON, even after searching the whole "
             f"response for one. Raw response was:\n{raw_text}"
         ) from exc
+
+
+# ---- LangSmith tracing (senior-review step B) ----
+# call_real_llm is the one function we want visible as a trace in LangSmith:
+# each real LLM call becomes a run, so an assessment's reasoning is auditable
+# and evaluable after the fact. We wrap it AFTER definition so the decorator
+# applies to the exact object main.py resolves via llm_client.call_real_llm.
+#
+# Guarded on purpose: in fake mode there is no real LLM call -- only the
+# zero-cost stand-in -- and we must NOT send fake-mode traffic to LangSmith
+# as though it were real reasoning. So the decoration only happens when we
+# are actually going to hit the model. (os.environ is fully populated here:
+# load_dotenv() ran at the top of this module, and in the container LLM_MODE
+# comes from docker-compose, which beats any .env file.)
+if os.environ.get("LLM_MODE", "real").lower() != "fake":
+    try:
+        from langsmith import traceable
+
+        call_real_llm = traceable(name="call_real_llm")(call_real_llm)
+        print("    [langsmith] tracing enabled -- call_real_llm wrapped with @traceable")
+    except ImportError:
+        # langsmith is in requirements.txt, but if it's somehow absent this
+        # must never break the real LLM path -- tracing is observability,
+        # not a hard dependency.
+        print("    [langsmith] package not installed -- tracing skipped (real LLM path unaffected)")

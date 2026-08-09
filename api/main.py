@@ -2,10 +2,9 @@
 The doorway (Phase 2). Wraps Phase 1's assess_patient() in an HTTP API so
 any system can call it -- no direct Python import needed.
 
-No database yet -- trials are registered in memory via POST /trials and
-looked up by trial_id for POST /assess. This resets on restart. A real
-database is a later phase's problem; this is enough to prove the API
-pattern actually works.
+Persistence: trials, assessments, and coordinator decisions live in a
+SQLite database (api/db.py), not in memory -- a hard process kill no
+longer loses anything (that's proven by a real kill-and-restart test).
 
 LLM_MODE controls cost: "real" (default) makes actual LLM calls through
 Phase 1's llm_client. "fake" always returns "unclear" with zero cost and
@@ -13,6 +12,7 @@ zero network calls -- use this to test the API's plumbing (does routing,
 validation, and error handling work?) without spending anything.
 """
 
+import logging
 import os
 import sys
 import time
@@ -21,11 +21,13 @@ from pathlib import Path
 from typing import Literal
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import Counter, Histogram
 from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel, field_validator
+
+import db
 
 # Loads api/.env if one exists. This is the reliable way to set LLM_MODE
 # (and real API keys, later) -- it works the same regardless of which
@@ -41,7 +43,7 @@ sys.path.insert(0, str(REASONING_ENGINE_PATH))
 
 from engine import assess_patient  # noqa: E402
 from protocol import Protocol, Rule  # noqa: E402
-from schema import AssessmentResult, RULE_ID_PATTERN  # noqa: E402
+from schema import AssessmentResult, RuleResult, RULE_ID_PATTERN  # noqa: E402
 import llm_client  # noqa: E402
 
 app = FastAPI(title="CareMatch API", description="Phase 2 -- the doorway into the reasoning engine")
@@ -93,9 +95,48 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-memory stores. Deliberately simple -- see module docstring.
-_trials: dict[str, Protocol] = {}
-_assessments: dict[str, "AssessmentRecord"] = {}
+# Human-readable request logging (senior-review step C). One structured line
+# per request, separate from the Instrumentator() Prometheus metrics above --
+# this is for a coordinator/support person to trace "request abc123 failed"
+# through the logs, not for dashboards. Bound directly to stdout (via its own
+# StreamHandler) so the lines appear no matter how uvicorn configures logging.
+_logger = logging.getLogger("carematch.api")
+if not _logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(message)s"))
+    _logger.addHandler(_handler)
+_logger.setLevel(logging.INFO)
+_logger.propagate = False
+
+
+@app.middleware("http")
+async def request_logging(request: Request, call_next):
+    request_id = str(uuid.uuid4())
+    start = time.monotonic()
+    status = 500
+    try:
+        response = await call_next(request)
+        status = response.status_code
+        response.headers["X-Request-ID"] = request_id
+    except Exception:
+        # Re-raise so FastAPI's normal error handling still produces the
+        # 500; the request_id is still logged here for traceability.
+        raise
+    finally:
+        duration_ms = (time.monotonic() - start) * 1000
+        client_ip = request.client.host if request.client else "unknown"
+        _logger.info(
+            f"method={request.method} path={request.url.path} "
+            f"status={status} duration_ms={duration_ms:.1f} "
+            f"client_ip={client_ip} request_id={request_id}"
+        )
+    return response
+
+
+# In-memory stores are GONE. Everything lives in SQLite via api/db.py --
+# one file, WAL mode, survives a hard kill of the process. Schema is
+# created idempotently at startup (or first import, for tests).
+db.init_db()
 
 
 class RuleIn(BaseModel):
@@ -167,6 +208,31 @@ def _fake_llm(rule_text: str, patient_record: str, category: str) -> dict:
     return {"status": "unclear", "evidence": "FAKE MODE -- no real LLM call was made"}
 
 
+def _protocol_from_row(row: dict) -> Protocol:
+    return Protocol(
+        trial_id=row["trial_id"],
+        trial_name=row["trial_name"],
+        rules=[Rule(**r) for r in row["rules"]],
+    )
+
+
+def _record_from_row(row: dict) -> "AssessmentRecord":
+    assessment = AssessmentResult(
+        patient_id=row["patient_id"],
+        trial_id=row["trial_id"],
+        suggested_status=row["suggested_status"],
+        rule_results=[RuleResult(**r) for r in row["rule_results"]],
+    )
+    return AssessmentRecord(
+        assessment_id=row["assessment_id"],
+        assessment=assessment,
+        decision=row["decision"],
+        decision_reason=row["decision_reason"],
+        provider_used=row["provider_used"],
+        model_used=row["model_used"],
+    )
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -174,7 +240,7 @@ def health():
 
 @app.get("/trials", response_model=list[Protocol])
 def list_trials():
-    return list(_trials.values())
+    return [_protocol_from_row(row) for row in db.list_trials()]
 
 
 @app.post("/trials", response_model=Protocol, status_code=201)
@@ -184,23 +250,27 @@ def register_trial(body: TrialRegisterRequest):
         trial_name=body.trial_name,
         rules=[Rule(**r.model_dump()) for r in body.rules],
     )
-    _trials[protocol.trial_id] = protocol
+    db.create_trial(
+        protocol.trial_id,
+        protocol.trial_name,
+        [r.model_dump() for r in protocol.rules],
+    )
     trials_registered_total.inc()
     return protocol
 
 
 @app.get("/trials/{trial_id}", response_model=Protocol)
 def get_trial(trial_id: str):
-    protocol = _trials.get(trial_id)
-    if protocol is None:
+    row = db.get_trial(trial_id)
+    if row is None:
         raise HTTPException(status_code=404, detail=f"No trial registered with id '{trial_id}'")
-    return protocol
+    return _protocol_from_row(row)
 
 
 @app.post("/assess", response_model=AssessmentRecord, status_code=201)
 def assess(body: AssessRequest):
-    protocol = _trials.get(body.trial_id)
-    if protocol is None:
+    trial_row = db.get_trial(body.trial_id)
+    if trial_row is None:
         raise HTTPException(
             status_code=404,
             detail=(
@@ -208,6 +278,7 @@ def assess(body: AssessRequest):
                 "Register it first via POST /trials."
             ),
         )
+    protocol = _protocol_from_row(trial_row)
 
     llm_mode = os.environ.get("LLM_MODE", "real").lower()
     call_llm = _fake_llm if llm_mode == "fake" else llm_client.call_real_llm
@@ -247,18 +318,27 @@ def assess(body: AssessRequest):
         provider_used=provider_used,
         model_used=model_used,
     )
-    _assessments[record.assessment_id] = record
+    db.save_assessment(
+        assessment_id=record.assessment_id,
+        trial_id=result.trial_id,
+        patient_id=result.patient_id,
+        patient_record=body.patient_record,
+        suggested_status=result.suggested_status,
+        provider_used=provider_used,
+        model_used=model_used,
+        rule_results=[rr.model_dump() for rr in result.rule_results],
+    )
     return record
 
 
 @app.get("/assessments/{assessment_id}", response_model=AssessmentRecord)
 def get_assessment(assessment_id: str):
-    record = _assessments.get(assessment_id)
-    if record is None:
+    row = db.get_assessment(assessment_id)
+    if row is None:
         raise HTTPException(
             status_code=404, detail=f"No assessment found with id '{assessment_id}'"
         )
-    return record
+    return _record_from_row(row)
 
 
 @app.post("/assessments/{assessment_id}/decision", response_model=AssessmentRecord)
@@ -270,13 +350,9 @@ def record_decision(assessment_id: str, body: DecisionRequest):
     expected, not optional, since an unexplained override defeats the
     whole point of the evidence trail.
     """
-    record = _assessments.get(assessment_id)
-    if record is None:
+    if not db.set_decision(assessment_id, body.decision, body.reason):
         raise HTTPException(
             status_code=404, detail=f"No assessment found with id '{assessment_id}'"
         )
-    record.decision = body.decision
-    record.decision_reason = body.reason
-    _assessments[assessment_id] = record
     coordinator_decisions_total.labels(decision=body.decision).inc()
-    return record
+    return _record_from_row(db.get_assessment(assessment_id))

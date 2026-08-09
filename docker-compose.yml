@@ -5,6 +5,8 @@ services:
       dockerfile: api/Dockerfile
     ports:
       - "8000:8000"
+    volumes:
+      - api_data:/app/api/data
     environment:
       LLM_MODE: ${LLM_MODE:-fake}
       LLM_PROVIDER: ${LLM_PROVIDER:-openrouter}
@@ -12,6 +14,10 @@ services:
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
+      LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
+      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-carematch-prototype}
+      LANGSMITH_WORKSPACE_ID: ${LANGSMITH_WORKSPACE_ID:-}
 
   dashboard:
     build:
@@ -28,8 +34,15 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
+    # Retention is a CLI flag, not a config-file key -- Prometheus rejects
+    # storage.tsdb.retention.time in prometheus_config.yml (proven by a
+    # real startup error). 30d is meaningful now that prometheus_data is a
+    # persistent volume that survives restarts.
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=30d"
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus_config.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
     ports:
       - "9090:9090"
@@ -46,5 +59,6 @@ services:
       - prometheus
 
 volumes:
+  api_data:
   prometheus_data:
   grafana_data:
