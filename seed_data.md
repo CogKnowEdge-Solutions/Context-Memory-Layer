@@ -4,6 +4,8 @@ Exact values to type into the app's screens, so you can see it working correctly
 
 These exact values have already been tested and confirmed correct earlier in this project's development.
 
+The five patients below are a quick manual walkthrough for confirming the app works with your own eyes — separate from the larger 12-patient formal evaluation described in `project_summary.md`.
+
 ---
 
 ## Step 1 — Go to "Trial Setup"
@@ -70,6 +72,8 @@ For each one, select the trial you just created, enter the Patient ID and record
 | Patient record | `Patient presenting for diabetes management follow-up. Type 2 Diabetes diagnosed 2019. Current medications: Metformin. Date of birth not recorded in this note.` |
 
 **Why:** the record never actually states the patient's age — the AI should say "unclear" rather than guess, since guessing wrong here could wrongly exclude someone.
+
+*(Note: "Needs More Information" here is the AI's suggestion about what's missing from the record — it is not the "Needs More Review" coordinator decision option, which is a separate thing a human picks later.)*
 
 ---
 

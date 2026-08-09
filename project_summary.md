@@ -49,13 +49,23 @@ Coordinator (browser)
    Dashboard (React / TanStack Start)
         │  HTTP
         ▼
-   API (FastAPI) ──────────► Prometheus ──► Grafana
+   API (FastAPI) ───────────► Prometheus ──► Grafana
+        │                        (system health numbers over time)
+        │
+        ├── reads / writes ──► SQLite database (trials, assessments, decisions)
         │
         ▼
    Reasoning Engine (Python)
         │  one call per rule
         ▼
    LLM (Anthropic Claude Haiku, via OpenRouter or direct)
+        │  every real AI call also logged
+        ▼
+   LangSmith (AI decision history)
+
+   Every request into the API also passes through a small logging layer:
+   it gets a unique ID (returned in the X-Request-ID header), and one
+   structured log line records what happened for that request.
 ```
 
 ---

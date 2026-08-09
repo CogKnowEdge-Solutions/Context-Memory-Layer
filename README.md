@@ -40,6 +40,8 @@ Everything worth reading, and what to read it for. This file (`README.md`) is th
 | `monitoring_guide.md` | Understand what Prometheus and Grafana are, and look at the app's health numbers yourself — click by click. |
 | `project_summary.md` | Get the whole story: what got built, what actually broke and got fixed, and the honest results. |
 
+> **Two similar-sounding terms, worth telling apart:** "Needs More Information" is what the AI suggests when it can't tell from the record alone (see the `suggested_status` field). "Needs More Review" is a separate action a coordinator can choose afterward, to flag an assessment for later follow-up. One comes from the AI, the other from a human — they are not the same thing.
+
 **For developers:**
 
 | Doc | Read it to |

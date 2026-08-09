@@ -142,6 +142,8 @@ See the separate file `seed_data.md` for exact copy-paste examples of what to ty
 | Prometheus | `http://localhost:9090` | Raw system health numbers (mostly for technical debugging) |
 | Grafana | `http://localhost:3000` | A nicer visual dashboard of those same health numbers (login: `admin` / `admin`) |
 
+Want click-by-click instructions for Prometheus and Grafana? See `monitoring_guide.md`.
+
 ---
 
 ## Stopping the App
