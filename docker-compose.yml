@@ -8,7 +8,11 @@ services:
     volumes:
       - api_data:/app/api/data
     environment:
-      LLM_MODE: ${LLM_MODE:-fake}
+      # "real" is the default so a client demo can NEVER silently run in
+      # free testing mode just because .env was forgotten or LLM_MODE was
+      # left unset. Without a key, real mode fails loudly (502), never
+      # quietly fakes a result.
+      LLM_MODE: ${LLM_MODE:-real}
       LLM_PROVIDER: ${LLM_PROVIDER:-openrouter}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}

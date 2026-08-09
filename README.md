@@ -2,6 +2,8 @@
 
 **An AI tool that helps hospital staff check if a patient qualifies for a clinical trial — and shows its work, every single time.**
 
+**New here?** See `setup_guide.md` for step-by-step setup instructions, and `seed_data.md` for copy-paste examples to try once it's running.
+
 ---
 
 ## Table of Contents
@@ -15,6 +17,7 @@
 - [The API](#the-api)
 - [Running It Yourself](#running-it-yourself)
 - [Environment Variables](#environment-variables)
+- [Monitoring, Logging & Tracing](#monitoring-logging--tracing)
 - [Testing](#testing)
 - [Key Decisions (and Why)](#key-decisions-and-why)
 - [Real Problems We Found and Fixed](#real-problems-we-found-and-fixed)
@@ -75,6 +78,7 @@ flowchart LR
     subgraph Backend
         API[API<br/>FastAPI]
         ENGINE[Reasoning Engine<br/>Python]
+        DB[(SQLite<br/>trials, assessments, decisions)]
     end
 
     subgraph Monitoring
@@ -83,21 +87,26 @@ flowchart LR
     end
 
     LLM[(AI Model<br/>Claude Haiku)]
+    LS[(LangSmith<br/>AI decision history)]
 
     UI -- HTTP requests --> API
     API -- one call per rule --> ENGINE
     ENGINE -- asks a question about one rule --> LLM
     LLM -- answer + evidence --> ENGINE
+    API -- reads/writes --> DB
     API -- exposes /metrics --> PROM
     PROM -- feeds data to --> GRAF
+    ENGINE -. every real AI call also logged to .-> LS
 ```
 
 **In plain words:**
 - **Dashboard** — the webpage a coordinator actually looks at
 - **API** — the doorway other systems (like the dashboard) use to send data in and get answers back
 - **Reasoning Engine** — the actual "brain." It goes through a trial's rules one at a time
+- **SQLite database** — where trial rules, patient assessments, and coordinator decisions are permanently stored, so nothing is lost if the app restarts
 - **AI Model** — the underlying language model that reads the patient text and judges each rule
 - **Prometheus & Grafana** — a health dashboard for the *system itself* (is it fast? is it breaking? how many checks has it done?), separate from the coordinator's dashboard
+- **LangSmith** (optional) — a permanent, browsable history of every individual AI decision, useful for reviewing or evaluating reasoning quality later
 
 ---
 
@@ -110,16 +119,16 @@ carematch/
 ├── reasoning_engine/       The AI "brain" — reads one rule + one patient record, gives an answer
 │   ├── schema.py             Defines the exact shape of every answer (no shortcuts allowed)
 │   ├── protocol.py           Defines what a trial's rulebook looks like
-│   ├── llm_client.py         The actual call to the AI model, with retries and safety checks
+│   ├── llm_client.py         The actual call to the AI model, with retries, safety checks, and AI tracing
 │   ├── engine.py             Loops through all the rules and combines the results
 │   ├── run_real_assessment.py  Script to test real AI reasoning yourself, using your own API key
 │   ├── test_engine.py        Automated tests — no API key needed to run these
 │   ├── requirements.txt
 │   ├── .env.example          Copy this to .env if running this folder's scripts on their own
-│   └── test_data/            Sample fake patients used by the automated tests
+│   └── test_data/            Sample patient records used by the automated tests
 │
 ├── api/                    The doorway — turns the reasoning engine into a web service
-│   ├── main.py               All the API endpoints (register a trial, run a check, record a decision)
+│   ├── main.py               All the API endpoints, plus request logging
 │   ├── db.py                 SQLite persistence — trials, assessments, decisions survive restarts
 │   ├── test_api.py           Automated tests for the API itself
 │   ├── Dockerfile
@@ -139,8 +148,10 @@ carematch/
 │   └── project_summary.md   The full story: real bugs found, decisions made, evaluation results
 │
 ├── run_evaluation.py       The 12-patient accuracy test script (see project_summary.md for results)
+├── setup_guide.md          Step-by-step setup instructions for a first-time run
+├── seed_data.md            Copy-paste examples to try once the app is running
 ├── docker-compose.yml      Starts everything (API, dashboard, monitoring) with one command
-├── prometheus_config.yml   Tells Prometheus which service to watch (and to watch itself)
+├── prometheus_config.yml   Tells Prometheus which services to watch (including itself)
 └── README.md               You are here (lives at the project root, not inside docs/)
 ```
 
@@ -153,8 +164,10 @@ carematch/
 | Reasoning Engine | Python, Pydantic | Pydantic forces every AI answer to follow our exact required shape — an answer that doesn't fit gets rejected automatically |
 | AI Model Access | Anthropic Claude (direct) or OpenRouter | Two ways to reach an AI model, switchable with one setting, no code changes needed |
 | API | FastAPI | Lightweight, fast, and automatically generates interactive docs |
+| Persistence | SQLite | A real, permanent database that needs no separate server — one file on disk. Trials, assessments, and decisions all survive a restart |
 | Dashboard | React + TanStack Start + Tailwind CSS | A modern, fast web app framework |
-| Monitoring | Prometheus + Grafana | Industry-standard tools for watching a system's health in real time |
+| Metrics | Prometheus + Grafana | Industry-standard tools for watching the system's health in real time |
+| AI Tracing (optional) | LangSmith | Records every individual AI reasoning call permanently, so decisions can be reviewed or evaluated later — not just watched live |
 | Packaging | Docker + Docker Compose | Lets the whole project start with one command, on any computer |
 
 ---
@@ -171,6 +184,8 @@ carematch/
 | POST | `/assess` | Run a real eligibility check for one patient against one trial |
 | GET | `/assessments/{assessment_id}` | Look up a past assessment |
 | POST | `/assessments/{assessment_id}/decision` | Record the coordinator's Approve/Override decision |
+
+Every response also includes an `X-Request-ID` header — a unique ID for that specific request, useful for tracing a problem through the logs later (see [Monitoring, Logging & Tracing](#monitoring-logging--tracing)).
 
 **Example — what you get back from `/assess`:**
 ```json
@@ -201,6 +216,8 @@ Notice: no confidence score, no flat "yes." Just a status, a quote, and a note t
 
 ## Running It Yourself
 
+**The normal way to run CareMatch is with real AI (`LLM_MODE=real`).** Before any client demo, confirm the top-level `.env` has `LLM_MODE=real` and a valid API key — a missing key fails loudly with a 502, never quietly. There is also a **free developer testing mode** that returns placeholder answers; it exists only for the automated test suite and plumbing checks, and it must never be active during a demo. See `setup_guide.md` for full step-by-step instructions.
+
 **Everything at once, with Docker (recommended):**
 ```bash
 docker compose up -d --build
@@ -211,7 +228,9 @@ Then open:
 - Prometheus: `http://localhost:9090`
 - Grafana: `http://localhost:3000`
 
-Monitoring data persists across restarts: Prometheus and Grafana store their data in named Docker volumes (`carematch_prometheus_data` and `carematch_grafana_data`), so `docker compose down` won't wipe your metrics history or saved dashboards.
+**Data persists across restarts** — running `docker compose down` will never wipe anything:
+- Trials, assessments, and coordinator decisions are saved in SQLite (`api/db.py`), stored in a Docker volume (`api_data`) — this has been tested by actually killing the running server process and confirming the data survives.
+- Prometheus and Grafana also store their data in named volumes (`carematch_prometheus_data`, `carematch_grafana_data`).
 
 **Running pieces separately (for development):**
 ```bash
@@ -230,25 +249,47 @@ npm run dev
 
 ## Environment Variables
 
-There are two different `.env` files depending on how you're running things — this project doesn't use just one:
+**`LLM_MODE=real` is the normal configuration and the default.** Each variable below is only needed if you want to turn on the specific feature it controls. The free developer testing mode (`LLM_MODE=fake`) is for running the automated test suite without cost — it is never the configuration you run a real demo with.
+
+There are two different `.env` files depending on how you're running things:
 
 | File | When You Need It | Template Available? |
 |---|---|---|
 | `carematch/.env` (project root) | Running everything via Docker — `docker-compose.yml` reads this one | Yes — copy `carematch/.env.example` |
 | `reasoning_engine/.env` | Running the reasoning engine's own scripts directly, without Docker | Yes — copy `reasoning_engine/.env.example` |
 
-Both use the same variable names:
-
-| Variable | What It Does | Example |
+| Variable | What It Does | Required When |
 |---|---|---|
-| `LLM_MODE` | `"real"` actually calls an AI model (costs money). `"fake"` returns a placeholder answer for free — use this to test the app itself without spending anything | `fake` |
-| `LLM_PROVIDER` | Which AI service to use | `anthropic` or `openrouter` |
-| `ANTHROPIC_API_KEY` | Your key, if using Anthropic directly | *(secret)* |
-| `ANTHROPIC_MODEL` | Which Anthropic model | `claude-haiku-4-5-20251001` |
-| `OPENROUTER_API_KEY` | Your key, if using OpenRouter instead | *(secret)* |
-| `OPENROUTER_MODEL` | Which model via OpenRouter | `openai/gpt-oss-20b:free` |
+| `LLM_MODE` | `"real"` (default, normal) actually calls the AI model. `"fake"` is a **free developer testing mode** that returns placeholder answers — used only by the automated test suite, never in a real demo | Never — defaults to `"real"` |
+| `LLM_PROVIDER` | Which AI service to use: `"anthropic"` or `"openrouter"` | Never — has a default |
+| `ANTHROPIC_API_KEY` | Your Anthropic key | Only if `LLM_MODE=real` and `LLM_PROVIDER=anthropic` |
+| `ANTHROPIC_MODEL` | Which Anthropic model to use | Never — has a default |
+| `OPENROUTER_API_KEY` | Your OpenRouter key | Only if `LLM_MODE=real` and `LLM_PROVIDER=openrouter` |
+| `OPENROUTER_MODEL` | Which model via OpenRouter | Never — has a default |
+| `LANGSMITH_TRACING` | `"true"` turns on permanent AI decision logging | Never — defaults to off |
+| `LANGSMITH_API_KEY` | Your LangSmith key | Only if `LANGSMITH_TRACING=true` |
+| `LANGSMITH_PROJECT` | Which LangSmith project traces go into | Never — has a default |
+| `LANGSMITH_WORKSPACE_ID` | Your LangSmith workspace ID | Only if tracing is on **and** your key is an org-scoped "Service" key (starts with `lsv2_sk_`) — LangSmith rejects requests without it in that case |
+| `CAREMATCH_DB_PATH` | Where the SQLite database file is stored | Never — has a sensible default location |
 
-**Never commit either real `.env` file** — only `reasoning_engine/.env.example` (the template, with no real secrets in it) belongs in version control.
+**Good to know:** a missing or misconfigured LangSmith key never breaks the app itself — tracing failures are silently logged, but every real feature keeps working normally either way.
+
+**Never commit either real `.env` file** — only the `.env.example` templates (with no real secrets in them) belong in version control.
+
+---
+
+## Monitoring, Logging & Tracing
+
+CareMatch has three separate, complementary ways of watching what the system is doing — each answering a different question.
+
+### 1. Prometheus + Grafana — "Is the system healthy?"
+Tracks system-wide numbers over time: how many assessments have run, how long reasoning takes, how often coordinators approve vs. override, and standard web traffic stats. Prometheus collects the numbers (configured in `prometheus_config.yml`, which also watches its own health); Grafana turns them into charts. Good for spotting trends — "did things slow down this week?" — not for looking at one specific event.
+
+### 2. Request Logging — "What happened on this exact request?"
+Every single request to the API gets a unique ID (visible in the `X-Request-ID` response header) and one log line recording what happened: which endpoint, how long it took, what it returned. If something goes wrong for one specific user action, this is how you'd trace it — "show me everything about request abc123."
+
+### 3. LangSmith (optional) — "Why did the AI decide this?"
+While Prometheus shows *how many* checks ran, LangSmith shows the actual *content* of each one — the exact question asked and the exact answer given, for every single rule the AI ever evaluated, permanently stored and browsable. This is useful for reviewing reasoning quality after the fact, well beyond what a live dashboard number can show. Entirely optional — the app works fully without it, and a failure to record a trace never affects a real request.
 
 ---
 
@@ -259,12 +300,12 @@ Both use the same variable names:
 cd reasoning_engine
 pytest test_engine.py -v
 
-# API tests (also free — forces fake mode automatically)
+# API tests (also free — forces fake mode automatically, uses a throwaway database)
 cd api
 pytest test_api.py -v
 ```
 
-Both test suites are fully automated and cost nothing to run, since they never make a real call to an AI model.
+Both test suites are fully automated and cost nothing to run, since they never make a real call to an AI model, and never touch the real database.
 
 ---
 
@@ -278,6 +319,7 @@ Both test suites are fully automated and cost nothing to run, since they never m
 | **Rules are written by hand, not read from a PDF automatically** | Automatically parsing rules out of messy trial documents is a much bigger, riskier problem. For now, a human converts the rulebook into a clean checklist first. |
 | **Exclusion rules are phrased as plain statements, not "must not" rules** | Testing showed the AI reasoning got confused by double-negatives. "Patient is taking Warfarin" works much better than "Patient must not be taking Warfarin." |
 | **When information is missing, the AI says so — it doesn't guess** | A wrongly excluded patient never gets a second chance. Being cautious costs less than being wrong. |
+| **A real database, not just memory** | Early versions lost everything on restart. A tool coordinators actually rely on can't forget their decisions. |
 
 ---
 
@@ -289,6 +331,7 @@ Building this surfaced some genuine bugs — the useful kind, found and fixed be
 2. **The AI guessed too confidently when information was simply missing.** "No screening on file" was being read as "doesn't have the condition." Fixed by explicitly telling the AI to say "unclear" instead of guessing.
 3. **A single bad AI response could crash the whole check.** Now, if the AI's answer doesn't fit the expected format, that one rule safely falls back to "unclear" instead of breaking everything.
 4. **A leftover test service was quietly stealing web traffic meant for the real system**, because both were using the same computer port. Fixed by removing the old service entirely and building monitoring directly into the real system instead.
+5. **The app forgot everything every time it restarted.** All trials and assessments lived only in memory. Fixed by adding a real SQLite database — tested by actually killing the running server process and confirming the data survived.
 
 *(Full details of each issue, exactly what caused it and how it was proven fixed, are in `docs/project_summary.md`.)*
 
@@ -313,4 +356,4 @@ Two things are intentionally left for later, because they need more than code to
 - **Legal & security review** — getting the paperwork and security testing done to safely handle real patient data. This needs real lawyers and real security auditors.
 - **Turning this into an actual product** — onboarding real hospitals, handling many trials at once, figuring out pricing. This needs a real business, not more engineering.
 
-Everything else — the AI reasoning, the API, the dashboard, monitoring, and testing — is built, working, and verified.
+Everything else — the AI reasoning, the API, the database, the dashboard, monitoring, logging, tracing, and testing — is built, working, and verified.
