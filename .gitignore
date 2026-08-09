@@ -24,3 +24,6 @@ dist/
 dist-ssr/
 .nitro/
 *.local
+
+# ---- Local scratch notes ----
+sample_run.md

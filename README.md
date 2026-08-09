@@ -210,6 +210,8 @@ Then open:
 - Prometheus: `http://localhost:9090`
 - Grafana: `http://localhost:3000`
 
+Monitoring data persists across restarts: Prometheus and Grafana store their data in named Docker volumes (`carematch_prometheus_data` and `carematch_grafana_data`), so `docker compose down` won't wipe your metrics history or saved dashboards.
+
 **Running pieces separately (for development):**
 ```bash
 # Backend
@@ -231,7 +233,7 @@ There are two different `.env` files depending on how you're running things — 
 
 | File | When You Need It | Template Available? |
 |---|---|---|
-| `carematch/.env` (project root) | Running everything via Docker — `docker-compose.yml` reads this one | No template yet — create it yourself using the variables below |
+| `carematch/.env` (project root) | Running everything via Docker — `docker-compose.yml` reads this one | Yes — copy `carematch/.env.example` |
 | `reasoning_engine/.env` | Running the reasoning engine's own scripts directly, without Docker | Yes — copy `reasoning_engine/.env.example` |
 
 Both use the same variable names:
