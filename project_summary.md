@@ -44,7 +44,7 @@ CareMatch is a lightweight reasoning layer, not a black box. It never gives a fl
 
 ```mermaid
 flowchart TD
-    COORD[Coordinator<br/>(browser)] --> DASH[Dashboard<br/>React / TanStack Start]
+    COORD[Coordinator<br/>via web browser] --> DASH[Dashboard<br/>React / TanStack Start]
     DASH -- HTTP --> API[API<br/>FastAPI]
     API -- exposes /metrics --> PROM[Prometheus<br/>system health numbers over time]
     PROM --> GRAF[Grafana]
