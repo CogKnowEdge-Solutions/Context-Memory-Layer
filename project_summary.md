@@ -42,31 +42,19 @@ CareMatch is a lightweight reasoning layer, not a black box. It never gives a fl
 
 ## Architecture
 
+```mermaid
+flowchart TD
+    COORD[Coordinator<br/>(browser)] --> DASH[Dashboard<br/>React / TanStack Start]
+    DASH -- HTTP --> API[API<br/>FastAPI]
+    API -- exposes /metrics --> PROM[Prometheus<br/>system health numbers over time]
+    PROM --> GRAF[Grafana]
+    API -- reads / writes --> DB[(SQLite database<br/>trials, assessments, decisions)]
+    API --> ENG[Reasoning Engine<br/>Python]
+    ENG -- one call per rule --> LLM[LLM<br/>Anthropic Claude Haiku, via OpenRouter or direct]
+    ENG -. every real AI call also logged .-> LS[LangSmith<br/>AI decision history]
 ```
-Coordinator (browser)
-        │
-        ▼
-   Dashboard (React / TanStack Start)
-        │  HTTP
-        ▼
-   API (FastAPI) ───────────► Prometheus ──► Grafana
-        │                        (system health numbers over time)
-        │
-        ├── reads / writes ──► SQLite database (trials, assessments, decisions)
-        │
-        ▼
-   Reasoning Engine (Python)
-        │  one call per rule
-        ▼
-   LLM (Anthropic Claude Haiku, via OpenRouter or direct)
-        │  every real AI call also logged
-        ▼
-   LangSmith (AI decision history)
 
-   Every request into the API also passes through a small logging layer:
-   it gets a unique ID (returned in the X-Request-ID header), and one
-   structured log line records what happened for that request.
-```
+Every request into the API also passes through a small logging layer: it gets a unique ID (returned in the `X-Request-ID` header), and one structured log line records what happened for that request.
 
 ---
 
@@ -177,19 +165,19 @@ Both of these need an actual organization adopting this system — they are not 
 
 ## Repository Structure
 
-```
-carematch/
-├── reasoning_engine/    Phase 1 — core AI reasoning logic
-├── api/                 Phase 2 — FastAPI doorway + SQLite persistence + Prometheus metrics
-├── dashboard/           Phase 3 — React/TanStack Start coordinator UI (New Assessment, Assessment Review, Trial Setup, Trials)
-├── run_evaluation.py    The 12-patient accuracy test script
-├── project_summary.md   This file (at the project root, alongside README.md)
-├── setup_guide.md       Step-by-step setup instructions
-├── seed_data.md         Copy-paste examples to try once the app is running
-├── monitoring_guide.md  What Prometheus and Grafana are, and how to use them
-├── docker-compose.yml   Runs the full stack: api, dashboard, prometheus, grafana
-├── prometheus_config.yml  Monitoring config (data retention is passed as a command-line flag, not set here)
-└── README.md            Living technical status, updated throughout the build
+```mermaid
+flowchart TD
+    ROOT[carematch/] --> RE[reasoning_engine/<br/>Phase 1 — core AI reasoning logic]
+    ROOT --> API[api/<br/>Phase 2 — FastAPI doorway + SQLite persistence + Prometheus metrics]
+    ROOT --> DASH[dashboard/<br/>Phase 3 — React/TanStack Start coordinator UI<br/>New Assessment, Assessment Review, Trial Setup, Trials]
+    ROOT --> EV[run_evaluation.py<br/>The 12-patient accuracy test script]
+    ROOT --> PS[project_summary.md<br/>This file, at the project root alongside README.md]
+    ROOT --> SETUP[setup_guide.md<br/>Step-by-step setup instructions]
+    ROOT --> SEED[seed_data.md<br/>Copy-paste examples to try once the app is running]
+    ROOT --> MON[monitoring_guide.md<br/>What Prometheus and Grafana are, and how to use them]
+    ROOT --> DC[docker-compose.yml<br/>Runs the full stack: api, dashboard, prometheus, grafana]
+    ROOT --> PC[prometheus_config.yml<br/>Monitoring config — data retention is a command-line flag, not set here]
+    ROOT --> README[README.md<br/>Living technical status, updated throughout the build]
 ```
 
 ---
