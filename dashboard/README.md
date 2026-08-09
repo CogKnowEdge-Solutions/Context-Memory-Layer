@@ -1,9 +1,7 @@
 # CareMatch — Dashboard (Phase 3)
 
 The coordinator-facing dashboard for CareMatch's clinical trial eligibility
-review tool. This is the UI layer only, currently running on mock/local
-data — wiring to the real backend (Phase 2's FastAPI service) is a
-separate, upcoming step.
+review tool. Wired to the real backend (the FastAPI service in `api/`).
 
 ## Development
 
@@ -22,6 +20,7 @@ npm run dev
 ## Status
 
 - [x] New Assessment screen
-- [x] Assessment Review screen (evidence display, inclusion/exclusion columns, approve/override flow)
+- [x] Assessment Review screen (evidence display, inclusion/exclusion columns, accept/deny/needs-more-review flow)
 - [x] Trial Setup screen
-- [ ] Wired to the real CareMatch API (Phase 2) — currently uses mock data only
+- [x] Trials list screen (every registered trial with its rules)
+- [x] Wired to the real CareMatch API

@@ -35,8 +35,8 @@ CareMatch is a lightweight reasoning layer, not a black box. It never gives a fl
 | Layer | What It Is | Status |
 |---|---|---|
 | **Reasoning engine** | Python core that walks a trial's rules one at a time against a patient record, calling an LLM per rule | ✅ Built, tested with a real LLM |
-| **API** | FastAPI doorway — register trials, run assessments, record coordinator decisions | ✅ Built, 13/13 tests passing |
-| **Dashboard** | React/TanStack Start UI — New Assessment, Assessment Review, Trial Setup | ✅ Built, wired to the real API, browser-tested |
+| **API** | FastAPI doorway — register trials, run assessments, record coordinator decisions | ✅ Built, 17/17 tests passing |
+| **Dashboard** | React/TanStack Start UI — New Assessment, Assessment Review, Trial Setup, Trials | ✅ Built, wired to the real API, browser-tested |
 | **Docker** | All services containerized, one `docker-compose up` starts everything | ✅ 4 containers running together |
 | **Observability** | Prometheus + Grafana, built into the real API (not a separate toy service) | ✅ Real metrics, real dashboard |
 
@@ -117,6 +117,43 @@ The batch was deliberately designed to re-test the two reasoning bugs above, plu
 
 ---
 
+## The Senior-Review Round
+
+A later senior review of the finished prototype led to another round of real work. Everything below was actually changed, rebuilt, and verified against the running system — not just edited and assumed fine.
+
+### SQLite persistence — the app stopped forgetting
+
+The prototype originally kept trials and assessments in memory, so restarting the app wiped everything. Trials, assessments, and coordinator decisions now live in a real SQLite database (`api/db.py`). This was proven with the harshest test available: we actually killed the running server process, restarted it, and confirmed the data came back exactly as it was.
+
+### LangSmith tracing — the AI's reasoning is now recorded
+
+Every real AI call is now logged to LangSmith, so an individual decision can be reviewed long after it happened. This is proven with real evidence, not a claim: a live assessment produced three successful trace records, each with its own run ID and a direct link to the full reasoning inside LangSmith.
+
+Setting it up surfaced a genuine authentication bug. The key in use is an org-scoped "service" key, and LangSmith quietly rejected every request with `403 Forbidden`. The cause: org-scoped keys need an explicit **workspace ID** in the configuration, and we hadn't set one. Adding `LANGSMITH_WORKSPACE_ID` fixed it, and the traces then appeared.
+
+### Request logging — every request is now traceable
+
+A small middleware layer gives every API request a unique ID, returned in the `X-Request-ID` response header and written into one structured log line (which endpoint, how long it took, what it returned). Proved with a real request: the header on the response and the corresponding log line matched, byte for byte.
+
+### Prometheus config — renamed, expanded, and one genuine lesson
+
+The monitoring config was renamed to `prometheus_config.yml` and expanded with clearer scrape settings and a job that watches Prometheus's own health. The expansion surfaced a real mistake: retention settings were first put in the config file, and Prometheus refused to start, rejecting the file with a real startup error (`field retention.time not found in type config.plain`). Retention cannot live in the config file — it has to be a command-line flag. The fix was to pass `--storage.tsdb.retention.time=30d` when starting Prometheus, after which the config loaded cleanly and both monitored targets reported healthy.
+
+### Coordinator decisions — from 2 options to 3
+
+The decision system was redesigned from two options ("Approve" / "Override") to three: **Accept**, **Deny**, and **Needs More Review**. This was a deliberate design change, not a rename:
+
+- **Accept** and **Deny** are final — once recorded, the assessment is locked.
+- **Needs More Review** is deliberately not a dead end. It keeps the assessment open and flagged, so the coordinator can come back later and finish with a real Accept or Deny once the missing information arrives.
+
+The hard part was the data already in the database. Older assessments stored decisions as `"approved"` or `"overridden"`, and the new code had to keep reading those rows without crashing — and without rewriting them, since they are records of what actually happened. The solution: the API only accepts the three new values on input, but tolerates any stored value on output. Proven with the real database: an old `"approved"` row still loads and displays correctly today.
+
+### The Trials list page
+
+The dashboard gained a fourth page — **Trials** — which lists every registered trial and its rules in a plain, expandable view. It sits in the top navigation alongside New Assessment, Assessment Review, and Trial Setup.
+
+---
+
 ## What's Genuinely Left (Not Code)
 
 | Phase | What It Actually Requires |
@@ -133,10 +170,14 @@ Both of these need an actual organization adopting this system — they are not 
 ```
 carematch/
 ├── reasoning_engine/    Phase 1 — core AI reasoning logic
-├── api/                 Phase 2 — FastAPI doorway + Prometheus metrics
-├── dashboard/           Phase 3 — React/TanStack Start coordinator UI
-├── docs/                This file, and original Phase 0 planning documents
+├── api/                 Phase 2 — FastAPI doorway + SQLite persistence + Prometheus metrics
+├── dashboard/           Phase 3 — React/TanStack Start coordinator UI (New Assessment, Assessment Review, Trial Setup, Trials)
+├── run_evaluation.py    The 12-patient accuracy test script
+├── project_summary.md   This file (at the project root, alongside README.md)
+├── setup_guide.md       Step-by-step setup instructions
+├── seed_data.md         Copy-paste examples to try once the app is running
 ├── docker-compose.yml   Runs the full stack: api, dashboard, prometheus, grafana
+├── prometheus_config.yml  Monitoring config (data retention is passed as a command-line flag, not set here)
 └── README.md            Living technical status, updated throughout the build
 ```
 

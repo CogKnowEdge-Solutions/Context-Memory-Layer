@@ -57,13 +57,16 @@ flowchart TD
     F --> G
     G --> H[Human coordinator reviews the report]
     H --> I{Coordinator decides}
-    I --> J[✅ Approve]
-    I --> K[✏️ Override, with a written reason]
+    I --> J[✅ Accept]
+    I --> K[❌ Deny, with a written reason]
+    I --> N[❓ Needs More Review]
     J --> L[Decision saved permanently]
     K --> L
+    N --> M[Assessment stays open, flagged]
+    M --> H
 ```
 
-**The one rule that never changes:** the AI's answer is always a *suggestion*. Even if every single rule looks like a clean match, a human still has to click "Approve" before it counts as anything real. There is no way to skip this step — it's built into the code itself, not just a policy someone has to remember.
+**The one rule that never changes:** the AI's answer is always a *suggestion*. Even if every single rule looks like a clean match, a human still has to make a final call — Accept or Deny — before it counts as anything real. The third option, "Needs More Review," is not a dead end: it simply keeps the assessment open while the coordinator gathers the missing information, and the decision is finished with an Accept or Deny later. There is no way to skip this step — it's built into the code itself, not just a policy someone has to remember.
 
 ---
 
@@ -136,7 +139,7 @@ carematch/
 │
 ├── dashboard/              The webpage the coordinator actually uses
 │   └── src/
-│       ├── routes/            The 3 pages: New Assessment, Assessment Review, Trial Setup
+│       ├── routes/            The 4 pages: New Assessment, Assessment Review, Trial Setup, Trials
 │       ├── components/        Reusable pieces, like the rule result cards
 │       ├── hooks/             Small reusable bits of frontend logic
 │       └── lib/api.ts         The code that talks to the real API
@@ -144,15 +147,13 @@ carematch/
 ├── observability/          Retired — an early standalone monitoring test.
 │                             Real monitoring now lives directly inside api/main.py instead.
 │
-├── docs/                   Written explanations of the project
-│   └── project_summary.md   The full story: real bugs found, decisions made, evaluation results
-│
 ├── run_evaluation.py       The 12-patient accuracy test script (see project_summary.md for results)
+├── project_summary.md      The full story: real bugs found, decisions made, evaluation results
 ├── setup_guide.md          Step-by-step setup instructions for a first-time run
 ├── seed_data.md            Copy-paste examples to try once the app is running
 ├── docker-compose.yml      Starts everything (API, dashboard, monitoring) with one command
 ├── prometheus_config.yml   Tells Prometheus which services to watch (including itself)
-└── README.md               You are here (lives at the project root, not inside docs/)
+└── README.md               You are here (lives at the project root)
 ```
 
 ---
@@ -183,9 +184,11 @@ carematch/
 | GET | `/trials/{trial_id}` | Look up one specific trial |
 | POST | `/assess` | Run a real eligibility check for one patient against one trial |
 | GET | `/assessments/{assessment_id}` | Look up a past assessment |
-| POST | `/assessments/{assessment_id}/decision` | Record the coordinator's Approve/Override decision |
+| POST | `/assessments/{assessment_id}/decision` | Record the coordinator's decision — Accept, Deny, or Needs More Review |
 
 Every response also includes an `X-Request-ID` header — a unique ID for that specific request, useful for tracing a problem through the logs later (see [Monitoring, Logging & Tracing](#monitoring-logging--tracing)).
+
+A coordinator decision is one of three values: `accepted`, `denied`, or `needs_more_review`. **Accept and Deny are final** — once recorded, the assessment is locked. **`needs_more_review` is temporary.** It just flags the assessment as "still being worked on" and leaves it open, so the coordinator can come back later and turn it into a final Accept or Deny once the missing information arrives.
 
 **Example — what you get back from `/assess`:**
 ```json
@@ -283,7 +286,7 @@ There are two different `.env` files depending on how you're running things:
 CareMatch has three separate, complementary ways of watching what the system is doing — each answering a different question.
 
 ### 1. Prometheus + Grafana — "Is the system healthy?"
-Tracks system-wide numbers over time: how many assessments have run, how long reasoning takes, how often coordinators approve vs. override, and standard web traffic stats. Prometheus collects the numbers (configured in `prometheus_config.yml`, which also watches its own health); Grafana turns them into charts. Good for spotting trends — "did things slow down this week?" — not for looking at one specific event.
+Tracks system-wide numbers over time: how many assessments have run, how long reasoning takes, how often coordinators accept vs. deny, and standard web traffic stats. Prometheus collects the numbers (configured in `prometheus_config.yml`, which also watches its own health); Grafana turns them into charts. Good for spotting trends — "did things slow down this week?" — not for looking at one specific event.
 
 ### 2. Request Logging — "What happened on this exact request?"
 Every single request to the API gets a unique ID (visible in the `X-Request-ID` response header) and one log line recording what happened: which endpoint, how long it took, what it returned. If something goes wrong for one specific user action, this is how you'd trace it — "show me everything about request abc123."
@@ -315,7 +318,7 @@ Both test suites are fully automated and cost nothing to run, since they never m
 |---|---|
 | **Never a flat yes/no** | A decision with no explanation can't be trusted or checked. Every answer comes with a direct quote as proof. |
 | **No confidence score, anywhere** | We deliberately left this out. A percentage score can feel more certain than it actually is, and it was explicitly ruled out during planning. |
-| **Human approval is always required** | Even a clean "everything matches" case still needs a person to click Approve. This is enforced in the code itself — there's no way around it. |
+| **A human always makes the final call** | Even a clean "everything matches" case still needs a person to make a real decision — Accept or Deny — or deliberately flag it for more review. Nothing is ever decided by the AI alone. This is enforced in the code itself — there's no way around it. |
 | **Rules are written by hand, not read from a PDF automatically** | Automatically parsing rules out of messy trial documents is a much bigger, riskier problem. For now, a human converts the rulebook into a clean checklist first. |
 | **Exclusion rules are phrased as plain statements, not "must not" rules** | Testing showed the AI reasoning got confused by double-negatives. "Patient is taking Warfarin" works much better than "Patient must not be taking Warfarin." |
 | **When information is missing, the AI says so — it doesn't guess** | A wrongly excluded patient never gets a second chance. Being cautious costs less than being wrong. |
@@ -333,7 +336,7 @@ Building this surfaced some genuine bugs — the useful kind, found and fixed be
 4. **A leftover test service was quietly stealing web traffic meant for the real system**, because both were using the same computer port. Fixed by removing the old service entirely and building monitoring directly into the real system instead.
 5. **The app forgot everything every time it restarted.** All trials and assessments lived only in memory. Fixed by adding a real SQLite database — tested by actually killing the running server process and confirming the data survived.
 
-*(Full details of each issue, exactly what caused it and how it was proven fixed, are in `docs/project_summary.md`.)*
+*(Full details of each issue, exactly what caused it and how it was proven fixed, are in `project_summary.md`.)*
 
 ---
 
