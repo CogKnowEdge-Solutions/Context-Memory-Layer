@@ -8,6 +8,7 @@
 
 ## Table of Contents
 
+- [Documentation Map](#documentation-map)
 - [What This Project Does](#what-this-project-does)
 - [Why It's Built This Way](#why-its-built-this-way)
 - [How It Works](#how-it-works)
@@ -23,6 +24,30 @@
 - [Real Problems We Found and Fixed](#real-problems-we-found-and-fixed)
 - [How Well Does It Actually Work?](#how-well-does-it-actually-work)
 - [What's Not Built](#whats-not-built)
+
+---
+
+## Documentation Map
+
+Everything worth reading, and what to read it for. This file (`README.md`) is the technical overview; the four guides below take you from "nothing installed" to "I understand the whole project."
+
+**For everyone — read in this order:**
+
+| Doc | Read it to |
+|---|---|
+| `setup_guide.md` | Get the app running, step by step, from a fresh computer. This is the only doc you need to start. |
+| `seed_data.md` | Type in exact values and confirm the app is actually working with your own eyes. |
+| `monitoring_guide.md` | Understand what Prometheus and Grafana are, and look at the app's health numbers yourself — click by click. |
+| `project_summary.md` | Get the whole story: what got built, what actually broke and got fixed, and the honest results. |
+
+**For developers:**
+
+| Doc | Read it to |
+|---|---|
+| `dashboard/README.md` | Developer notes for the dashboard — how to run it and what's built. |
+| `dashboard/src/routes/README.md` | Internal note on how the dashboard's file-based routing works. |
+
+The suggested path for a newcomer is simple: `setup_guide.md` → `seed_data.md` → `monitoring_guide.md` → `project_summary.md`.
 
 ---
 
@@ -151,6 +176,7 @@ carematch/
 ├── project_summary.md      The full story: real bugs found, decisions made, evaluation results
 ├── setup_guide.md          Step-by-step setup instructions for a first-time run
 ├── seed_data.md            Copy-paste examples to try once the app is running
+├── monitoring_guide.md     What Prometheus and Grafana are, and how to look at the numbers yourself
 ├── docker-compose.yml      Starts everything (API, dashboard, monitoring) with one command
 ├── prometheus_config.yml   Tells Prometheus which services to watch (including itself)
 └── README.md               You are here (lives at the project root)
@@ -283,7 +309,7 @@ There are two different `.env` files depending on how you're running things:
 
 ## Monitoring, Logging & Tracing
 
-CareMatch has three separate, complementary ways of watching what the system is doing — each answering a different question.
+CareMatch has three separate, complementary ways of watching what the system is doing — each answering a different question. **Want to look at these numbers yourself, click by click? See `monitoring_guide.md`.**
 
 ### 1. Prometheus + Grafana — "Is the system healthy?"
 Tracks system-wide numbers over time: how many assessments have run, how long reasoning takes, how often coordinators accept vs. deny, and standard web traffic stats. Prometheus collects the numbers (configured in `prometheus_config.yml`, which also watches its own health); Grafana turns them into charts. Good for spotting trends — "did things slow down this week?" — not for looking at one specific event.

@@ -176,6 +176,7 @@ carematch/
 ├── project_summary.md   This file (at the project root, alongside README.md)
 ├── setup_guide.md       Step-by-step setup instructions
 ├── seed_data.md         Copy-paste examples to try once the app is running
+├── monitoring_guide.md  What Prometheus and Grafana are, and how to use them
 ├── docker-compose.yml   Runs the full stack: api, dashboard, prometheus, grafana
 ├── prometheus_config.yml  Monitoring config (data retention is passed as a command-line flag, not set here)
 └── README.md            Living technical status, updated throughout the build
