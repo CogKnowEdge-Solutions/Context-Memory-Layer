@@ -2,9 +2,11 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
+  decisionDisplayLabel,
   getAssessment,
   recordDecision,
   SUGGESTED_STATUS_LABEL,
+  type Decision,
   type RuleResult,
   type RuleStatus,
 } from "@/lib/api";
@@ -44,15 +46,15 @@ function Review() {
     enabled: id !== "",
   });
 
-  const [overriding, setOverriding] = useState(false);
+  const [panel, setPanel] = useState<"deny" | "needs_more_review" | null>(null);
   const [reason, setReason] = useState(DEFAULT_REASON);
 
   const decisionMutation = useMutation({
-    mutationFn: (input: { decision: "approved" | "overridden"; reason?: string }) =>
-      recordDecision(id, input),
+    mutationFn: (input: { decision: Decision; reason?: string }) => recordDecision(id, input),
     onSuccess: (record) => {
       queryClient.setQueryData(["assessment", id], record);
-      setOverriding(false);
+      setPanel(null);
+      setReason(DEFAULT_REASON);
     },
   });
 
@@ -172,56 +174,129 @@ function Review() {
 
             <div className="mt-5 flex flex-wrap gap-3">
               <button
-                onClick={() => decisionMutation.mutate({ decision: "approved" })}
+                onClick={() => decisionMutation.mutate({ decision: "accepted" })}
                 disabled={decisionMutation.isPending}
                 className="bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-structure disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Approve
+                Accept
               </button>
               <button
-                onClick={() => setOverriding(true)}
+                onClick={() => setPanel(panel === "deny" ? null : "deny")}
                 disabled={decisionMutation.isPending}
                 className="border border-structure/50 px-5 py-2.5 text-sm font-medium text-structure transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Override
+                Deny
+              </button>
+              <button
+                onClick={() => setPanel(panel === "needs_more_review" ? null : "needs_more_review")}
+                disabled={decisionMutation.isPending}
+                className="border border-structure/50 px-5 py-2.5 text-sm font-medium text-structure transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Needs More Review
               </button>
             </div>
 
-            {overriding && (
-              <div className="mt-6 max-w-2xl border border-border bg-card p-5">
-                <label htmlFor="reason" className="mb-2 block text-sm font-medium">
-                  Why are you overriding this? <span className="text-nomatch">*</span>
-                </label>
-                <textarea
-                  id="reason"
-                  rows={4}
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  className="w-full border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
-                  placeholder="Documented rationale, recorded with the assessment."
-                />
-                <div className="mt-4 flex gap-3">
-                  <button
-                    disabled={reason.trim().length === 0 || decisionMutation.isPending}
-                    onClick={() =>
-                      decisionMutation.mutate({ decision: "overridden", reason: reason.trim() })
-                    }
-                    className="bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-structure disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
-                  >
-                    {decisionMutation.isPending ? "Saving…" : "Confirm override"}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setOverriding(false);
-                      setReason(DEFAULT_REASON);
-                    }}
-                    className="px-3 py-2.5 text-sm text-muted-foreground hover:text-foreground"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
+            {panel === "deny" && (
+              <DecisionPanel
+                title="Why are you denying this assessment?"
+                required
+                placeholder="Documented rationale, recorded with the assessment."
+                reason={reason}
+                onChange={setReason}
+                pending={decisionMutation.isPending}
+                submitLabel={decisionMutation.isPending ? "Saving…" : "Confirm deny"}
+                onSubmit={() =>
+                  decisionMutation.mutate({ decision: "denied", reason: reason.trim() })
+                }
+                onCancel={() => {
+                  setPanel(null);
+                  setReason(DEFAULT_REASON);
+                }}
+              />
             )}
+
+            {panel === "needs_more_review" && (
+              <DecisionPanel
+                title="What additional information or review is needed?"
+                required={false}
+                placeholder="Optional note, e.g. awaiting a follow-up report."
+                reason={reason}
+                onChange={setReason}
+                pending={decisionMutation.isPending}
+                submitLabel={decisionMutation.isPending ? "Saving…" : "Flag for further review"}
+                onSubmit={() => {
+                  const trimmed = reason.trim();
+                  decisionMutation.mutate(
+                    trimmed
+                      ? { decision: "needs_more_review", reason: trimmed }
+                      : { decision: "needs_more_review" },
+                  );
+                }}
+                onCancel={() => {
+                  setPanel(null);
+                  setReason(DEFAULT_REASON);
+                }}
+              />
+            )}
+          </>
+        ) : record.decision === "needs_more_review" ? (
+          <>
+            <div className="border-l-4 border-l-unclear bg-unclear/8 p-6">
+              <p className="font-mono text-[0.68rem] uppercase tracking-widest text-muted-foreground">
+                Decision recorded — awaiting final decision
+              </p>
+              <h2 className="mt-2 text-xl text-structure">
+                {decisionDisplayLabel(record.decision)}
+              </h2>
+              {record.decision_reason && (
+                <div className="evidence mt-3 max-w-2xl">{record.decision_reason}</div>
+              )}
+              <p className="mt-3 text-xs text-muted-foreground">
+                Not final. Return when the missing information is available.
+              </p>
+            </div>
+
+            <div className="mt-6">
+              <h3 className="text-base">Finalize this decision</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Recorded by coordinator · {a.patient_id} · {a.trial_id}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-3">
+                <button
+                  onClick={() => decisionMutation.mutate({ decision: "accepted" })}
+                  disabled={decisionMutation.isPending}
+                  className="bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-structure disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Accept
+                </button>
+                <button
+                  onClick={() => setPanel(panel === "deny" ? null : "deny")}
+                  disabled={decisionMutation.isPending}
+                  className="border border-structure/50 px-5 py-2.5 text-sm font-medium text-structure transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Deny
+                </button>
+              </div>
+
+              {panel === "deny" && (
+                <DecisionPanel
+                  title="Why are you denying this assessment?"
+                  required
+                  placeholder="Documented rationale, recorded with the assessment."
+                  reason={reason}
+                  onChange={setReason}
+                  pending={decisionMutation.isPending}
+                  submitLabel={decisionMutation.isPending ? "Saving…" : "Confirm deny"}
+                  onSubmit={() =>
+                    decisionMutation.mutate({ decision: "denied", reason: reason.trim() })
+                  }
+                  onCancel={() => {
+                    setPanel(null);
+                    setReason(DEFAULT_REASON);
+                  }}
+                />
+              )}
+            </div>
           </>
         ) : (
           <div className="border-l-4 border-l-structure bg-secondary p-6">
@@ -229,13 +304,13 @@ function Review() {
               Decision recorded
             </p>
             <h2 className="mt-2 text-xl text-structure">
-              {record.decision === "approved" ? "Approved" : "Overridden"}
+              {decisionDisplayLabel(record.decision)}
             </h2>
-            {record.decision === "overridden" && record.decision_reason && (
+            {record.decision_reason && (
               <div className="evidence mt-3 max-w-2xl">{record.decision_reason}</div>
             )}
             <p className="mt-3 text-xs text-muted-foreground">
-              Recorded by coordinator · {a.patient_id} · {a.trial_id}
+              Final decision · {a.patient_id} · {a.trial_id}
             </p>
           </div>
         )}
@@ -269,6 +344,60 @@ function TallyStat({ value, label, tone }: { value: number; label: string; tone:
     <div className="min-w-20 px-3 text-center sm:min-w-24 sm:px-5">
       <p className={`font-mono text-xl font-medium ${tone}`}>{value}</p>
       <p className="mt-1 text-[0.68rem] leading-tight text-muted-foreground">{label}</p>
+    </div>
+  );
+}
+
+function DecisionPanel({
+  title,
+  required,
+  placeholder,
+  reason,
+  onChange,
+  pending,
+  submitLabel,
+  onSubmit,
+  onCancel,
+}: {
+  title: string;
+  required: boolean;
+  placeholder: string;
+  reason: string;
+  onChange: (value: string) => void;
+  pending: boolean;
+  submitLabel: string;
+  onSubmit: () => void;
+  onCancel: () => void;
+}) {
+  const canSubmit = !required || reason.trim().length > 0;
+  return (
+    <div className="mt-6 max-w-2xl border border-border bg-card p-5">
+      <label htmlFor="reason" className="mb-2 block text-sm font-medium">
+        {title} {required && <span className="text-nomatch">*</span>}
+      </label>
+      <textarea
+        id="reason"
+        rows={4}
+        value={reason}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
+        placeholder={placeholder}
+      />
+      <div className="mt-4 flex gap-3">
+        <button
+          disabled={!canSubmit || pending}
+          onClick={onSubmit}
+          className="bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-structure disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+        >
+          {submitLabel}
+        </button>
+        <button
+          onClick={onCancel}
+          className="px-3 py-2.5 text-sm text-muted-foreground hover:text-foreground"
+        >
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }

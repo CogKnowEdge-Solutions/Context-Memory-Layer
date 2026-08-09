@@ -85,7 +85,7 @@ def test_metrics_endpoint_exposes_carematch_specific_metrics():
         json={"trial_id": "T-METRICS-TEST", "patient_id": "P-1", "patient_record": "record"},
     )
     assessment_id = assess_resp.json()["assessment_id"]
-    client.post(f"/assessments/{assessment_id}/decision", json={"decision": "approved"})
+    client.post(f"/assessments/{assessment_id}/decision", json={"decision": "accepted"})
 
     metrics_text = client.get("/metrics").text
     assert "trials_registered_total" in metrics_text
@@ -94,7 +94,7 @@ def test_metrics_endpoint_exposes_carematch_specific_metrics():
     assert "coordinator_decisions_total" in metrics_text
     # Confirm the label values we expect actually show up, not just the metric names
     assert 'suggested_status="needs_more_info"' in metrics_text  # fake mode always returns this
-    assert 'decision="approved"' in metrics_text
+    assert 'decision="accepted"' in metrics_text
 
 
 def test_health():
@@ -213,22 +213,118 @@ def test_recording_a_decision_updates_the_assessment():
 
     decision_resp = client.post(
         f"/assessments/{assessment_id}/decision",
-        json={"decision": "overridden", "reason": "Coordinator saw additional labs not in the record"},
+        json={"decision": "denied", "reason": "Coordinator saw additional labs not in the record"},
     )
     assert decision_resp.status_code == 200
     data = decision_resp.json()
-    assert data["decision"] == "overridden"
+    assert data["decision"] == "denied"
     assert data["decision_reason"] == "Coordinator saw additional labs not in the record"
 
     # Confirm it actually persisted, not just echoed back in the response
     fetch_resp = client.get(f"/assessments/{assessment_id}")
-    assert fetch_resp.json()["decision"] == "overridden"
+    assert fetch_resp.json()["decision"] == "denied"
+
+
+def test_needs_more_review_can_be_changed_to_a_final_decision():
+    """'Needs More Review' is a temporary flag, not a dead end. Recording it
+    first, then coming back later to finalize as 'accepted' or 'denied',
+    must work -- the second decision wins (set_decision overwrites via
+    ON CONFLICT DO UPDATE)."""
+    client.post(
+        "/trials",
+        json={
+            "trial_id": "T-NMR-TEST",
+            "trial_name": "Needs More Review Test Trial",
+            "rules": [{"rule_id": "INC-01", "rule_text": "test rule", "category": "inclusion"}],
+        },
+    )
+    create_resp = client.post(
+        "/assess",
+        json={"trial_id": "T-NMR-TEST", "patient_id": "P-1", "patient_record": "record"},
+    )
+    assessment_id = create_resp.json()["assessment_id"]
+
+    # Step 1: flag for further review (optional reason)
+    first = client.post(
+        f"/assessments/{assessment_id}/decision",
+        json={"decision": "needs_more_review", "reason": "Awaiting latest pathology report"},
+    )
+    assert first.status_code == 200
+    assert first.json()["decision"] == "needs_more_review"
+    assert first.json()["decision_reason"] == "Awaiting latest pathology report"
+
+    # Step 2: confirm it persisted and is still reviewable, not final
+    mid = client.get(f"/assessments/{assessment_id}")
+    assert mid.json()["decision"] == "needs_more_review"
+
+    # Step 3: coordinator returns later and finalizes as "accepted"
+    final = client.post(
+        f"/assessments/{assessment_id}/decision",
+        json={"decision": "accepted"},
+    )
+    assert final.status_code == 200
+    assert final.json()["decision"] == "accepted"
+
+    # The second decision wins, and the stale note is replaced
+    fetch = client.get(f"/assessments/{assessment_id}")
+    assert fetch.json()["decision"] == "accepted"
+    assert fetch.json()["decision_reason"] is None
+
+    # And the same assessment can equally be finalized as "denied" instead
+    denied = client.post(
+        f"/assessments/{assessment_id}/decision",
+        json={"decision": "denied", "reason": "Record contradicts inclusion criterion"},
+    )
+    assert denied.status_code == 200
+    assert denied.json()["decision"] == "denied"
+    assert denied.json()["decision_reason"] == "Record contradicts inclusion criterion"
+    assert client.get(f"/assessments/{assessment_id}").json()["decision"] == "denied"
+
+
+def test_legacy_decision_values_still_load_without_crashing():
+    """Decisions written before the 3-option redesign used "approved" /
+    "overridden". They are NOT migrated (plain TEXT in SQLite), but they
+    must still load and display through the API without a validation
+    crash."""
+    import sqlite3
+
+    import db
+
+    client.post(
+        "/trials",
+        json={
+            "trial_id": "T-LEGACY-TEST",
+            "trial_name": "Legacy Decision Trial",
+            "rules": [{"rule_id": "INC-01", "rule_text": "test rule", "category": "inclusion"}],
+        },
+    )
+    create_resp = client.post(
+        "/assess",
+        json={"trial_id": "T-LEGACY-TEST", "patient_id": "P-1", "patient_record": "record"},
+    )
+    assessment_id = create_resp.json()["assessment_id"]
+
+    # Simulate data written by the old system, straight into the DB.
+    conn = sqlite3.connect(db.DB_PATH)
+    try:
+        conn.execute(
+            "INSERT INTO decisions (assessment_id, decision, decision_reason) VALUES (?, ?, ?)",
+            (assessment_id, "approved", "Legacy approval"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    r = client.get(f"/assessments/{assessment_id}")
+    assert r.status_code == 200  # must NOT 500
+    assert r.json()["decision"] == "approved"
+    assert r.json()["decision_reason"] == "Legacy approval"
 
 
 def test_recording_decision_on_unknown_assessment_returns_404():
     r = client.post(
         "/assessments/does-not-exist/decision",
-        json={"decision": "approved"},
+        json={"decision": "accepted"},
     )
     assert r.status_code == 404
 
@@ -287,7 +383,7 @@ def test_data_persists_across_a_fresh_database_connection():
         json={"trial_id": "T-PERSIST-1", "patient_id": "P-1", "patient_record": "some record"},
     )
     assessment_id = assess_resp.json()["assessment_id"]
-    client.post(f"/assessments/{assessment_id}/decision", json={"decision": "overridden"})
+    client.post(f"/assessments/{assessment_id}/decision", json={"decision": "accepted"})
 
     # New connection to the SAME file -- no reference to anything main.py
     # or the TestClient still holds in memory.
@@ -319,6 +415,6 @@ def test_data_persists_across_a_fresh_database_connection():
             "SELECT decision FROM decisions WHERE assessment_id=?", (assessment_id,)
         ).fetchone()
         assert decision is not None
-        assert decision[0] == "overridden"
+        assert decision[0] == "accepted"
     finally:
         conn.close()

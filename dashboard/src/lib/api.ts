@@ -29,12 +29,29 @@ export type AssessmentResult = {
   rule_results: RuleResult[];
 };
 
-export type Decision = "approved" | "overridden";
+export type Decision = "accepted" | "denied" | "needs_more_review";
+
+export const DECISION_LABEL: Record<Decision, string> = {
+  accepted: "Accepted",
+  denied: "Denied",
+  needs_more_review: "Flagged for Further Review",
+};
+
+// Legacy rows written before the 3-option redesign stored "approved" /
+// "overridden". The backend still returns them (no migration), so the UI
+// must display them gracefully instead of crashing.
+export function decisionDisplayLabel(value: string | null): string {
+  if (value === null) return "Undecided";
+  return DECISION_LABEL[value as Decision] ?? `Recorded (${value})`;
+}
 
 export type AssessmentRecord = {
   assessment_id: string;
   assessment: AssessmentResult;
-  decision: Decision | null;
+  // string | null, not Decision | null: the backend keeps legacy
+  // "approved"/"overridden" rows readable without migration, so responses
+  // can contain values outside the current 3-option set.
+  decision: string | null;
   decision_reason: string | null;
   provider_used: string;
   model_used: string;

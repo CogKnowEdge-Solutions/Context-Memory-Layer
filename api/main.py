@@ -187,14 +187,23 @@ class AssessmentRecord(BaseModel):
     """
     assessment_id: str
     assessment: AssessmentResult
-    decision: Literal["approved", "overridden"] | None = None
+    # str | None on purpose, NOT a 3-value Literal: decisions are stored as
+    # plain TEXT in SQLite, and rows written before the 3-option redesign
+    # still contain the legacy values "approved"/"overridden". Those must
+    # load and display without crashing (senior-review requirement), so the
+    # response side tolerates any string; the REQUEST side below stays a
+    # strict Literal so new writes can only be the 3 current values.
+    decision: str | None = None
     decision_reason: str | None = None
     provider_used: str
     model_used: str
 
 
 class DecisionRequest(BaseModel):
-    decision: Literal["approved", "overridden"]
+    # Strict on purpose: coordinators can only write these 3 values. Old
+    # "approved"/"overridden" data stays readable (see AssessmentRecord
+    # above) but is never written again.
+    decision: Literal["accepted", "denied", "needs_more_review"]
     reason: str | None = None
 
 
