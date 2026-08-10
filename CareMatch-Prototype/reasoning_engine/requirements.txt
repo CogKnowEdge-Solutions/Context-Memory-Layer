@@ -1,6 +1,0 @@
-pydantic
-pytest
-openai
-anthropic
-python-dotenv
-langsmith
