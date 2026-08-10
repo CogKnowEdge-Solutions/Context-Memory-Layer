@@ -1,10 +1,14 @@
 # Context-Memory-Layer
 
-A persistent, context-aware memory layer for AI agents and applications. This repository is a work in progress.
+A persistent, context-aware memory layer for AI agents and applications.
 
-## Getting Started
+## Memory & Context Layer
 
-Repository is being initialized. Documentation and code will follow.
+- **Short-term**: Current conversation context, working memory
+- **Long-term**: Vector embeddings, knowledge bases, conversation history
+- **Episodic**: Past interactions and outcomes
+- **Semantic**: Facts, skills, world knowledge
+- **Retrieval mechanisms** for relevant context
 
 ## License
 
