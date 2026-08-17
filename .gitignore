@@ -36,3 +36,9 @@ yarn-error.log*
 # Misc
 tmp/
 *.tmp
+
+
+AGENTS.md
+CONSTITUTION.md
+GUIDELINES.md
+TEST.md
