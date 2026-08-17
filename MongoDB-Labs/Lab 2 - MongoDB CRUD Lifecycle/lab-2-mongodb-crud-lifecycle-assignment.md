@@ -1,6 +1,6 @@
-# Lab 2 — Personal Task Tracker: Assignment
+# Lab 2 — MongoDB Basics: How to Write, Update & Delete Data — Assignment
 
-Test your understanding of MongoDB CRUD operations by answering the following questions and completing the short code tasks.
+Test your understanding of MongoDB write operations by answering the following questions and completing the short code tasks.
 
 ---
 

@@ -1,6 +1,6 @@
-# Lab 1 — Student Records Lookup System: Assignment
+# Lab 1 — MongoDB Basics: How to Query Data — Assignment
 
-Test your understanding of MongoDB basics by answering the following questions and completing the short code tasks.
+Test your understanding of MongoDB query basics by answering the following questions and completing the short code tasks.
 
 ---
 

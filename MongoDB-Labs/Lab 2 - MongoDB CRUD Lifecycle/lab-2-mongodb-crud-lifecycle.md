@@ -1,6 +1,8 @@
-# Personal Task Tracker
+# MongoDB Basics: How to Write, Update & Delete Data
 
 **Difficulty: Beginner | ~40 min | No prerequisites**
+
+*Lab 2 of 7 in the MongoDB Mastery series.*
 
 ---
 
@@ -9,6 +11,8 @@
 A project manager needs a lightweight task tracker that supports the full lifecycle of work items — creating tasks, updating their status as work progresses, reassigning priorities, and removing completed items from the active list. They want to see data change over time as tasks move through different states, not just query a static snapshot.
 
 This lab walks you through building a personal task tracker using MongoDB. You will learn how to connect to a MongoDB instance, insert individual and bulk task records, update task state (mark done, bump priority, edit due dates), use upserts to add-if-missing-or-update, and delete finished tasks — finishing with a summary report that reflects the tracker's current state after every mutation.
+
+This is the write-heavy lab. Lab 1 covered how to insert data and query it. This lab covers what happens when data changes — updates, deletes, and upserts. After each change, you will re-query the data to see it update in real time.
 
 Before diving into the code, it helps to understand the core MongoDB concepts this lab uses.
 
@@ -62,7 +66,7 @@ flowchart TD
     style E fill:#e1f5ff
 ```
 
-> **Why this matters:** Understanding the full CRUD lifecycle — not just read-heavy queries — is essential for building applications that manage real data. Task trackers, shopping carts, and user profiles all depend on reliable create, update, and delete operations.
+> **Why this matters:** In Lab 1 you learned how to insert and query data. But real applications need to change data too — marking tasks done, updating prices, removing old records. Understanding the full CRUD lifecycle (Create, Read, Update, Delete) is essential for building applications that manage real data. Task trackers, shopping carts, and user profiles all depend on reliable update and delete operations.
 
 ---
 
@@ -439,3 +443,5 @@ Replace the `mongomock` in-memory client with a real MongoDB server running loca
 - **`delete_one()` removes the first matching document** — use with a specific filter to remove exactly one record.
 - **`delete_many()` removes all matching documents** — ideal for cleanup operations like archiving completed tasks.
 - **Re-querying after every mutation** confirms the data actually changed — this is the write-heavy counterpart to Lab 1's read-heavy focus.
+
+With Labs 1 and 2 done, you now know the full MongoDB CRUD picture — inserting, querying, updating, and deleting. Lab 3 builds on this with aggregation pipelines and indexing.

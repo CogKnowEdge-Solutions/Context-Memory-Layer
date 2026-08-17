@@ -1,6 +1,8 @@
-# Student Records Lookup System
+# MongoDB Basics: How to Query Data
 
 **Difficulty: Beginner | ~35 min | No prerequisites**
+
+*Lab 1 of 7 in the MongoDB Mastery series.*
 
 ---
 
@@ -9,6 +11,8 @@
 A university administrator needs to manage and query a growing collection of student records. They want to quickly answer questions like "which students are currently failing?", "list all Computer Science students sorted by grade", and "how many students are enrolled in each course?" — all without writing complex SQL joins or managing rigid table schemas.
 
 This lab walks you through building a queryable mini student database using MongoDB. You will learn how to connect to a MongoDB instance, design a flexible document schema, insert a realistic dataset of 25 student records, and then use MongoDB's built-in query operators to filter, sort, and project the data — finishing with a printed summary report that answers real administrative questions.
+
+This is the read-heavy lab. You will focus on inserting data once, then querying it in different ways. Lab 2 covers the write side — updating, deleting, and changing data over time.
 
 Before diving into the code, it helps to understand the core MongoDB concepts this lab uses.
 
@@ -57,7 +61,7 @@ graph LR
     style D fill:#c8e6c9
 ```
 
-> **Why this matters:** Understanding the difference between a document database and a relational database is the first step to deciding which tool fits your project. MongoDB's flexible schema makes it a natural choice for applications where the data shape evolves over time — user profiles, product catalogs, or, as in this lab, student records.
+> **Why this matters:** Understanding the difference between a document database and a relational database is the first step to deciding which tool fits your project. MongoDB's flexible schema makes it a natural choice for applications where the data shape evolves over time — user profiles, product catalogs, or, as in this lab, student records. In Lab 2, you will learn how to update, delete, and change this data once it is in the database.
 
 ---
 
@@ -364,3 +368,5 @@ Replace the `mongomock` in-memory client with a real MongoDB server running loca
 - **Projections control which fields are returned** — `{"_id": 0}` hides the auto-generated `_id`, and you can include or exclude any field.
 - **`.sort("field", -1)` orders results** — `1` for ascending, `-1` for descending, and it chains naturally with `.find()`.
 - **Aggregation pipelines transform data in stages** — `$group` groups by a field, `$sum` counts, and `$sort` orders — MongoDB's equivalent of SQL's `GROUP BY`.
+
+With Lab 1 done, you know how to put data into MongoDB and query it. Lab 2 builds on this by covering updates, deletes, and upserts — the full write lifecycle.
