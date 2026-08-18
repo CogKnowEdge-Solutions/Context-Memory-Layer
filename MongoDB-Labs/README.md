@@ -1,6 +1,6 @@
 # MongoDB Labs — Foundations to Production
 
-This module teaches MongoDB from first principles through seven hands-on labs, building toward the MongoDB skills needed for the storage/memory layer of an AI agent harness. This README is the starting point: it explains what MongoDB is, how it works, and how the labs are organized. Read it fully before opening Lab 1.
+This module teaches MongoDB from first principles through seven hands-on labs. This README is the starting point: it explains what MongoDB is, how it works, and how the labs are organized. Read it fully before opening Lab 1.
 
 ---
 
@@ -219,7 +219,9 @@ Open the `.ipynb` to run the lab, read the matching `.md` if a step needs more e
 
 ## 9. Prerequisites
 
-Basic Python — variables, dictionaries, lists, loops, `import` statements — is the only requirement to start.
+Basic Python — variables, dictionaries, lists, loops, `import` statements — is the only requirement.
+
+No prior MongoDB experience is assumed for Labs 1-2; each later lab builds only on what earlier ones taught. No database installation is required for Labs 1-4, since they run on `pymongo` (the official MongoDB Python driver) and `mongomock` (an in-memory mock server). Labs 5-6 involve replication, sharding, and security concepts that exceed what an in-memory mock can fully demonstrate, and each calls out clearly where a real MongoDB server is assumed.
 
 ---
 
