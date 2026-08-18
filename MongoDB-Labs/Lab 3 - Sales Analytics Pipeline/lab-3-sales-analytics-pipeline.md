@@ -36,10 +36,10 @@ graph LR
     IX --> R["Results"]
     CS --> R
 
-    style Q fill:#e1f5ff
-    style IDX fill:#fff9c4
-    style IX fill:#c8e6c9
-    style CS fill:#ffcdd2
+    style Q fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style IDX fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style IX fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style CS fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
 ```
 
 ### Compound Indexes
@@ -77,8 +77,10 @@ flowchart LR
     CON --> ORD[("orders<br/>20 records")]
     PROD -.->|product_id| ORD
 
-    classDef defaultStyle fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
-    class PY,CON,PROD,ORD defaultStyle
+    style PY fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style CON fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style PROD fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style ORD fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
 ```
 
 Two collections are seeded: `products` (catalog) and `orders` (transactions). Orders reference products via `product_id`.
@@ -94,8 +96,13 @@ flowchart LR
     GP --> ST["$sort / $limit"]
     ST --> R["Results"]
 
-    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
-    class ORD,LK,UW,AF,GP,ST,R defaultStyle
+    style ORD fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    style LK fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    style UW fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    style AF fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    style GP fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    style ST fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    style R fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
 ```
 
 Each pipeline joins orders with products, computes revenue, then groups by product, month, customer, or region.
@@ -107,8 +114,9 @@ flowchart LR
     IDX["Create indexes"] --> EX["Run .explain()"]
     EX --> RES["IXSCAN / COLLSCAN"]
 
-    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
-    class IDX,EX,RES defaultStyle
+    style IDX fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    style EX fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    style RES fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
 ```
 
 Three indexes are created (product_id, unique product_id, compound region+date). `.explain()` shows whether each query uses an index or falls back to a collection scan.
@@ -203,7 +211,7 @@ products = db["products"]
 print("Connected to ecommerce database")
 ```
 
-We create two collections: `orders` for purchase records and `products` for the product catalog.
+We create two collections: `orders` for purchase records and `products` for the product catalog. This multi-collection design separates transactions from catalog data, linked by `product_id`.
 
 ---
 
@@ -227,7 +235,7 @@ products.insert_many(product_catalog)
 print(f"Inserted {products.count_documents({})} products.")
 ```
 
-Each product has a `product_id`, `name`, `category`, and `price`.
+Each product has a `product_id`, `name`, `category`, and `price`. The `product_id` is the key we will reference from orders to join the two collections.
 
 ---
 
@@ -244,7 +252,7 @@ orders.insert_many(order_records)
 print(f"Inserted {orders.count_documents({})} orders.")
 ```
 
-Each order links to a product via `product_id`. Orders span January–May 2025 across four regions.
+Each order links to a product via `product_id`. Orders span January–May 2025 across four regions. We will use aggregation pipelines to slice this data in different ways.
 
 ---
 
@@ -271,25 +279,128 @@ pipeline = [
 ]
 ```
 
-Five stages: `$lookup` joins products, `$unwind` flattens, `$addFields` computes revenue, `$group` aggregates, `$sort` ranks.
+Five stages: `$lookup` joins each order with its product (like SQL JOIN), `$unwind` flattens the joined array into individual documents, `$addFields` computes `revenue = quantity × price`, `$group` aggregates revenue and quantity by product name, and `$sort` ranks products by total revenue descending.
 
 ---
 
 ### Step 5 — Monthly Revenue Trend
 
-Uses `$substr` to extract year-month from the date string, then groups by month.
+```python
+pipeline = [
+    {"$lookup": {
+        "from": "products",
+        "localField": "product_id",
+        "foreignField": "product_id",
+        "as": "product"
+    }},
+    {"$unwind": "$product"},
+    {"$addFields": {
+        "revenue": {"$multiply": ["$quantity", "$product.price"]},
+        "month": {"$substr": ["$date", 0, 7]}
+    }},
+    {"$group": {
+        "_id": "$month",
+        "monthly_revenue": {"$sum": "$revenue"},
+        "order_count": {"$sum": 1}
+    }},
+    {"$sort": {"_id": 1}}
+]
+
+print("--- Monthly Revenue Trend ---")
+for doc in orders.aggregate(pipeline):
+    print(f"{doc['_id']}  | Revenue: ${doc['monthly_revenue']:>9.2f} | Orders: {doc['order_count']}")
+```
+
+Uses `$substr` to extract the year-month portion (e.g., `"2025-01"`) from each order date, then groups by that substring. This gives a month-by-month revenue breakdown without needing date-type parsing.
 
 ### Step 6 — Top Customers by Spend
 
-Groups by customer, sorts by total spend, uses `$limit` for top-N.
+```python
+pipeline = [
+    {"$lookup": {
+        "from": "products",
+        "localField": "product_id",
+        "foreignField": "product_id",
+        "as": "product"
+    }},
+    {"$unwind": "$product"},
+    {"$addFields": {
+        "revenue": {"$multiply": ["$quantity", "$product.price"]}
+    }},
+    {"$group": {
+        "_id": "$customer",
+        "total_spend": {"$sum": "$revenue"},
+        "orders_count": {"$sum": 1}
+    }},
+    {"$sort": {"total_spend": -1}},
+    {"$limit": 5}
+]
+
+print("--- Top 5 Customers by Spend ---")
+for i, doc in enumerate(orders.aggregate(pipeline), 1):
+    print(f"{i}. {doc['_id']:<10} | Total: ${doc['total_spend']:>9.2f} | Orders: {doc['orders_count']}")
+```
+
+Groups by customer, computes total spend and order count, then uses `$limit` to return only the top 5 highest-spending customers.
 
 ### Step 7 — Revenue by Region
 
-Groups by region with both `$sum` and `$avg` in the same pipeline.
+```python
+pipeline = [
+    {"$lookup": {
+        "from": "products",
+        "localField": "product_id",
+        "foreignField": "product_id",
+        "as": "product"
+    }},
+    {"$unwind": "$product"},
+    {"$addFields": {
+        "revenue": {"$multiply": ["$quantity", "$product.price"]}
+    }},
+    {"$group": {
+        "_id": "$region",
+        "total_revenue": {"$sum": "$revenue"},
+        "avg_order_value": {"$avg": "$revenue"}
+    }},
+    {"$sort": {"total_revenue": -1}}
+]
+
+print("--- Revenue by Region ---")
+for doc in orders.aggregate(pipeline):
+    print(f"{doc['_id']:<8} | Revenue: ${doc['total_revenue']:>9.2f} | Avg Order: ${doc['avg_order_value']:.2f}")
+```
+
+Groups by region with both `$sum` (total revenue) and `$avg` (average order value) in the same pipeline — two aggregations in one pass.
 
 ### Step 8 — Category Breakdown with `$match`
 
-Filters on the joined product's category using `$match` after `$unwind`.
+```python
+pipeline = [
+    {"$lookup": {
+        "from": "products",
+        "localField": "product_id",
+        "foreignField": "product_id",
+        "as": "product"
+    }},
+    {"$unwind": "$product"},
+    {"$match": {"product.category": "Electronics"}},
+    {"$addFields": {
+        "revenue": {"$multiply": ["$quantity", "$product.price"]}
+    }},
+    {"$group": {
+        "_id": "$product.name",
+        "total_revenue": {"$sum": "$revenue"},
+        "units_sold": {"$sum": "$quantity"}
+    }},
+    {"$sort": {"total_revenue": -1}}
+]
+
+print("--- Electronics Category Breakdown ---")
+for doc in orders.aggregate(pipeline):
+    print(f"{doc['_id']:<30} | Revenue: ${doc['total_revenue']:>9.2f} | Units: {doc['units_sold']}")
+```
+
+Places `$match` after `$unwind` to filter on the joined product's category, showing only Electronics orders. In production, you would move `$match` as early as possible (before `$lookup`) for better performance.
 
 ### Step 9 — Create Indexes
 
@@ -299,7 +410,7 @@ products.create_index("product_id", unique=True)
 orders.create_index([("region", 1), ("date", 1)])
 ```
 
-Three indexes: one for join acceleration, one unique constraint, one compound for filtered time-range queries.
+Three indexes: `orders.product_id` accelerates the `$lookup` join, `products.product_id` with `unique=True` enforces one record per product, and the compound index `(region, date)` optimizes filtered time-range queries.
 
 ### Step 10 — Analyze with `.explain()`
 
@@ -308,9 +419,11 @@ result = orders.find({"region": "North", "date": {"$gte": "2025-02-01"}}).explai
 print(result["queryPlanner"]["winningPlan"]["stage"])  # IXSCAN or COLLSCAN
 ```
 
+`explain()` shows the query plan MongoDB uses. `IXSCAN` means an index is being used (fast). `COLLSCAN` means a full collection scan (slow — indicates a missing index). This query hits the compound `(region, date)` index we created in Step 9.
+
 ### Step 11 — Print Summary Report
 
-Collects all key metrics into one formatted block.
+Re-runs the key pipelines from earlier steps and collects all results — total revenue, top products, region breakdown, and index listing — into a single formatted summary report.
 
 ---
 

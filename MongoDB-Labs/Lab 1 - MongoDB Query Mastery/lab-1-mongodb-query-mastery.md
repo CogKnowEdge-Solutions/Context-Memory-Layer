@@ -55,10 +55,10 @@ graph LR
     B -->|"$group"| C["Grouped by Course"]
     C -->|"$sort"| D["Sorted Results"]
 
-    style A fill:#e1f5ff
-    style B fill:#fff9c4
-    style C fill:#ffe0b2
-    style D fill:#c8e6c9
+    style A fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style B fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style C fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style D fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
 ```
 
 > **Why this matters:** Understanding the difference between a document database and a relational database is the first step to deciding which tool fits your project. MongoDB's flexible schema makes it a natural choice for applications where the data shape evolves over time — user profiles, product catalogs, or, as in this lab, student records. In Lab 2, you will learn how to update, delete, and change this data once it is in the database.
@@ -87,8 +87,10 @@ flowchart LR
     CON --> INS["Insert 25 student<br/>documents"]
     INS --> COL[("students collection")]
 
-    classDef defaultStyle fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
-    class PY,CON,INS,COL defaultStyle
+    style PY fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style CON fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style INS fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style COL fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
 ```
 
 The notebook connects to a MongoDB instance, creates a `students` collection inside a `school_db` database, and bulk-inserts 25 student documents in one operation.
@@ -104,8 +106,11 @@ flowchart LR
     Q2 --> R
     Q3 --> R
 
-    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
-    class COL,Q1,Q2,Q3,R defaultStyle
+    style COL fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    style Q1 fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    style Q2 fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    style Q3 fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    style R fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
 ```
 
 Three types of queries are run against the same collection: a filter query to find failing students, a filtered sort to list top performers in a specific course, and an aggregation pipeline to count students per course. All results are collected into a single printed summary report.
@@ -214,7 +219,7 @@ students = db["students"]
 print("Connected to MongoDB (in-memory mock)")
 ```
 
-We create a `mongomock.MongoClient()` which behaves exactly like a real MongoDB connection but runs in memory. To switch to a real server later, you only change this one line.
+Creates an in-memory MongoDB client that behaves exactly like a real connection. To use a real server later, just swap `mongomock.MongoClient()` for `pymongo.MongoClient("mongodb://localhost:27017/")`.
 
 ---
 
@@ -256,7 +261,7 @@ result = students.insert_many(student_records)
 print(f"Inserted {len(result.inserted_ids)} student records.")
 ```
 
-Each dictionary is a **document** — MongoDB's equivalent of a row. Unlike SQL, there's no table definition needed; you simply insert documents and MongoDB stores them as-is.
+Each dictionary is a **document** — MongoDB's equivalent of a row. No table definition is needed; `insert_many()` accepts a list of dictionaries and stores them directly.
 
 ---
 
@@ -276,7 +281,7 @@ for s in failing_students:
     print(f"{s['name']:<20} | {s['course']:<15} | Grade: {s['grade']} | Status: {s['status']}")
 ```
 
-The filter `{"grade": {"$lt": 60}}` uses MongoDB's **less than** operator. The second argument `{"_id": 0}` is a **projection** — it excludes the auto-generated `_id` field, keeping output clean.
+`$lt` is the "less than" comparison operator. The second argument `{"_id": 0}` is a **projection** — it hides the auto-generated `_id` field so the output stays clean.
 
 ---
 
@@ -294,7 +299,7 @@ for s in cs_students:
     print(f"{s['name']:<20} | Grade: {s['grade']} | Status: {s['status']}")
 ```
 
-This chains a **filter** (`{"course": "Computer Science"}`) with a **sort** (`.sort("grade", -1)`). Use `1` instead of `-1` to sort ascending (lowest first).
+Chains a **filter** (course = "Computer Science") with a **sort** on grade. Use `1` for ascending (lowest first), `-1` for descending (highest first).
 
 ---
 
@@ -314,7 +319,7 @@ for doc in course_counts:
     print(f"{doc['_id']:<20} | {doc['count']} students")
 ```
 
-An **aggregation pipeline** processes data in stages. `$group` groups documents by `course` and counts them with `$sum: 1`. `$sort` then orders by count, highest first. This is MongoDB's equivalent of SQL's `GROUP BY course ORDER BY count DESC`.
+`$group` groups documents by `course` and counts each group with `$sum: 1`. `$sort` then orders by count descending. This is MongoDB's equivalent of SQL's `GROUP BY course ORDER BY count DESC`.
 
 ---
 
@@ -348,7 +353,7 @@ for doc in enrollment:
     print(f"  {doc['_id']}: {doc['count']} students")
 ```
 
-This final cell collects all results into a formatted summary report — the kind of output an administrator would actually want to see.
+Re-runs the queries from Steps 3–5 and collects all results into a single formatted summary report — the kind of output an administrator would actually want to see.
 
 ---
 

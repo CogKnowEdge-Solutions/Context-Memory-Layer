@@ -59,11 +59,11 @@ flowchart TD
     C --> E["Return matched count"]
     D --> E
 
-    style A fill:#e1f5ff
-    style B fill:#fff9c4
-    style C fill:#c8e6c9
-    style D fill:#ffe0b2
-    style E fill:#e1f5ff
+    style A fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style B fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style C fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style D fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style E fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
 ```
 
 > **Why this matters:** In Lab 1 you learned how to insert and query data. But real applications need to change data too — marking tasks done, updating prices, removing old records. Understanding the full CRUD lifecycle (Create, Read, Update, Delete) is essential for building applications that manage real data. Task trackers, shopping carts, and user profiles all depend on reliable update and delete operations.
@@ -92,8 +92,10 @@ flowchart LR
     CON --> INS["Insert 8 task<br/>documents"]
     INS --> COL[("tasks collection")]
 
-    classDef defaultStyle fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
-    class PY,CON,INS,COL defaultStyle
+    style PY fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style CON fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style INS fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style COL fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
 ```
 
 The notebook connects to a MongoDB instance, creates a `tasks` collection inside a `task_db` database, and inserts 8 task documents using both `insert_one()` and `insert_many()`.
@@ -114,8 +116,14 @@ flowchart LR
     D1 --> RPT["Summary Report"]
     D2 --> RPT
 
-    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
-    class COL,U1,U2,UPS,Q,D1,D2,RPT defaultStyle
+    style COL fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    style U1 fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    style U2 fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    style UPS fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    style Q fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    style D1 fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    style D2 fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    style RPT fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
 ```
 
 After every write operation, the notebook re-queries the collection so you can see the data change in real time — the write-heavy counterpart to Lab 1's read-heavy focus.
