@@ -279,6 +279,11 @@ print(f"Updated: Alice Johnson — added scholarship = 'Dean's Award'")
 ### Step 4 — Bulk Increment: Bump Failing Grades by 5
 
 ```python
+# Capture who's failing BEFORE the update
+failing_ids = [s["student_id"] for s in students.find(
+    {"grade": {"$lt": 60}}, {"_id": 0, "student_id": 1}
+)]
+
 # update_many() modifies ALL documents that match the filter
 # $inc adds 5 to the grade field (no need to read the current value first)
 result = students.update_many(
@@ -288,11 +293,10 @@ result = students.update_many(
 
 print(f"Updated {result.modified_count} failing student(s) — grades incremented by 5")
 
-# Show the updated failing students
+# Look up the SAME students by their captured IDs, not by re-filtering on grade
 updated_failing = students.find(
-    {"grade": {"$lt": 60}},
-    {"_id": 0}
-).sort("grade", 1)
+    {"student_id": {"$in": failing_ids}}, {"_id": 0}
+)
 
 print("\n--- Updated Failing Students ---")
 for s in updated_failing:
