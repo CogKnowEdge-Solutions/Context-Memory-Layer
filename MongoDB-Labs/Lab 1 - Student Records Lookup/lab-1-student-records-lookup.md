@@ -182,7 +182,7 @@ Biology              | 4 students
 
 - **Basic Python knowledge** — variables, lists, dictionaries, loops, and `import` statements.
 - **No MongoDB experience required** — this lab teaches you from scratch.
-- **MongoDB Atlas cluster set up** — the shared Atlas cluster and `.env` file are already configured (see README Section 9). No additional database installation is needed.
+- **MongoDB Atlas cluster set up** — the shared Atlas cluster and `.env` file are already configured (see README Section 8). No additional database installation is needed.
 
 ---
 

@@ -28,6 +28,23 @@ These are complemented by **retrieval mechanisms** that select and surface the m
 - **Learning over time**: Systems improve by accumulating and applying past outcomes
 - **Reduced redundancy**: Relevant context is injected once, precisely, rather than dumped wholesale
 
+## Repository Structure
+
+```
+RAG-Labs/
+├── Agentic-RAG/           # Agentic RAG with tool use and multi-step reasoning
+├── Graph-and-Vector/      # Hybrid graph + vector retrieval
+├── Graph-RAG/             # Graph-based retrieval augmented generation
+├── HybridRAG/             # Hybrid RAG combining sparse + dense retrieval
+├── LLM-Wiki/              # LLM knowledge base with Wikipedia-style retrieval
+├── MultiVector-RAG/       # Multi-vector retrieval (LangChain + ColBERT)
+├── OCR-RAG/               # OCR-powered RAG for scanned documents
+└── Vectorless-RAG/        # RAG without vector embeddings
+
+MongoDB-Labs/
+└── Lab 1 - Student Records Lookup/  # MongoDB Atlas CRUD, queries, indexing
+```
+
 ## License
 
 [MIT](LICENSE)
