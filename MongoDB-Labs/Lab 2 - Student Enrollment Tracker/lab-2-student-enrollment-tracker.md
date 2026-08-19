@@ -118,12 +118,12 @@ Updated: Alice Johnson — added scholarship = 'Dean's Award'
 Updated 6 failing student(s) — grades incremented by 5
 
 --- Updated Failing Students ---
-Charlie Brown        | Physics     | Grade: 60
-Diana Prince         | English     | Grade: 53
-Frank Castle         | Mathematics | Grade: 57
-Laura Palmer         | Biology     | Grade: 50
-Rosa Parks           | English     | Grade: 63
-Walt Disney          | Physics     | Grade: 61
+Charlie Brown        | Physics      | Grade: 60
+Diana Prince         | English      | Grade: 53
+Frank Castle         | Mathematics  | Grade: 57
+Laura Palmer         | Biology      | Grade: 50
+Rosa Parks           | English      | Grade: 63
+Walt Disney          | Physics      | Grade: 61
 ```
 
 **Upsert — Re-enrolling Frank Castle after withdrawal:**
