@@ -1,6 +1,8 @@
 # MongoDB Labs — Foundations to Production
 
-This module teaches MongoDB from first principles through seven hands-on labs. This README is the starting point: it explains what MongoDB is, how it works, and how the labs are organized. Read it fully before opening Lab 1.
+This module teaches MongoDB from first principles through six hands-on labs, all built around one simple, consistent domain — a student/university management system — so every lab reinforces the same story instead of jumping between unrelated examples. A seventh, capstone lab is documented in the roadmap below but intentionally not built for now; that's where the module's real end goal — the MongoDB skills needed for the storage/memory layer of an AI agent harness — is reserved for later.
+
+All six labs run against a real, cloud-hosted **MongoDB Atlas** cluster rather than a local install or a mock database. This README first explains what MongoDB is and how it works, then walks through setting up the Atlas environment, and finally lays out how the labs are organized. Read it fully before opening Lab 1.
 
 ---
 
@@ -179,55 +181,98 @@ The practical guidance: MongoDB is a strong default for flexible, evolving, high
 
 ---
 
-## 8. Module Roadmap
+## 8. Environment Setup — Required Before You Start
 
-### 8.1 Lab Sequence
+Now that you know what MongoDB actually is, here's how to get a real one running before opening Lab 1. **Do this in this exact order** — none of the notebooks will run without it, and each step depends on the one before it.
+
+**Step 1 — Create a free MongoDB Atlas account.**
+Go to `mongodb.com/cloud/atlas/register` and sign up. No credit card required.
+
+**Step 2 — Create a cluster.**
+Choose the free **M0** tier, pick any region close to you, and give it a name (e.g. `agent-memory-cluster`). This takes a few minutes to provision before moving on.
+
+**Step 3 — Create a database user.**
+Atlas → Database Access → Add New Database User. Set a username and password. **Save the password immediately, somewhere durable** — Atlas will not show it to you again after this step, and you'll need it in Step 5.
+
+**Step 4 — Allow your IP address.**
+Atlas → Network Access → Add IP Address → Add Current IP Address. Without this, nothing can connect — Atlas refuses every connection attempt by default until the connecting IP is explicitly allowed. If you ever switch networks (home WiFi to mobile hotspot, for example), your IP changes, and you'll need to come back and add the new one here before anything will connect again.
+
+**Step 5 — Get your connection string.**
+Go to your cluster → Connect → Drivers → choose Python → copy the string shown. It looks like:
+```
+mongodb+srv://<username>:<password>@<your-cluster-address>/
+```
+Replace `<password>` with the real password you saved in Step 3.
+
+**Step 6 — Create a `.env` file.**
+In the same folder as the lab notebooks, create a file named `.env` containing exactly one line:
+```
+MONGODB_URI=<paste your full connection string here>
+```
+
+**Step 7 — Keep that `.env` file private.**
+Don't share it or commit it anywhere. If this project ever goes into a git repository, add `.env` to `.gitignore` first, so the real credentials are never committed.
+
+**That's the whole flow.** Every notebook in this module already contains the code that reads `MONGODB_URI` from this `.env` file automatically — you don't need to write or paste any connection code yourself. As long as the `.env` file exists, in the same folder as the notebooks, with that exact variable name, every lab connects on its own from here.
+
+---
+
+## 9. Module Roadmap
+
+### 9.1 Lab Sequence
+
+One domain — a student/university management system — runs through every lab below. Different labs touch different parts of that same system; none of them switch to an unrelated example.
 
 ```mermaid
 flowchart LR
     B["Beginner<br/>Labs 1-2<br/>Read & write data"] --> I["Intermediate<br/>Labs 3-4<br/>Aggregation & schema design"]
     I --> A["Advanced<br/>Labs 5-6<br/>Transactions & clusters"]
-    A --> C["Capstone<br/>Lab 7<br/>Full-stack app"]
+    A --> C["Capstone<br/>Lab 7<br/>Documented, not built"]
 
     classDef defaultStyle fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
     class B,I,A,C defaultStyle
 ```
 
-| # | Lab | Level | Est. Time | What You Learn |
-|---|-----|-------|-----------|-----------------|
-| 1 | Student Records Lookup System | Beginner | ~35 min | Connect, insert, filter, sort, aggregate |
-| 2 | Personal Task Tracker | Beginner | ~35 min | Full CRUD lifecycle, upserts, re-query after mutations |
-| 3 | Sales Analytics Pipeline | Intermediate | ~45 min | Aggregation pipelines, indexing, `.explain()` |
-| 4 | Multi-Tenant Blog Backend | Intermediate | ~45 min | Schema design, embedding vs. referencing, `$lookup`, text search |
-| 5 | Reliable Order Processing System | Advanced | ~50 min | Transactions, change streams, backup/restore |
-| 6 | Scaling and Securing a Cluster | Advanced | ~40 min | Replica sets, sharding, RBAC, TLS |
-| 7 | End-to-End Mini App | Capstone | ~60 min | Full-stack: schema + CRUD + analytics + indexing |
+| # | Lab | Concept Title | Level | Domain Content | What You Learn |
+|---|-----|----------------|-------|-----------------|-----------------|
+| 1 | Student Records Lookup | MongoDB Basics: How to Query Data | Beginner | Students, grades, courses | Connect, insert, filter, sort, aggregate |
+| 2 | Student Enrollment Tracker | MongoDB Basics: How to Write, Update & Delete Data | Beginner | Enrolling/withdrawing students, status updates | Full CRUD lifecycle, upserts |
+| 3 | Academic Performance Analytics | MongoDB Intermediate: How to Analyze Data at Scale | Intermediate | Average grades per course, attendance trends | Aggregation pipelines, indexing, `.explain()` |
+| 4 | Courses & Instructors | MongoDB Intermediate: How to Design Schemas & Search Data | Intermediate | Courses referencing instructors, descriptions | Schema design, embedding vs. referencing, `$lookup`, text search |
+| 5 | Enrollment Transactions | MongoDB Advanced: How to Guarantee Data Consistency | Advanced | Enrolling a student while reducing course seat count, atomically | Transactions, change streams, backup/restore |
+| 6 | Scaling the University Database | MongoDB Advanced: How to Scale & Secure a Database | Advanced | Same student/course data, now replicated and secured | Replica sets, RBAC, TLS *(sharding stays conceptual — Atlas's free tier can't shard)* |
+| 7 | AI Agent Memory Service *(documented only, not built)* | MongoDB Capstone: Building a Real Agent Memory Layer | Capstone | Conversation logs, memory entries, tool-call history | Full-stack: everything above, applied to the real AI harness use case |
 
-### 8.2 Repository Structure
+### 9.2 Repository Structure
 
-Each lab is a set of three files, named consistently as `labN<topic>`:
+Each lab lives in its own folder, named `Lab N - <Title>`. Inside each folder are the same three pieces every lab follows: a notebook (the runnable pipeline), a markdown write-up (problem statement, diagrams, step-by-step explanation), and an assignment file (practice exercises plus an answer key).
 
 ```
-lab1studentrecordslookup.ipynb              # the runnable pipeline
-lab1studentrecordslookup.md                 # concept write-up: problem statement, diagrams, step-by-step explanation
-lab1studentrecordslookupassignment.md       # practice exercises + answer key
+MongoDB-Labs/
+├── Lab 1 - <Title>/
+│   ├── <notebook>.ipynb        # the runnable pipeline
+│   ├── <notes>.md              # concept write-up
+│   └── <assignment>.md         # practice exercises + answer key
+├── Lab 2 - <Title>/
+│   └── ...
+├── .env                          # your Atlas connection string (Section 8) — shared by every lab, never committed
+└── README.md                     # this file
 ```
 
-Open the `.ipynb` to run the lab, read the matching `.md` if a step needs more explanation, and use `assignment.md` afterward to verify understanding.
+The `.env` file sits once at the root, not inside each lab folder — every notebook reads the same shared connection string from it, regardless of which lab folder it's in. Open the `.ipynb` to run a lab, read its `.md` if a step needs more explanation, and use the assignment file afterward to verify understanding.
 
 ---
 
-## 9. Prerequisites
+## 10. Prerequisites
 
-Basic Python — variables, dictionaries, lists, loops, `import` statements — is the only requirement.
-
-No prior MongoDB experience is assumed for Labs 1-2; each later lab builds only on what earlier ones taught. No database installation is required for Labs 1-4, since they run on `pymongo` (the official MongoDB Python driver) and `mongomock` (an in-memory mock server). Labs 5-6 involve replication, sharding, and security concepts that exceed what an in-memory mock can fully demonstrate, and each calls out clearly where a real MongoDB server is assumed.
+Basic Python — variables, dictionaries, lists, loops, `import` statements — is the only requirement to start, beyond the one-time Atlas + `.env` setup in Section 8.
 
 ---
 
-## 10. Getting Started
+## 11. Getting Started
 
-1. Start with Lab 1, in sequence — later labs assume the concepts taught earlier.
-2. Run the `!pip install` cell at the top of each notebook first, then proceed step by step.
-3. Refer to the matching `.md` file if a step needs further explanation.
-4. Complete the assignment after each lab before checking its answer key.
+1. Complete Section 8 first if you haven't already — nothing below will work without it.
+2. Start with Lab 1, in sequence — later labs assume the concepts taught earlier.
+3. Run the `!pip install` cell at the top of each notebook first, then proceed step by step. The connection cell reads from your `.env` file automatically — no need to paste any credentials into the notebook itself.
+4. Refer to the matching `.md` file if a step needs further explanation.
+5. Complete the assignment after each lab before checking its answer key.

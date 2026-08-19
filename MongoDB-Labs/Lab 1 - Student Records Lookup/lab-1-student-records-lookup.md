@@ -1,5 +1,7 @@
 # MongoDB Basics: How to Query Data
 
+## Student Records Lookup
+
 **Difficulty: Beginner | ~35 min | No prerequisites**
 
 *Lab 1 of 7 in the MongoDB Mastery series.*
@@ -10,7 +12,7 @@
 
 A university administrator needs to manage and query a growing collection of student records. They want to quickly answer questions like "which students are currently failing?", "list all Computer Science students sorted by grade", and "how many students are enrolled in each course?" — all without writing complex SQL joins or managing rigid table schemas.
 
-This lab walks you through building a queryable mini student database using MongoDB. You will learn how to connect to a MongoDB instance, design a flexible document schema, insert a realistic dataset of 25 student records, and then use MongoDB's built-in query operators to filter, sort, and project the data — finishing with a printed summary report that answers real administrative questions.
+This lab walks you through building a queryable mini student database using MongoDB. You will learn how to connect to a real MongoDB Atlas cluster, design a flexible document schema, insert a realistic dataset of 25 student records, and then use MongoDB's built-in query operators to filter, sort, and project the data — finishing with a printed summary report that answers real administrative questions.
 
 This is the read-heavy lab. You will focus on inserting data once, then querying it in different ways. Lab 2 covers the write side — updating, deleting, and changing data over time.
 
@@ -83,7 +85,7 @@ graph LR
 
 ```mermaid
 flowchart LR
-    PY["Python script"] --> CON["Connect to MongoDB<br/>(local or mongomock)"]
+    PY["Python script"] --> CON["Connect to MongoDB Atlas<br/>(via .env credentials)"]
     CON --> INS["Insert 25 student<br/>documents"]
     INS --> COL[("students collection")]
 
@@ -93,7 +95,7 @@ flowchart LR
     style COL fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
 ```
 
-The notebook connects to a MongoDB instance, creates a `students` collection inside a `school_db` database, and bulk-inserts 25 student documents in one operation.
+The notebook loads the Atlas connection string from a `.env` file using `python-dotenv`, connects to the real MongoDB Atlas cluster, creates a `students` collection inside a `school_db` database, and bulk-inserts 25 student documents in one operation.
 
 ### Part B — Querying the Data
 
@@ -168,10 +170,11 @@ Biology              | 4 students
 
 | Component | Tool |
 |-----------|------|
-| **MongoDB driver** | `pymongo==4.10.1` — Python driver for MongoDB |
-| **Mock server** | `mongomock` — in-memory MongoDB simulation, no install required |
+| **MongoDB driver** | `pymongo[srv,tls]==4.10.1` — Python driver for MongoDB with SRV and TLS support |
+| **Credential loader** | `python-dotenv==1.0.1` — loads `.env` files for credentials |
+| **CA certificates** | `certifi` — provides up-to-date CA bundles for reliable SSL/TLS on all platforms |
 
-> **Note:** `mongomock` lets you practice MongoDB queries without installing a MongoDB server. The queries you write are identical to those you would run against a real MongoDB instance — only the connection step changes.
+> **Note:** This lab connects to a real MongoDB Atlas cluster. The connection string is stored in the `.env` file (see README Section 8) and loaded at runtime — credentials never appear in the notebook itself.
 
 ---
 
@@ -179,7 +182,7 @@ Biology              | 4 students
 
 - **Basic Python knowledge** — variables, lists, dictionaries, loops, and `import` statements.
 - **No MongoDB experience required** — this lab teaches you from scratch.
-- **No database installation required** — we use `mongomock`, an in-memory simulation.
+- **MongoDB Atlas cluster set up** — the shared Atlas cluster and `.env` file are already configured (see README Section 9). No additional database installation is needed.
 
 ---
 
@@ -187,14 +190,15 @@ Biology              | 4 students
 
 | Package | Purpose |
 |---------|---------|
-| `pymongo` | Python driver for MongoDB — used to connect, insert, and query |
-| `mongomock` | In-memory mock of MongoDB — no server installation needed |
+| `pymongo[srv,tls]` | Python driver for MongoDB with SRV and TLS support |
+| `python-dotenv` | Loads `.env` files so credentials stay out of the notebook |
+| `certifi` | Provides up-to-date CA certificates for reliable SSL/TLS on all platforms |
 
 ```bash
-pip install -qU pymongo==4.10.1 mongomock
+pip install -qU "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi
 ```
 
-> **Note:** Run this command once in your terminal before opening the notebook, or run the first code cell in the notebook which does the same thing.
+> **Note:** The `srv` extra is required for `mongodb+srv://` connection strings. The `tls` extra and `certifi` ensure SSL/TLS works reliably on all platforms (especially Windows). Run this command once in your terminal before opening the notebook, or run the first code cell in the notebook which does the same thing.
 
 ---
 
@@ -205,27 +209,37 @@ pip install -qU pymongo==4.10.1 mongomock
 ### Step 1 — Connect to MongoDB
 
 ```python
+import os
+import certifi
+from dotenv import load_dotenv
 import pymongo
-import mongomock
 
-# Create an in-memory MongoDB client (no server needed)
-# To use a real MongoDB server, replace with: client = pymongo.MongoClient("mongodb://localhost:27017/")
-client = mongomock.MongoClient()
+# Load the Atlas connection string from the .env file one directory up
+load_dotenv("../.env")
+uri = os.environ["MONGODB_URI"]
+
+# Connect to the real MongoDB Atlas cluster
+# tlsCAFile uses certifi's CA bundle so SSL works reliably on all platforms
+client = pymongo.MongoClient(uri, tlsCAFile=certifi.where())
 
 # Access (or create) the database and collection
 db = client["school_db"]
 students = db["students"]
 
-print("Connected to MongoDB (in-memory mock)")
+print("Connected to MongoDB Atlas")
 ```
 
-Creates an in-memory MongoDB client that behaves exactly like a real connection. To use a real server later, just swap `mongomock.MongoClient()` for `pymongo.MongoClient("mongodb://localhost:27017/")`.
+`load_dotenv("../.env")` reads the `.env` file in the `MongoDB-Labs` folder and loads `MONGODB_URI` into the environment. `certifi.where()` points pymongo to a trusted CA certificate bundle, which ensures SSL works reliably on all platforms. The database and collection are created automatically on first insert.
 
 ---
 
 ### Step 2 — Design and Insert Student Records
 
 ```python
+# Drop the collection first so re-running the notebook starts clean
+# Without this, re-running would duplicate all 25 records
+students.drop()
+
 # 25 student records across 5 courses with varying grades
 # Some students have grades below 60 (failing) to make queries interesting
 student_records = [
@@ -261,7 +275,7 @@ result = students.insert_many(student_records)
 print(f"Inserted {len(result.inserted_ids)} student records.")
 ```
 
-Each dictionary is a **document** — MongoDB's equivalent of a row. No table definition is needed; `insert_many()` accepts a list of dictionaries and stores them directly.
+`students.drop()` clears the collection before inserting so the notebook is safe to re-run without duplicating data. Each dictionary is a **document** — MongoDB's equivalent of a row. Unlike SQL, there's no table definition needed; you simply insert documents and MongoDB stores them as-is.
 
 ---
 
@@ -309,7 +323,7 @@ Chains a **filter** (course = "Computer Science") with a **sort** on grade. Use 
 # Aggregation pipeline: group by course, then count students in each
 pipeline = [
     {"$group": {"_id": "$course", "count": {"$sum": 1}}},
-    {"$sort": {"count": -1}}
+    {"$sort": {"count": -1, "_id": 1}}
 ]
 
 course_counts = students.aggregate(pipeline)
@@ -319,7 +333,7 @@ for doc in course_counts:
     print(f"{doc['_id']:<20} | {doc['count']} students")
 ```
 
-`$group` groups documents by `course` and counts each group with `$sum: 1`. `$sort` then orders by count descending. This is MongoDB's equivalent of SQL's `GROUP BY course ORDER BY count DESC`.
+`$group` groups documents by `course` and counts each group with `$sum: 1`. `$sort` orders first by count descending, then by `_id` ascending as a tiebreaker so courses with the same count appear in alphabetical order. This is MongoDB's equivalent of SQL's `GROUP BY course ORDER BY count DESC, course ASC`.
 
 ---
 
@@ -331,7 +345,7 @@ failing = list(students.find({"grade": {"$lt": 60}}, {"_id": 0}))
 top_cs = list(students.find({"course": "Computer Science"}, {"_id": 0}).sort("grade", -1))
 enrollment = list(students.aggregate([
     {"$group": {"_id": "$course", "count": {"$sum": 1}}},
-    {"$sort": {"count": -1}}
+    {"$sort": {"count": -1, "_id": 1}}
 ]))
 
 print("         STUDENT RECORDS SUMMARY REPORT")
@@ -359,7 +373,7 @@ Re-runs the queries from Steps 3–5 and collects all results into a single form
 
 # Optional Exercise
 
-Replace the `mongomock` in-memory client with a real MongoDB server running locally. Install MongoDB Community Edition, start the server, change the connection line from `mongomock.MongoClient()` to `pymongo.MongoClient("mongodb://localhost:27017/")`, and re-run the entire notebook. Verify that the same 25 records are inserted and the same queries return the same results.
+Connect to a different MongoDB deployment. If you have a local MongoDB instance running, change the connection line from loading `MONGODB_URI` via `.env` to `pymongo.MongoClient("mongodb://localhost:27017/")` and re-run the entire notebook. Verify that the same 25 records are inserted and the same queries return the same results.
 
 ---
 
@@ -367,7 +381,9 @@ Replace the `mongomock` in-memory client with a real MongoDB server running loca
 
 - **Document databases store flexible, JSON-like documents** instead of rigid table rows — each record can have different fields without requiring schema changes.
 - **Collections are MongoDB's equivalent of tables** — they group related documents together and are created automatically when you first insert data.
-- **`pymongo` is the standard Python driver for MongoDB** — `MongoClient()` connects to the server, and the connection string is the only thing that changes between local, remote, and mock instances.
+- **`pymongo` is the standard Python driver for MongoDB** — `MongoClient()` connects to the server, and the connection string is the only thing that changes between local, remote, and cloud deployments.
+- **`python-dotenv` loads credentials from `.env` files** — keeping secrets out of notebooks while making them available at runtime.
+- **`certifi` provides up-to-date CA certificates** — ensuring SSL/TLS connections work reliably across platforms without OS-level configuration.
 - **`insert_many()` bulk-inserts a list of dictionaries** as documents — no table creation or column definition needed beforehand.
 - **Query filters use dictionary syntax** — `{"grade": {"$lt": 60}}` means "grade less than 60," and multiple conditions can be combined in one filter.
 - **Projections control which fields are returned** — `{"_id": 0}` hides the auto-generated `_id`, and you can include or exclude any field.
