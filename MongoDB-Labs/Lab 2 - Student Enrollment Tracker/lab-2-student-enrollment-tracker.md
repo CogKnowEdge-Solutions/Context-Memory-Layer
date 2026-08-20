@@ -83,21 +83,23 @@ flowchart LR
 
 The notebook starts by inserting the same 25 student records (dropping the collection first so re-runs are safe). It then walks through `update_one` to add a field to a single student, `update_many` with `$inc` to modify groups of students, and an upsert to handle a re-enrollment.
 
-### Part B — Deletions & Summary
+### Part B — Atomic Find-and-Modify & Deletions
 
 ```mermaid
 flowchart LR
-    U3["After updates"] --> D1["find_one_and_delete<br/>Remove a graduated student"]
-    D1 --> D2["delete_many<br/>Remove all graduated"]
+    U3["After updates"] --> FA["find_one_and_update<br/>Atomically bump a grade"]
+    FA --> FD["find_one_and_delete<br/>Remove a graduated student"]
+    FD --> D2["delete_many<br/>Remove all graduated"]
     D2 --> R["Summary Report:<br/>status counts, remaining failing"]
 
     style U3 fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
-    style D1 fill:#ffe0b2,stroke:#333333,stroke-width:1px,color:#111111
+    style FA fill:#fff9c4,stroke:#333333,stroke-width:1px,color:#111111
+    style FD fill:#ffe0b2,stroke:#333333,stroke-width:1px,color:#111111
     style D2 fill:#ffe0b2,stroke:#333333,stroke-width:1px,color:#111111
     style R fill:#c8e6c9,stroke:#333333,stroke-width:1px,color:#111111
 ```
 
-After updates are complete, the notebook demonstrates single-document and bulk deletion, then prints a summary report showing the final state of the collection.
+After updates are complete, the notebook demonstrates atomic find-and-modify operations (`find_one_and_update` and `find_one_and_delete`), then bulk deletion, and prints a summary report showing the final state of the collection.
 
 ---
 
@@ -129,6 +131,11 @@ Walt Disney          | Physics      | Grade: 61
 **Upsert — Re-enrolling Frank Castle after withdrawal:**
 ```
 Upserted: Frank Castle — status set to 'active'
+```
+
+**Atomic find-and-modify — Bob Smith's grade bumped:**
+```
+Updated: Bob Smith — grade 78 → 83
 ```
 
 **Deletion — Graduated students removed:**
@@ -328,7 +335,25 @@ Without `upsert=True`, `update_one` does nothing if the filter matches nothing. 
 
 ---
 
-### Step 6 — Delete: Remove Graduated Students
+### Step 6 — Atomic Find-and-Modify: Bump a Grade
+
+```python
+# find_one_and_update: finds one document, applies an update, and returns it
+# By default it returns the document BEFORE the update — so we can see the old grade
+old = students.find_one_and_update(
+    {"student_id": "STU002"},
+    {"$inc": {"grade": 5}},
+    projection={"_id": 0, "name": 1, "grade": 1}
+)
+
+print(f"Updated: {old['name']} — grade {old['grade']} → {old['grade'] + 5}")
+```
+
+`find_one_and_update` is the modify counterpart of `find_one_and_delete` — it finds and updates in one atomic step, returning the document as it was **before** the change. This avoids the race condition of reading a value, modifying it in Python, and writing it back. Like `update_one`, it only affects the first matching document.
+
+---
+
+### Step 7 — Delete: Remove Graduated Students
 
 ```python
 # find_one_and_delete: finds one document, deletes it, and returns what it removed
@@ -341,7 +366,7 @@ if graduated:
     print(f"Deleted: {graduated['name']} (graduated)")
 ```
 
-`find_one_and_delete` is atomic — it finds and removes in one step, returning the deleted document so you can log or confirm what was removed.
+`find_one_and_delete` is the delete counterpart of `find_one_and_update` — it finds and removes in one step, returning the deleted document so you can log or confirm what was removed.
 
 ```python
 # delete_many() removes ALL documents matching the filter
@@ -353,7 +378,7 @@ print(f"Deleted {result.deleted_count} graduated student(s).")
 
 ---
 
-### Step 7 — Summary Report
+### Step 8 — Summary Report
 
 ```python
 # Count remaining students
@@ -407,6 +432,7 @@ Write a sequence of operations that does the following: (1) uses `$unset` to rem
 - **`$unset` removes a field entirely** from matching documents.
 - **Upserts (`upsert=True`) combine insert and update** — if the filter matches, update; if not, insert a new document.
 - **`find_one_and_delete` is atomic** — finds and removes in one step, returning the deleted document.
+- **`find_one_and_update` is atomic** — finds and updates in one step, returning the document as it was before the change.
 - **`delete_many()` removes all matching documents** — use it with a specific filter to avoid accidental full-collection deletion.
 - **`modified_count` and `deleted_count` tell you what actually changed** — always check these to confirm operations worked as expected.
 - **Atomic operations prevent race conditions** — MongoDB guarantees that find-and-modify and find-and-delete happen as a single uninterruptible step.

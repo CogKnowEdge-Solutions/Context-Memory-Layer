@@ -202,7 +202,40 @@ class TestUpsert:
 
 
 # ---------------------------------------------------------------------------
-# 6. Delete one
+# 6. find_one_and_update
+# ---------------------------------------------------------------------------
+
+class TestFindOneAndUpdate:
+    def test_returns_document_before_update(self, populated):
+        collection, _ = populated
+        old = collection.find_one_and_update(
+            {"student_id": "STU002"},
+            {"$inc": {"grade": 5}},
+            projection={"_id": 0, "name": 1, "grade": 1}
+        )
+        assert old["name"] == "Bob Smith"
+        assert old["grade"] == 78  # value BEFORE the $inc
+
+    def test_document_is_actually_updated(self, populated):
+        collection, _ = populated
+        collection.find_one_and_update(
+            {"student_id": "STU002"},
+            {"$inc": {"grade": 5}}
+        )
+        bob = collection.find_one({"student_id": "STU002"}, {"_id": 0})
+        assert bob["grade"] == 83  # 78 + 5
+
+    def test_find_one_and_update_nonexistent_returns_none(self, populated):
+        collection, _ = populated
+        old = collection.find_one_and_update(
+            {"student_id": "STU999"},
+            {"$set": {"grade": 100}}
+        )
+        assert old is None
+
+
+# ---------------------------------------------------------------------------
+# 7. Delete one
 # ---------------------------------------------------------------------------
 
 class TestDeleteOne:
@@ -231,7 +264,7 @@ class TestDeleteOne:
 
 
 # ---------------------------------------------------------------------------
-# 7. Delete many
+# 8. Delete many
 # ---------------------------------------------------------------------------
 
 class TestDeleteMany:
@@ -247,7 +280,7 @@ class TestDeleteMany:
 
 
 # ---------------------------------------------------------------------------
-# 8. Edge Cases
+# 9. Edge Cases
 # ---------------------------------------------------------------------------
 
 class TestEdgeCases:
@@ -276,7 +309,7 @@ class TestEdgeCases:
 
 
 # ---------------------------------------------------------------------------
-# 9. Summary Report Logic
+# 10. Summary Report Logic
 # ---------------------------------------------------------------------------
 
 class TestSummaryReport:
