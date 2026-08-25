@@ -77,7 +77,7 @@ Submit the following files:
 | **RBAC correctness** | 15 points | Auditor role created; SELECT on v_audit_trail verified; no INSERT on base tables; role cleaned up |
 | **Compliance-log completeness** | 10 points | All 3 runs ingested with full hierarchy; events span multiple event_types; guardrail outcomes cover pass, fail, warn |
 | **Code quality** | 10 points | SAVEPOINT-guarded cleanup; child-first deletes; tagged rows; no hardcoded credentials; single pinned pip install |
-| **Documentation** | 10 points | Output section matches notebook; Mermaid diagrams present; PROJECT_SUMMARY.md submitted |
+| **Documentation** | 10 points | Output section matches notebook; Mermaid diagrams present; Appendix A and B present; PROJECT_SUMMARY.md submitted |
 
 **Grading bands:**
 
@@ -88,6 +88,8 @@ Submit the following files:
 | Pass | 50-69 | Most components working; some bugs or missing features |
 | Borderline | 40-49 | Partial implementation; significant gaps in one or more categories |
 | Fail | 0-39 | Minimal or non-functional implementation |
+
+> These bands describe the 100-point mandatory rubric above. The Optional section awards bonus points on top of it -- a perfect mandatory score plus every optional exercise tops out at 110.
 
 ---
 

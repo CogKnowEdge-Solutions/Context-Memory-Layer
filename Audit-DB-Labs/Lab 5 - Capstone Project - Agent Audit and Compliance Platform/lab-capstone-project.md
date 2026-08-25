@@ -302,7 +302,7 @@ flowchart LR
 | RBAC correctness | 15 | Auditor role created; SELECT on v_audit_trail verified; no INSERT on base tables; role cleaned up |
 | Compliance-log completeness | 10 | All 3 runs ingested with full hierarchy; events span multiple event_types; guardrail outcomes cover pass, fail, warn |
 | Code quality | 10 | SAVEPOINT-guarded cleanup; child-first deletes; tagged rows; no hardcoded credentials; single pinned pip install |
-| Documentation | 10 | Output section matches notebook; Mermaid diagrams present; Appendix A and B present |
+| Documentation | 10 | Output section matches notebook; Mermaid diagrams present; Appendix A and B present; PROJECT_SUMMARY.md submitted |
 | **Total** | **100** | |
 
 **Grading bands:**
@@ -314,6 +314,8 @@ flowchart LR
 | Pass | 50-69 | Most components working; some bugs or missing features |
 | Borderline | 40-49 | Partial implementation; significant gaps in one or more categories |
 | Fail | 0-39 | Minimal or non-functional implementation |
+
+> These bands describe the 100-point mandatory rubric above. The Optional Exercise section below awards bonus points on top of it -- a perfect mandatory score plus every optional exercise tops out at 110.
 
 ---
 
@@ -369,7 +371,7 @@ flowchart TD
     end
 
     subgraph "Reporting Layer (Lab 3 + Lab 4)"
-        EV --> VIEW["v_audit_trail\n4-table LEFT JOIN"]
+        RUN --> VIEW["v_audit_trail\n4-table LEFT JOIN"]
         SPAN --> VIEW
         TC --> VIEW
         GE --> VIEW
