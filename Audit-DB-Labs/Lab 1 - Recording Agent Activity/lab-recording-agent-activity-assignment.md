@@ -1,86 +1,121 @@
-# Lab 1 Assignment — Recording Agent Activity
+# Lab 1 — Recording Agent Activity: Knowledge Check
 
-*Companion to `lab-recording-agent-activity.md` / `.ipynb`. Every exercise is answerable from the lab alone. Attempt all seven before scrolling to the answer key.*
+Complete these exercises after finishing the lab. The answer key is at the bottom — try each one before looking.
 
 ---
 
 ## Exercises
 
-### Exercise 1 — Two databases, two questions (concept)
+### 1. Why append-only? (concept)
 
-Your app database holds a `students` table that currently says Alice's balance is $0. Your audit database holds rows recording every change ever made to that balance. In one or two sentences each: what question does each database answer, and why can't either one do the other's job?
+Lab 1's core rule is that event rows are added, never silently edited or deleted. Why is this rule critical for an *audit* database specifically, as opposed to a normal application database? What problem would arise if an agent harness could freely UPDATE event rows after writing them?
 
-### Exercise 2 — The append-only rule and its exceptions (concept)
+### 2. Why does ORDER BY need a tiebreaker? (concept)
 
-State the append-only rule for event rows. Then list precisely:
-1. The one further write a `run` header row is allowed after creation — which fields, and when?
-2. The one exception that lets an *event* row's contents change — and the mandatory companion action that makes it lawful?
+In Step 5, events committed inside one transaction all share the same `created_at` timestamp (`now()` returns the transaction's start time). Why would `ORDER BY created_at` alone return events in a non-deterministic order? What does the `, event_id` tiebreaker guarantee, and why is this important for an auditor replaying events?
 
-### Exercise 3 — Why log the redaction? (concept)
+### 3. What does the lifecycle update actually do? (concept)
 
-A teammate proposes: "Just run `UPDATE event SET payload = '[REDACTED]' WHERE ...` — done." Explain, using the lab's reasoning, what this one-liner gets wrong even though it removes the secret.
+Step 4 issues an `UPDATE` on the `run` row — the only `UPDATE` against `run` in the entire lab. What three fields does it set, and why is each one unavailable at row creation time? Why is this considered a lifecycle write rather than a rewrite of history?
 
-### Exercise 4 — Write a correction (short code)
+### 4. Why log the redaction instead of just replacing the secret? (concept)
 
-An event was mislogged for run 42:
+In Step 7, the redaction is a two-step operation: replace the secret in the payload, *then* insert a new `redaction` event recording what was changed. Why is the second step necessary? What would a compliance reviewer lose if the replacement happened without a log row?
 
-```
-event_type: db_query
-payload:    'Counted refunds issued: 3'
-```
+### 5. Write a query that reads back a run's events (short code)
 
-The true count was 30. Write the SQL INSERT (with `%s` placeholders) your harness should execute to fix this the audit-correct way, and state what must happen to the original row.
+Write a `cursor.execute` call that returns every event for a given `run_id` (use the variable `current_run_id` already holding a valid id), ordered by `created_at` then `event_id`. Print each row's `event_id`, `event_type`, and `payload`.
 
-### Exercise 5 — Newest-first history (short code)
-
-Write a single SELECT that returns all events for run 42, newest first, with a deterministic order when timestamps tie. Name the tiebreaker column and explain in one sentence why it's needed.
-
-### Exercise 6 — Applied: an email where it shouldn't be (applied)
-
-Your harness logged this event during run 77:
-
-```
-(901, 'user_profile', 'Profile fetched: email=jane@example.com, plan=pro')
+```python
+cursor.execute("""
+    -- your query here
+""", (current_run_id,))
+for row in cursor.fetchall():
+    print(row)
 ```
 
-A privacy reviewer requires the email removed from the log. Walk through the exact steps you would execute, in order, to comply with the lab's rules — and state what the log must show afterwards.
+### 6. Write a correction event (short code)
 
-### Exercise 7 — Applied: crash mid-run (applied)
+You have a run with id in `current_run_id`. An event with `event_id = 99` logged the wrong value. Write the `cursor.execute` calls needed to:
+1. Insert a `correction` event naming event 99 and stating the true value was 42.
+2. Commit the transaction.
+3. Query and print both the original event and the correction to prove both rows exist.
 
-A harness inserts a `run` row, then three `event` rows, then loses its connection **before** reaching `commit()`. What does the audit database contain for that run, and why is that the *correct* outcome rather than a bug?
+### 7. Applied: a silent edit that breaks the audit trail (applied)
+
+A developer writes this code to "fix" a mislogged event:
+
+```python
+cursor.execute(
+    "UPDATE event SET payload = 'Corrected: 42 orders shipped.' WHERE event_id = %s",
+    (wrong_event_id,),
+)
+connection.commit()
+```
+
+This silently overwrites the original payload. What two things are wrong with this approach from an audit-log perspective? How would Lab 1's append-only pattern fix both problems?
 
 ---
 
 ## Answer Key
 
-**Exercise 1.** The app database answers *"what is true right now?"* (Alice's current balance), while the audit database answers *"what happened, when, and in what order?"* (every change that produced that balance). Each keeps only half the picture: the current photo without its history, or the film reel without a convenient snapshot of today's state — so neither can substitute for the other. *(See the lab's **Underlying Concepts** section — "audit vs normal".)*
+### 1. Why append-only?
 
-**Exercise 2.** Event rows are **append-only**: once written, they are never silently updated or deleted. Exceptions: (1) the `run` header may receive exactly **one** lifecycle write when the run finishes — setting `ended_at`, `status`, and `total_cost` once — because at creation time those facts genuinely didn't exist yet, so nothing is misrepresented; (2) an event field may be changed only by a **scoped redaction**, and it is lawful only because a **new event row logging the redaction** (which event, which field, when) is inserted alongside it. *(Lab Steps 4, 7; README Section 3.)*
+An audit database exists to answer "what happened, when, and in what order?" If rows could be silently edited, there would be no way to prove the log wasn't tampered with after the fact — the log loses its evidentiary value. A normal application database optimizes for "what is true right now?" (current balance, current status), so edits are expected and necessary. An audit log records the film reel of what happened; silent edits corrupt the reel. Lab 1's only exceptions — the lifecycle update on `run` and the scoped `REPLACE` for redaction — are both controlled and self-logged, so a reviewer can still see that a change was made and why.
 
-**Exercise 3.** Three things go wrong. It **overwrites more than the secret** if the payload held anything besides the sensitive value (the lab uses `REPLACE` to blank only the secret); it leaves **no trace of what happened** — the fact that data was hidden becomes itself hidden, destroying accountability; and it treats the event like normal mutable state instead of history. The rule requires the scoped replacement *plus* a new event recording which event, which field, and when. *(Lab Step 7; README Section 3.2.)*
+### 2. Why does ORDER BY need a tiebreaker?
 
-**Exercise 4.**
+`now()` returns the transaction's start time, not the time each individual `INSERT` executes. All events committed in one transaction share the same `created_at` value. When rows tie on the sort column, the database is free to return them in any order — it might be insertion order, physical order on disk, or something else. Adding `, event_id` as a tiebreaker provides a second, unique sort key that pins the order to a deterministic value. For an auditor replaying events, this matters because the narrative must be reproducible: anyone re-running the query must see the same sequence.
 
-```sql
-INSERT INTO event (run_id, event_type, payload)
-VALUES (%s, %s, %s);
--- params: (42, 'correction',
---          'Correction: event naming the mislogged row said refunds = 3; true count was 30.')
+### 3. What does the lifecycle update actually do?
+
+It sets `ended_at`, `status`, and `total_cost` on the `run` row. At creation time, none of these facts are known yet: the run hasn't ended (so `ended_at` is meaningless), its final status isn't decided, and the total cost hasn't been tallied. This update records facts that came into existence *after* the run started — it's a lifecycle write capturing reality, not a rewrite of a previously-recorded event. This is the only UPDATE allowed on the `run` row; event rows themselves are never updated.
+
+### 4. Why log the redaction instead of just replacing the secret?
+
+Without the log row, there is no record that anything was changed. A compliance reviewer looking at the log would see a payload containing `[REDACTED]` but would have no way to know *when* the redaction happened, *which field* was affected, or *who* performed it. The redaction log row makes the cleanup itself part of the audit trail: it records the event id, the field name, and the timestamp, so the reviewer can see both that a secret existed and that it was deliberately blanked out at a specific time. This is the same "nothing is silently modified" principle that governs corrections.
+
+### 5. Write a query that reads back a run's events
+
+```python
+cursor.execute("""
+    SELECT event_id, event_type, payload
+    FROM event
+    WHERE run_id = %s
+    ORDER BY created_at, event_id
+""", (current_run_id,))
+for row in cursor.fetchall():
+    print(row)
 ```
 
-The correcting row should reference the original event (by id, as the lab does) so auditors can pair them, and the original mislogged row **must remain untouched** — corrections are appended, never applied to the old row. *(Lab Step 6.)*
+The `WHERE run_id = %s` filters to one run's events, `ORDER BY created_at` replays them in time order, and `, event_id` ensures deterministic ordering when timestamps tie.
 
-**Exercise 5.**
+### 6. Write a correction event
 
-```sql
-SELECT event_id, event_type, payload, created_at
-FROM event
-WHERE run_id = %s
-ORDER BY created_at DESC, event_id DESC;
+```python
+cursor.execute(
+    "INSERT INTO event (run_id, event_type, payload) VALUES (%s, %s, %s) RETURNING event_id",
+    (current_run_id, "correction",
+     "Correction: event 99 reported the wrong value; the true value was 42."),
+)
+connection.commit()
+
+cursor.execute(
+    "SELECT event_id, event_type, payload FROM event WHERE event_id IN (99, %s)",
+    (cursor.fetchone()[0],),
+)
+for row in cursor.fetchall():
+    print(row)
 ```
 
-Tiebreaker: `event_id` (descending here, to keep newest-first consistent). It's needed because events committed inside one transaction share an identical `created_at` — Postgres's `now()` returns the transaction's start time — so tied rows would otherwise come back in arbitrary, non-deterministic order. *(Lab Step 5.)*
+The correction event names the event it fixes (event 99) in its payload text. Both the original row and the correction row survive — the original is not deleted or updated. This is the append-only correction pattern from Lab 1's Step 6.
 
-**Exercise 6.** In order: (1) identify the offending event's `event_id`; (2) scoped-redact just the email value: `UPDATE event SET payload = REPLACE(payload, %s, %s) WHERE event_id = %s` with `('jane@example.com', '[REDACTED]', 901)`; (3) insert a new redaction-log event on run 77 whose payload names event 901, the field `'payload'`, and the UTC time of the redaction; (4) commit once so both writes land together. Afterwards the log shows event 901 still present with `email=[REDACTED]`, everything else in its payload intact, plus the new redaction row proving when and what was hidden. Deleting row 901 or silently blanking it without the log row would both violate the rules. *(Lab Step 7; README Section 3.2.)*
+### 7. Applied: a silent edit that breaks the audit trail
 
-**Exercise 7.** The database contains **nothing** from that attempt — no run row and no events. All four inserts were inside one open transaction, and until `commit()` arrives no other observer (including a reconnecting client) can see any of them; losing the connection rolls the transaction back. This is correct because a half-recorded run — a header with missing events, or events with no header — would be an untrustworthy, unreconstructable history. All-or-nothing is exactly what transactions guarantee (README Section 4.1). The correct behavior on recovery is to start the run again from its first insert.
+Two problems:
+
+1. **The original payload is lost.** The `UPDATE` overwrites the previous value in place. There is now no row showing what was originally logged — the auditor cannot see the mistake, only the "corrected" version. This destroys the evidentiary chain.
+
+2. **No record that a change was made.** There is no `correction` event, no redaction log, nothing. A reviewer looking at the log has no way to know the payload was ever different. The log appears pristine, which is precisely the problem — it hides the fact that human intervention occurred.
+
+Lab 1's append-only pattern fixes both: insert a *new* `correction` event naming what it fixes (the original stays visible), or use `REPLACE` on the payload only for redaction and log the act as a separate event. In every case, the history shows *what happened, including the corrections*.
