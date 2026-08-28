@@ -45,7 +45,7 @@ Integrates every concept from Labs 1-7:
 - Day 3: Resource validation — connect, confirm the five Lab 1-2 tables exist, insert and commit one synthetic run
 
 **Week 2: Implementation & Evaluation**
-- Day 5 (M1 — Foundation): all 3 synthetic runs ingested with full hierarchy, tagged `pytest-lab5-<hex>`
+- Day 5 (M1 — Foundation): all 3 synthetic runs ingested with full hierarchy, tagged `pytest-lab8-<hex>`
 - Week 2, Day 2 (M2 — Core Integration): `v_audit_trail` view created; append-only trigger working; hash chain built and verified
 - Week 2, Day 4 (M3 — Compliance Layer): tamper detection demonstrated; auditor role created and verified; EXPLAIN ANALYZE shows index usage
 - Week 2, Day 5 (M4 — Polish): cleanup complete; PROJECT_SUMMARY.md written; notebook runs cleanly top-to-bottom
@@ -87,7 +87,7 @@ Integrates every concept from Labs 1-7:
 
 See the assignment file's Mandatory table for the full 15-item list. In short:
 
-- ✅ Full Lab 1-2 hierarchy tagged and populated (`pytest-lab5-<hex>`)
+- ✅ Full Lab 1-2 hierarchy tagged and populated (`pytest-lab8-<hex>`)
 - ✅ `v_audit_trail` view with an append-only trigger on `event`
 - ✅ Hash chain: 0 content breaks, 0 linkage breaks; tamper detected after a simulated privileged bypass
 - ✅ Auditor role with SELECT on the view only — no INSERT on base tables
@@ -96,7 +96,7 @@ See the assignment file's Mandatory table for the full 15-item list. In short:
 
 ## Optional Extensions (bonus, up to +10)
 
-- **+5** — A second, more restricted auditor role (`lab5_guardrail_reader`) scoped to `guardrail_event` only
+- **+5** — A second, more restricted auditor role (`lab8_guardrail_reader`) scoped to `guardrail_event` only
 - **+3** — A "Cost by guardrail outcome" report section
 - **+2** — A standalone Compliance Checklist document in `submission/`
 
@@ -114,6 +114,6 @@ The full checklist lives in `lab-capstone-project-assignment.md` under Success C
 
 - **Start with the proposal** — a wrong assumption about which tables/tags already exist costs hours later.
 - **Test early, test often** — run the test suite after each phase, not just at the end.
-- **Tag before you insert** — every synthetic row needs its `pytest-lab5-<hex>` marker from the moment it's created, not added afterward.
+- **Tag before you insert** — every synthetic row needs its `pytest-lab8-<hex>` marker from the moment it's created, not added afterward.
 - **Reuse, don't copy** — this capstone is about composing Labs 1-7, not repeating their code.
 - **Cleanup order matters** — child objects before parent objects, SAVEPOINT-guarded, so one failed drop doesn't roll back earlier successes.

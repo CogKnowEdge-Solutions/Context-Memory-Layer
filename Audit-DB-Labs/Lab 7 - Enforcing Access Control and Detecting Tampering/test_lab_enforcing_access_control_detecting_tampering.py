@@ -203,9 +203,9 @@ def marked_run(db):
             cur.execute("ROLLBACK TO SAVEPOINT sp_cleanup")
     # Clean up auditor role if it exists.
     for stmt in [
-        "REVOKE ALL ON SCHEMA public FROM lab4_auditor",
-        "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM lab4_auditor",
-        "DROP USER IF EXISTS lab4_auditor",
+        "REVOKE ALL ON SCHEMA public FROM lab7_auditor",
+        "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM lab7_auditor",
+        "DROP USER IF EXISTS lab7_auditor",
     ]:
         cur.execute("SAVEPOINT sp_role")
         try:
@@ -601,24 +601,24 @@ class TestAuditorRole:
 
         # Create auditor role
         for stmt in [
-            "REVOKE ALL ON SCHEMA public FROM lab4_auditor",
-            "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM lab4_auditor",
-            "DROP USER IF EXISTS lab4_auditor",
+            "REVOKE ALL ON SCHEMA public FROM lab7_auditor",
+            "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM lab7_auditor",
+            "DROP USER IF EXISTS lab7_auditor",
         ]:
             try:
                 cur.execute(stmt)
             except Exception:
                 db.rollback()
         db.commit()
-        cur.execute("CREATE USER lab4_auditor WITH PASSWORD 'lab4_test_pass_2026'")
-        cur.execute("GRANT SELECT ON v_audit_trail TO lab4_auditor")
-        cur.execute("GRANT USAGE ON SCHEMA public TO lab4_auditor")
+        cur.execute("CREATE USER lab7_auditor WITH PASSWORD 'lab4_test_pass_2026'")
+        cur.execute("GRANT SELECT ON v_audit_trail TO lab7_auditor")
+        cur.execute("GRANT USAGE ON SCHEMA public TO lab7_auditor")
         db.commit()
 
         # Verify permissions via pg_catalog
         cur.execute("""
             SELECT privilege_type FROM information_schema.role_table_grants
-            WHERE grantee = 'lab4_auditor' AND table_name = 'v_audit_trail'
+            WHERE grantee = 'lab7_auditor' AND table_name = 'v_audit_trail'
         """)
         privs = [row[0] for row in cur.fetchall()]
         assert "SELECT" in privs, f"auditor should have SELECT, got {privs}"
@@ -629,23 +629,23 @@ class TestAuditorRole:
 
         # Create auditor role if not exists
         for stmt in [
-            "REVOKE ALL ON SCHEMA public FROM lab4_auditor",
-            "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM lab4_auditor",
-            "DROP USER IF EXISTS lab4_auditor",
+            "REVOKE ALL ON SCHEMA public FROM lab7_auditor",
+            "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM lab7_auditor",
+            "DROP USER IF EXISTS lab7_auditor",
         ]:
             try:
                 cur.execute(stmt)
             except Exception:
                 db.rollback()
         db.commit()
-        cur.execute("CREATE USER lab4_auditor WITH PASSWORD 'lab4_test_pass_2026'")
-        cur.execute("GRANT USAGE ON SCHEMA public TO lab4_auditor")
+        cur.execute("CREATE USER lab7_auditor WITH PASSWORD 'lab4_test_pass_2026'")
+        cur.execute("GRANT USAGE ON SCHEMA public TO lab7_auditor")
         db.commit()
 
         # Verify no INSERT privilege on run table
         cur.execute("""
             SELECT privilege_type FROM information_schema.role_table_grants
-            WHERE grantee = 'lab4_auditor' AND table_name = 'run'
+            WHERE grantee = 'lab7_auditor' AND table_name = 'run'
         """)
         privs = [row[0] for row in cur.fetchall()]
         assert "INSERT" not in privs, f"auditor should NOT have INSERT on run, got {privs}"

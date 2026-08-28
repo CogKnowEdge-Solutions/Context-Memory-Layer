@@ -104,7 +104,7 @@ Your implementation should generate **synthetic, deterministic** data across the
 
 This gives the compliance report something real to aggregate: 3 runs, 5 spans, 3 tool calls, 5 guardrail checks (covering `pass`, `fail`, and `warn`), and 8 events. The guardrail outcomes should span all three CHECK-constrained values so the aggregation queries have meaningful variation.
 
-Tag each synthetic run with a distinguishable marker in `agent_name` (e.g. `pytest-lab5-<hex>`) so cleanup can find and delete all synthetic rows without touching real data from Labs 1-7.
+Tag each synthetic run with a distinguishable marker in `agent_name` (e.g. `pytest-lab8-<hex>`) so cleanup can find and delete all synthetic rows without touching real data from Labs 1-7.
 
 ---
 
@@ -196,8 +196,8 @@ Chain after restore: 0 content break(s), 0 linkage break(s) across 8 links.
 **Step 8 -- auditor role:**
 
 ```
-lab5_auditor permissions on v_audit_trail:
-  lab5_auditor | v_audit_trail | SELECT
+lab8_auditor permissions on v_audit_trail:
+  lab8_auditor | v_audit_trail | SELECT
 ```
 
 **Step 9 -- cleanup and summary:**
@@ -324,7 +324,7 @@ flowchart LR
 
 # Optional Exercise
 
-Create a second, more restricted auditor role called `lab5_guardrail_reader` that can only `SELECT` from `guardrail_event` -- not from `run`, `span`, `tool_call`, `event`, or `v_audit_trail`. Verify via `information_schema.role_table_grants` that this role has exactly one grant (`SELECT` on `guardrail_event`) and nothing else. Then connect as this role (or simulate the check via a permission query) and confirm it can read guardrail outcomes but cannot see any run metadata, span names, or event payloads.
+Create a second, more restricted auditor role called `lab8_guardrail_reader` that can only `SELECT` from `guardrail_event` -- not from `run`, `span`, `tool_call`, `event`, or `v_audit_trail`. Verify via `information_schema.role_table_grants` that this role has exactly one grant (`SELECT` on `guardrail_event`) and nothing else. Then connect as this role (or simulate the check via a permission query) and confirm it can read guardrail outcomes but cannot see any run metadata, span names, or event payloads.
 
 This exercises the principle of least privilege at a finer granularity than Lab 7's single auditor role: different auditors see different slices of the compliance data.
 
@@ -336,7 +336,7 @@ This exercises the principle of least privilege at a finer granularity than Lab 
 - **The hash chain must protect the same rows the hierarchy uses** -- putting the chain on a separate table would let an attacker modify the hierarchy without detection; the chain references `event(event_id)` directly to close this gap.
 - **Reporting through the view enforces RBAC** -- if compliance queries hit base tables directly, the auditor role's restrictions are meaningless; the view is the single access path.
 - **Cleanup is harder than creation** -- creating triggers, views, roles, and hash chain tables is straightforward; dropping them in the right order (child before parent) without one failure rolling back the others requires SAVEPOINT-guarded teardown.
-- **Tagged rows enable safe re-runs** -- the `pytest-lab5-<hex>` marker pattern means every synthetic row can be found and deleted without touching real data, making the notebook safe to execute repeatedly.
+- **Tagged rows enable safe re-runs** -- the `pytest-lab8-<hex>` marker pattern means every synthetic row can be found and deleted without touching real data, making the notebook safe to execute repeatedly.
 - **EXPLAIN ANALYZE proves the queries are practical** -- a compliance report that takes minutes to run on a small dataset would be useless at scale; the index-usage output confirms the JOINs use indexes, not sequential scans.
 - **Defense in depth means no single point of failure** -- the append-only trigger prevents casual modification; the hash chain catches privileged bypass; RBAC limits who can read what; together they make the audit log trustworthy enough for compliance decisions.
 
@@ -382,7 +382,7 @@ flowchart TD
     end
 
     subgraph "Access Layer (Lab 7)"
-        VIEW --> AUDITOR["lab5_auditor\nSELECT only"]
+        VIEW --> AUDITOR["lab8_auditor\nSELECT only"]
         AUDITOR --> SUMMARY["Compliance summary"]
     end
 

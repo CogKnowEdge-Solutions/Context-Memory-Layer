@@ -26,7 +26,7 @@ All of the following **must** be present in your submission. Missing any one mea
 | 2 | All five Lab 1-2 tables exist and are populated: run, event, span, tool_call, guardrail_event | Schema check query |
 | 3 | Foreign key constraints enforced (span.run_id -> run.run_id, etc.) | `information_schema.table_constraints` query |
 | 4 | CHECK constraint on guardrail_event.outcome (pass/fail/warn) | `information_schema.check_constraints` query |
-| 5 | Synthetic runs tagged with `pytest-lab5-<hex>` prefix in agent_name | SELECT query on run table |
+| 5 | Synthetic runs tagged with `pytest-lab8-<hex>` prefix in agent_name | SELECT query on run table |
 | 6 | `v_audit_trail` view created (4-table LEFT JOIN) | View exists check |
 | 7 | Append-only trigger on event (BEFORE UPDATE/DELETE raises exception) | Trigger test (UPDATE should fail) |
 | 8 | Hash chain table exists with row_hash and prev_hash columns | Schema check query |
@@ -46,7 +46,7 @@ These are **not required for a Pass** but improve your grade. Attempt them after
 
 | # | Exercise | Points | Notes |
 |---|----------|--------|-------|
-| 1 | Create a second auditor role `lab5_guardrail_reader` with SELECT on guardrail_event only | +5 | Verify via information_schema |
+| 1 | Create a second auditor role `lab8_guardrail_reader` with SELECT on guardrail_event only | +5 | Verify via information_schema |
 | 2 | Add a "Cost by guardrail outcome" report section (do guardrail failures cost more?) | +3 | GROUP BY guardrail_event.outcome |
 | 3 | Write a one-page "Compliance Checklist" document (Appendix A format) and include it in submission/ | +2 | Maps each requirement to verification method |
 
@@ -98,7 +98,7 @@ Submit the following files:
 Before submitting, confirm **every** item in this checklist. If any box is unchecked, you are not ready to submit.
 
 - [ ] Notebook runs top-to-bottom with no errors (Kernel -> Restart & Run All)
-- [ ] All five Lab 1-2 tables have synthetic data tagged with `pytest-lab5-<hex>`
+- [ ] All five Lab 1-2 tables have synthetic data tagged with `pytest-lab8-<hex>`
 - [ ] `v_audit_trail` view returns rows (SELECT * FROM v_audit_trail LIMIT 5 works)
 - [ ] Append-only trigger fires on UPDATE (raises exception)
 - [ ] Hash chain has 0 content breaks and 0 linkage breaks
@@ -182,7 +182,7 @@ If you cannot do these three things by Day 3, raise a flag immediately. The most
 
 | Milestone | Due | What to have working |
 |-----------|-----|---------------------|
-| **M1: Foundation** | End of Week 1, Day 5 | All 3 synthetic runs ingested with full hierarchy; tagged with pytest-lab5- prefix |
+| **M1: Foundation** | End of Week 1, Day 5 | All 3 synthetic runs ingested with full hierarchy; tagged with pytest-lab8- prefix |
 | **M2: Core Integration** | End of Week 2, Day 2 | v_audit_trail view created; append-only trigger working; hash chain built and verified |
 | **M3: Compliance Layer** | End of Week 2, Day 4 | Tamper detection demonstrated; auditor role created and verified; EXPLAIN ANALYZE shows indexes |
 | **M4: Polish** | End of Week 2, Day 5 | Cleanup complete; PROJECT_SUMMARY.md written; notebook runs cleanly top-to-bottom |

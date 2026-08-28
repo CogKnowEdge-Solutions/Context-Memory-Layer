@@ -12,7 +12,7 @@
 
 Lab 3 proved that JOINs can reconstruct the full run → span → tool_call / guardrail_event hierarchy in a single round trip, but the query rewrites the same flattening logic every time. It also proved nothing about **integrity**: a user with database access could silently UPDATE an event's payload or DELETE a row and no one would know.
 
-This lab solves both problems. First, a **SQL VIEW** (`v_audit_trail`) encodes the JOIN once so every downstream query reads from one canonical flattened source instead of repeating the four-table LEFT JOIN. Second, an **append-only trigger** on the `event` table blocks any UPDATE or DELETE — the audit log is write-once by construction. Third, a **hash chain** (`event_hash_chain` table + auto-hash trigger) computes an `md5` fingerprint over each event's content and links it to the previous hash, so even a privileged user who bypasses the trigger cannot alter the data without breaking the chain. Finally, a **read-only auditor role** (`lab4_auditor`) demonstrates how `GRANT` / `REVOKE` restricts who can read the audit trail versus who can write to the base tables.
+This lab solves both problems. First, a **SQL VIEW** (`v_audit_trail`) encodes the JOIN once so every downstream query reads from one canonical flattened source instead of repeating the four-table LEFT JOIN. Second, an **append-only trigger** on the `event` table blocks any UPDATE or DELETE — the audit log is write-once by construction. Third, a **hash chain** (`event_hash_chain` table + auto-hash trigger) computes an `md5` fingerprint over each event's content and links it to the previous hash, so even a privileged user who bypasses the trigger cannot alter the data without breaking the chain. Finally, a **read-only auditor role** (`lab7_auditor`) demonstrates how `GRANT` / `REVOKE` restricts who can read the audit trail versus who can write to the base tables.
 
 The same `support-agent` story continues: you insert a fresh run, build every layer, then prove each one catches the thing the previous layer could not.
 
@@ -43,7 +43,7 @@ flowchart LR
 
 **A privileged admin can bypass the trigger — the hash chain catches it.** A `BEFORE` trigger fires on every row modification regardless of who calls it — even a `SECURITY DEFINER` function that runs as `postgres` would still be blocked by the trigger's `RAISE EXCEPTION`. The only way to bypass the trigger is to drop it entirely, modify the data, and re-create it. This is exactly what the lab demonstrates: a privileged connection drops the trigger, tampers with an event, and re-creates the trigger. The hash chain is the only layer that detects this — the trigger is no longer a safeguard once dropped, but the chain's recomputed hashes reveal the content mismatch.
 
-**RBAC with GRANT / REVOKE restricts surface area.** Postgres roles control who can do what on which objects. `GRANT SELECT ON v_audit_trail TO lab4_auditor` lets the auditor *read* the audit trail; `REVOKE INSERT ON run FROM lab4_auditor` prevents them from writing new runs. The auditor never needs access to the base tables — the view is their entire interface. This is the principle of least privilege: give each role only the access it needs and no more.
+**RBAC with GRANT / REVOKE restricts surface area.** Postgres roles control who can do what on which objects. `GRANT SELECT ON v_audit_trail TO lab7_auditor` lets the auditor *read* the audit trail; `REVOKE INSERT ON run FROM lab7_auditor` prevents them from writing new runs. The auditor never needs access to the base tables — the view is their entire interface. This is the principle of least privilege: give each role only the access it needs and no more.
 
 ---
 
@@ -100,7 +100,7 @@ The hash chain table stores `row_hash` and `prev_hash` for each event. An auto-h
 
 ```mermaid
 flowchart LR
-    ROLE["CREATE USER lab4_auditor"] --> GRANT["GRANT SELECT\nON v_audit_trail"]
+    ROLE["CREATE USER lab7_auditor"] --> GRANT["GRANT SELECT\nON v_audit_trail"]
     GRANT --> SEL["Auditor SELECT\nworks (read-only)"]
     SEL --> INS["Auditor INSERT\nrejected"]
     style ROLE fill:#e1f5ff,stroke:#333333,color:#111111
@@ -176,8 +176,8 @@ Payload restored, chain rebuilt. Original value: "Counted 1284 shipped orders."
 **Step 9 — auditor role and cleanup:**
 
 ```
-User lab4_auditor created with SELECT on v_audit_trail only.
-  lab4_auditor | v_audit_trail | SELECT
+User lab7_auditor created with SELECT on v_audit_trail only.
+  lab7_auditor | v_audit_trail | SELECT
 Run 167: views + trigger + hash chain + auditor role - lab complete.
 ```
 
@@ -505,22 +505,22 @@ This is the critical demonstration. The append-only trigger blocks normal client
 ```python
 # Clean up any previous auditor user (ignore errors if it doesn't exist)
 for stmt in [
-    "REVOKE ALL ON SCHEMA public FROM lab4_auditor",
-    "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM lab4_auditor",
-    "DROP USER IF EXISTS lab4_auditor",
+    "REVOKE ALL ON SCHEMA public FROM lab7_auditor",
+    "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM lab7_auditor",
+    "DROP USER IF EXISTS lab7_auditor",
 ]:
     try: cursor.execute(stmt)
     except Exception: connection.rollback()
 connection.commit()
 # Create the auditor role with SELECT-only access on the view
-cursor.execute("CREATE USER lab4_auditor WITH PASSWORD 'lab4_test_pass_2026'")
-cursor.execute("GRANT SELECT ON v_audit_trail TO lab4_auditor")
-cursor.execute("GRANT USAGE ON SCHEMA public TO lab4_auditor")
+cursor.execute("CREATE USER lab7_auditor WITH PASSWORD 'lab4_test_pass_2026'")
+cursor.execute("GRANT SELECT ON v_audit_trail TO lab7_auditor")
+cursor.execute("GRANT USAGE ON SCHEMA public TO lab7_auditor")
 connection.commit()
-print("User lab4_auditor created with SELECT on v_audit_trail only.")
+print("User lab7_auditor created with SELECT on v_audit_trail only.")
 # Verify permissions via information_schema
 cursor.execute("""SELECT grantee, table_name, privilege_type FROM information_schema.role_table_grants
-    WHERE grantee = 'lab4_auditor' ORDER BY table_name, privilege_type""")
+    WHERE grantee = 'lab7_auditor' ORDER BY table_name, privilege_type""")
 for g, t, p in cursor.fetchall(): print(f"  {g} | {t} | {p}")
 
 # Cleanup: drop all Lab 7 objects and sample data
@@ -536,9 +536,9 @@ for stmt in [
     except Exception: connection.rollback()
 # Drop the auditor role so it doesn't outlive the lab
 for stmt in [
-    "REVOKE ALL ON SCHEMA public FROM lab4_auditor",
-    "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM lab4_auditor",
-    "DROP USER IF EXISTS lab4_auditor",
+    "REVOKE ALL ON SCHEMA public FROM lab7_auditor",
+    "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM lab7_auditor",
+    "DROP USER IF EXISTS lab7_auditor",
 ]:
     try: cursor.execute(stmt)
     except Exception: connection.rollback()

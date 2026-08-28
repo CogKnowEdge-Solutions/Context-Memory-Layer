@@ -58,7 +58,7 @@ MD_SECTIONS = [
 VENV_PATTERNS = [r"\bvenv\b", r"virtualenv", r"virtual\s+environment", r"python\s+-m\s+venv"]
 XLSX_PATTERNS = [r"\.xlsx\b", r"openpyxl", r"xlsxwriter"]
 
-RUN_MARKER_PREFIX = "pytest-lab5-"
+RUN_MARKER_PREFIX = "pytest-lab8-"
 
 
 # --------------------------------------------------------------------------
@@ -372,36 +372,36 @@ class TestLiveIntegration:
         db.commit()
 
         for stmt in [
-            "REVOKE ALL ON SCHEMA public FROM lab5_auditor",
-            "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM lab5_auditor",
-            "DROP USER IF EXISTS lab5_auditor",
+            "REVOKE ALL ON SCHEMA public FROM lab8_auditor",
+            "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM lab8_auditor",
+            "DROP USER IF EXISTS lab8_auditor",
         ]:
             try:
                 cur.execute(stmt)
             except Exception:
                 db.rollback()
         db.commit()
-        cur.execute("CREATE USER lab5_auditor WITH PASSWORD 'lab5_test_pass_2026'")
-        cur.execute("GRANT SELECT ON v_audit_trail TO lab5_auditor")
-        cur.execute("GRANT USAGE ON SCHEMA public TO lab5_auditor")
+        cur.execute("CREATE USER lab8_auditor WITH PASSWORD 'lab5_test_pass_2026'")
+        cur.execute("GRANT SELECT ON v_audit_trail TO lab8_auditor")
+        cur.execute("GRANT USAGE ON SCHEMA public TO lab8_auditor")
         db.commit()
 
         cur.execute("""SELECT privilege_type FROM information_schema.role_table_grants
-            WHERE grantee = 'lab5_auditor' AND table_name = 'v_audit_trail'""")
+            WHERE grantee = 'lab8_auditor' AND table_name = 'v_audit_trail'""")
         privs = [row[0] for row in cur.fetchall()]
         assert "SELECT" in privs, f"expected SELECT grant, got {privs}"
 
         cur.execute("""SELECT privilege_type FROM information_schema.role_table_grants
-            WHERE grantee = 'lab5_auditor' AND table_name = 'run'""")
+            WHERE grantee = 'lab8_auditor' AND table_name = 'run'""")
         privs = [row[0] for row in cur.fetchall()]
         assert "INSERT" not in privs, f"should NOT have INSERT on run, got {privs}"
 
         # Cleanup
         for stmt in [
             "DROP VIEW IF EXISTS v_audit_trail",
-            "REVOKE ALL ON SCHEMA public FROM lab5_auditor",
-            "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM lab5_auditor",
-            "DROP USER IF EXISTS lab5_auditor",
+            "REVOKE ALL ON SCHEMA public FROM lab8_auditor",
+            "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM lab8_auditor",
+            "DROP USER IF EXISTS lab8_auditor",
         ]:
             try:
                 cur.execute(stmt)
