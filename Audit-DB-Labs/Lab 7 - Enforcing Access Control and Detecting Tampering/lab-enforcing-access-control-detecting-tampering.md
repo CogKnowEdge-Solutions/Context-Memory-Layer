@@ -4,7 +4,7 @@
 
 **Difficulty: Advanced | ~50 min | Requires Lab 3 (Querying Across the Hierarchy with JOINs) done in this Supabase project**
 
-*Lab 4 of 5 in the Audit DB Labs module.*
+*Lab 7 of 8 in the Audit DB Labs module.*
 
 ---
 
@@ -523,7 +523,7 @@ cursor.execute("""SELECT grantee, table_name, privilege_type FROM information_sc
     WHERE grantee = 'lab4_auditor' ORDER BY table_name, privilege_type""")
 for g, t, p in cursor.fetchall(): print(f"  {g} | {t} | {p}")
 
-# Cleanup: drop all Lab 4 objects and sample data
+# Cleanup: drop all Lab 7 objects and sample data
 for stmt in [
     "DROP TRIGGER IF EXISTS trg_prevent_event_tamper ON event",
     "DROP FUNCTION IF EXISTS fn_prevent_event_tamper()",
@@ -555,7 +555,7 @@ cursor.close(); connection.close()
 print(f"Run {lab4_run_id}: views + trigger + hash chain + auditor role - lab complete.")
 ```
 
-Removes all Lab 4 objects and sample data so the database is clean for re-runs. Closing the connection is the same good hygiene as Labs 1–3.
+Removes all Lab 7 objects and sample data so the database is clean for re-runs. Closing the connection is the same good hygiene as Labs 1–3.
 
 ---
 

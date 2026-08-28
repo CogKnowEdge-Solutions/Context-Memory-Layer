@@ -1,4 +1,4 @@
-"""Tests for Lab 4 - Enforcing Access Control and Detecting Tampering (Audit DB Labs).
+"""Tests for Lab 7 - Enforcing Access Control and Detecting Tampering (Audit DB Labs).
 
 Testing strategy (documented per AGENTS.md / TEST.md):
 
@@ -9,7 +9,7 @@ Testing strategy (documented per AGENTS.md / TEST.md):
     and the tagged-run fixture deletes every tagged row afterwards -- child
     tables first (guardrail_event, tool_call, span, event), then the run
     itself -- so the suite is safe to re-run and leaves no residue.
-    Lab 4-specific objects (views, triggers, hash chain table) are also
+    Lab 7-specific objects (views, triggers, hash chain table) are also
     cleaned up in the fixture teardown.
 
 (b) HONEST SKIPS + FILE-BASED TESTS -- if no .env/DATABASE_URL is configured,
@@ -32,9 +32,9 @@ TEST.md categories actually applied here (no padding):
                                              auditor role permissions correct
   - Boundary & Limit Conditions ............ CQ-1 line budget at Advanced bounds
   - Cleanup & Side Effects ................. tagged-row teardown in FK-safe order;
-                                             Lab 4 objects (views, triggers, tables) cleaned up
+                                             Lab 7 objects (views, triggers, tables) cleaned up
 
-Scope note: Lab 4 owns views, triggers, roles/RBAC, and hash-chaining.
+Scope note: Lab 7 owns views, triggers, roles/RBAC, and hash-chaining.
 It must read from Lab 1-3's tables, create the append-only trigger and
 hash chain, and demonstrate auditor role permissions.
 """
@@ -60,7 +60,7 @@ LAB3_SQL_PATTERNS = [
     r"\brank\(\)", r"\bdense_rank\(\)",
 ]
 
-# Lab 4 must-have SQL patterns.
+# Lab 7 must-have SQL patterns.
 LAB4_REQUIRED_PATTERNS = [
     r"\bCREATE\s+VIEW\b", r"\bCREATE\s+TRIGGER\b",
     r"\bBEFORE\s+(UPDATE|DELETE)\b",
@@ -169,7 +169,7 @@ def db():
 def marked_run(db):
     """Ensure schema (Lab 1 + Lab 2), create a uniquely-tagged run row, and
     clean up every tagged row on teardown in FK-safe order. Also cleans up
-    any Lab 4 objects left behind."""
+    any Lab 7 objects left behind."""
     cur = db.cursor()
     cur.execute(RUN_TABLE_DDL)
     cur.execute(LAB1_2_SCHEMA_DDL)
@@ -185,7 +185,7 @@ def marked_run(db):
     # Roll back any leftover failed transaction from the test before cleaning up.
     db.rollback()
     cur = db.cursor()
-    # Clean up Lab 4 objects if they exist (from tests that create them).
+    # Clean up Lab 7 objects if they exist (from tests that create them).
     # Use SAVEPOINT for each drop so a failure only rolls back that statement,
     # not the entire transaction (which would undo earlier successful drops).
     for stmt in [
@@ -300,13 +300,13 @@ class TestDocumentationVsBehavior:
 
 
 class TestScopeGuards:
-    """Lab 4 scope: views, triggers, roles/RBAC, hash-chaining. No Lab 3."""
+    """Lab 7 scope: views, triggers, roles/RBAC, hash-chaining. No Lab 3."""
 
     def test_notebook_has_required_lab4_sql_patterns(self):
         joined = "\n".join(notebook_code_sources())
         for pattern in LAB4_REQUIRED_PATTERNS:
             hits = re.findall(pattern, joined, re.I)
-            assert hits, f"Lab 4 required pattern {pattern!r} not found in notebook"
+            assert hits, f"Lab 7 required pattern {pattern!r} not found in notebook"
 
     def test_notebook_creates_view(self):
         joined = "\n".join(notebook_code_sources())
@@ -369,7 +369,7 @@ class TestNotebookStructure:
         nonblank = sum(
             1 for src in notebook_code_sources() for line in src.splitlines() if line.strip()
         )
-        # Lab 4 covers 5 features (view, trigger, hash chain, tamper, RBAC),
+        # Lab 7 covers 5 features (view, trigger, hash chain, tamper, RBAC),
         # exceeding the typical Advanced ceiling of 180. Budget extended to 220.
         assert 150 <= nonblank <= 250, f"CQ-1 Advanced budget violated: {nonblank} lines"
 

@@ -1,4 +1,4 @@
-"""Tests for Lab 5 - Capstone Project: Agent Audit and Compliance Platform (Audit DB Labs).
+"""Tests for Lab 8 - Capstone Project: Agent Audit and Compliance Platform (Audit DB Labs).
 
 This is the grading harness the instructor runs against whatever the student
 eventually submits. It is expected to fail/report "not found" right now,
@@ -145,9 +145,9 @@ class TestMarkdownStructure:
         mermaid_count = len(re.findall(r"```mermaid", text))
         assert mermaid_count >= 2, f"need at least 2 Mermaid diagrams, found {mermaid_count}"
 
-    def test_md_mentions_labs_1_through_4(self):
+    def test_md_mentions_labs_1_through_7(self):
         text = md_text()
-        for lab_num in ["Lab 1", "Lab 2", "Lab 3", "Lab 4"]:
+        for lab_num in ["Lab 1", "Lab 2", "Lab 3", "Lab 7"]:
             assert lab_num in text, f"markdown must mention {lab_num}"
 
     def test_markdown_carries_pinned_versions(self):

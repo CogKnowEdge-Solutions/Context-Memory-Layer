@@ -1,4 +1,4 @@
-# Lab 4 — Enforcing Access Control and Detecting Tampering: Knowledge Check
+# Lab 7 — Enforcing Access Control and Detecting Tampering: Knowledge Check
 
 Complete these exercises after finishing the lab. The answer key is at the bottom — try each one before looking.
 
@@ -8,7 +8,7 @@ Complete these exercises after finishing the lab. The answer key is at the botto
 
 ### 1. Why a BEFORE trigger, not an AFTER trigger? (concept)
 
-Lab 4's Step 6 creates a `BEFORE UPDATE OR DELETE` trigger that raises an exception. What would happen if you changed it to an `AFTER UPDATE OR DELETE` trigger instead? Would the row still be modified?
+Lab 7's Step 6 creates a `BEFORE UPDATE OR DELETE` trigger that raises an exception. What would happen if you changed it to an `AFTER UPDATE OR DELETE` trigger instead? Would the row still be modified?
 
 ### 2. What is GENESIS and why does the chain need it? (concept)
 
@@ -16,7 +16,7 @@ The hash chain uses `GENESIS` as the `prev_hash` for the first event in a run. W
 
 ### 3. Why does the hash chain use md5, not sha256? (concept)
 
-Lab 4 uses `md5()` for the hash chain. Postgres has `sha256()` available via `pgcrypto`. In what scenario would `sha256()` be preferable? In what scenario is `md5()` sufficient?
+Lab 7 uses `md5()` for the hash chain. Postgres has `sha256()` available via `pgcrypto`. In what scenario would `sha256()` be preferable? In what scenario is `md5()` sufficient?
 
 ### 4. What does SECURITY DEFINER actually change? (concept)
 

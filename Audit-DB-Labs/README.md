@@ -1,8 +1,8 @@
 # Audit DB Labs — Foundations to the Harness Audit Layer
 
-This module teaches how to build an **audit database** from first principles through four hands-on labs, all built around one consistent domain — the activity log of an AI agent harness — so every lab reinforces the same story instead of jumping between unrelated examples. A fifth, capstone lab is documented in the roadmap below but intentionally not built for now; that's where the module's real end goal — wiring the audit database into a live AI harness — is reserved for later.
+This module teaches how to build an **audit database** from first principles through seven hands-on labs, all built around one consistent domain — the activity log of an AI agent harness — so every lab reinforces the same story instead of jumping between unrelated examples. An eighth, capstone lab is documented in the roadmap below but intentionally not built for now; that's where the module's real end goal — wiring the audit database into a live AI harness — is reserved for later.
 
-All four labs run against a real, cloud-hosted **Supabase Postgres** database rather than a local install or a mock. This README first explains what an audit database is and why it's built the way it is, then walks through setting up the Supabase environment, and finally lays out how the labs are organized. Read it fully before opening Lab 1.
+All seven built labs run against a real, cloud-hosted **Supabase Postgres** database rather than a local install or a mock. This README first explains what an audit database is and why it's built the way it is, then walks through setting up the Supabase environment, and finally lays out how the labs are organized. Read it fully before opening Lab 1.
 
 ---
 
@@ -82,7 +82,7 @@ Sensitive data is a deliberate, narrow exception to "event rows never change" �
 
 ### 3.3 Tamper-Evidence
 
-The strongest form of this idea: chain records together cryptographically, so that each row includes a hash of the one before it. Change any past row and every hash after it breaks — making tampering *detectable* even if someone has write access. Lab 4 builds this hash-chain.
+The strongest form of this idea: chain records together cryptographically, so that each row includes a hash of the one before it. Change any past row and every hash after it breaks — making tampering *detectable* even if someone has write access. Lab 7 builds this hash-chain.
 
 ```mermaid
 flowchart LR
@@ -110,15 +110,27 @@ Data split across `run`, `span`, and `tool_call` tables is recombined with a **J
 
 ### 4.4 Aggregation & Window Functions
 
-**Aggregation** (`GROUP BY`, `COUNT`, `SUM`, `AVG`) rolls many rows into summaries — total cost per run, average latency per tool. **Window functions** compute across ordered rows without collapsing them — useful for spotting a retry that fired three times in a row. Lab 3 covers both.
+**Aggregation** (`GROUP BY`, `COUNT`, `SUM`, `AVG`) rolls many rows into summaries — total cost per run, average latency per tool. **Window functions** compute across ordered rows without collapsing them — useful for spotting a retry that fired three times in a row. Lab 3 introduces both; Lab 5 uses them to build standing metrics.
+
+### 4.4a Filtering, Search & Pagination
+
+A real audit log grows without bound, so you almost never want *all* of it — you want a slice: only failed runs, only the last 24 hours, only calls that cost more than a threshold, only payloads containing a certain string. **Filtering** (`WHERE` with time windows, ranges, and categories), **text search** (`ILIKE`, full-text), and **pagination** (`LIMIT`/`OFFSET` and keyset paging) are how you turn an unbounded log into a readable answer. Lab 4 is built entirely on this.
 
 ### 4.5 Indexing
 
 An **index** lets Postgres find matching rows without scanning the whole table, the same role an index plays at the back of a book. Audit tables grow fast, so the right index is the difference between a millisecond query and a multi-second one. Lab 2 introduces indexing; Lab 3 uses `EXPLAIN` to see it working.
 
-### 4.6 Views, Triggers & Roles
+### 4.6 Views & Materialized Views
 
-A **view** is a saved query you can treat like a table — ideal for packaging an audit check ("all guardrail blocks in the last hour"). A **trigger** runs code automatically on write — used in Lab 4 to enforce append-only at the database level. **Roles** (RBAC) control who can read versus write the log. Lab 4 covers all three.
+A **view** is a saved query you can treat like a table — ideal for packaging an audit check ("all guardrail blocks in the last hour") so a dashboard can read it by name instead of re-writing the SQL. A **materialized view** goes further: it stores the computed result on disk and refreshes on demand, so an expensive metric over millions of rows is paid for once, not on every dashboard load. Lab 5 builds both to turn raw events into metrics.
+
+### 4.7 Thresholds & Anomaly Detection
+
+An **alert** is just a filter over a metric that returns rows only when something is wrong — an error rate above a limit, a cost per run beyond its usual band, a retry count that spikes. Expressing "what counts as a problem" as a query is the audit-DB half of an alerting pipeline. Lab 6 covers this.
+
+### 4.8 Triggers & Roles
+
+A **trigger** runs code automatically on write — used in Lab 7 to enforce append-only at the database level, so the rule holds even against someone with direct table access. **Roles** (RBAC) control who can read versus write the log — an auditor who can read everything but change nothing. Lab 7 covers both, alongside the hash-chain tamper-evidence from Section 3.3.
 
 ---
 
@@ -270,24 +282,30 @@ A `SUCCESS` line means you're ready for Lab 1. If it fails, the printed error wi
 
 ### 8.1 Lab Sequence
 
-One domain — the activity log of an AI agent harness — runs through every lab below. Different labs touch different parts of that same log; none of them switch to an unrelated example. The four built labs correspond exactly to the four jobs the audit layer must do for a harness: **write** events, **model** them, **read** them back, and **police** them for trust.
+One domain — the activity log of an AI agent harness — runs through every lab below. Different labs touch different parts of that same log; none of them switch to an unrelated example. The seven built labs follow one escalating verb chain — **write → model → read → filter → measure → alert → protect** — where each lab depends on the skills of the one before it, and the eighth wires all of them into a live harness. That ordering is deliberate: difficulty rises monotonically, so the hardest material (triggers, roles, and hash-chaining in Lab 7) lands last, right before the capstone, rather than in the middle where it would break the climb.
 
 ```mermaid
 flowchart LR
-    B["Beginner<br/>Lab 1<br/>Write events reliably"] --> I["Intermediate<br/>Labs 2-3<br/>Model & reconstruct"]
-    I --> A["Advanced<br/>Lab 4<br/>Integrity & anomalies"]
-    A --> C["Capstone<br/>Lab 5<br/>Documented, not built"]
+    W["Beginner<br/>Labs 1-2<br/>Write & model"] --> R["Intermediate<br/>Labs 3-4<br/>Read & filter"]
+    R --> M["Advanced<br/>Labs 5-6<br/>Measure & alert"]
+    M --> P["Advanced<br/>Lab 7<br/>Protect & prove"]
+    P --> C["Capstone<br/>Lab 8<br/>Documented, not built"]
     classDef defaultStyle fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
-    class B,I,A,C defaultStyle
+    class W,R,M,P,C defaultStyle
 ```
 
 | # | Lab slug (file name) | Concept Title (used inside the lab's `.md` write-up) | Level | Domain Content | What You Learn | Harness Job |
 |---|-----|----------------|-------|-----------------|-----------------|-------------|
 | 1 | `lab-recording-agent-activity` | Audit DB Basics: How to Write Event Data Reliably | Beginner | Logging runs and events, correcting a mislogged row, redacting a sensitive field | Connect, `INSERT`, `SELECT`/`WHERE`/`ORDER BY`, transactions, append-only discipline | Writing events as the agent runs |
 | 2 | `lab-modeling-runs-spans-tool-calls` | Audit DB Intermediate: How to Design an Auditable Schema | Intermediate | The `run → span → tool_call → guardrail_event` schema | Normalization, foreign keys, `CHECK`/`NOT NULL`, indexing | The schema the harness emits into |
-| 3 | `lab-reconstructing-analyzing-trace` | Audit DB Intermediate: How to Join & Roll Up Across Tables | Intermediate | Rebuilding a full trace; cost & latency per run | `JOIN`s, `GROUP BY`, window functions, CTEs, `EXPLAIN` | Reading back what happened |
-| 4 | `lab-auditing-integrity-anomalies` | Audit DB Advanced: How to Trust & Police the Log | Advanced | Retry storms, cost spikes, guardrail-block reconstruction, tamper-evidence | Analytical SQL, views, triggers, roles/RBAC, hash-chaining | Making the log trustworthy |
-| 5 | `lab-harness-audit-service` *(documented only, not built)* | Audit DB Capstone: Wiring the Log into a Live Harness | Capstone | A real harness emitting events into the DB as it runs, plus an audit view | Full-stack: everything above, applied to the real harness | The end goal |
+| 3 | `lab-querying-hierarchy-joins` | Audit DB Intermediate: How to Join & Roll Up Across Tables | Intermediate | Rebuilding a full trace; cost & latency per run | `JOIN`s, `GROUP BY`, window functions, CTEs, `EXPLAIN` | Reading back what happened |
+| 4 | `lab-filtering-search-pagination` | Audit DB Intermediate: How to Slice an Unbounded Log | Intermediate | Failed-runs-only, last-24h, cost thresholds, payload search, paged results | Time-window/range/category `WHERE`, `ILIKE`/full-text search, `LIMIT`/`OFFSET` + keyset pagination | Finding the needle in an ever-growing log |
+| 5 | `lab-metrics-dashboards` | Audit DB Advanced: How to Turn Events into Metrics | Advanced | Runs-per-hour, error rate, avg cost & latency per agent, guardrail-fail rate | Views, materialized views, `date_trunc` bucketing, refresh strategy | Standing metrics a dashboard reads |
+| 6 | `lab-alerting-anomalies` | Audit DB Advanced: How to Detect Trouble Automatically | Advanced | Cost spikes, error-rate surges, retry storms, latency outliers | Threshold queries over metrics, CTEs, alert-as-a-query, baselines/deviation | Firing when something goes wrong |
+| 7 | `lab-enforcing-access-control-detecting-tampering` | Audit DB Advanced: How to Trust & Police the Log | Advanced | Append-only enforcement, redaction, guardrail-block reconstruction, tamper-evidence | Views, triggers, roles/RBAC, hash-chaining | Making the log trustworthy |
+| 8 | `lab-capstone-project` *(documented only, not built)* | Audit DB Capstone: Wiring the Log into a Live Harness | Capstone | A real harness emitting events into the DB as it runs, plus filtering, metrics, alerting, and an audit view over it | Full-stack: everything above, applied to the real harness | The end goal |
+
+The order is not the order these labs were written — Lab 7 (Integrity) was built before Labs 4–6 existed, then deliberately moved to sit just before the capstone. The reason is difficulty: filtering, metrics, and alerting all build only on the schema (Lab 2) and JOINs/aggregation (Lab 3), and none of them need Lab 7's trigger/role/hash-chain machinery — so they belong *before* it, letting the module climb smoothly to its hardest material instead of peaking in the middle and dropping back down.
 
 Each lab lives in its own folder, named `Lab N - <Title>` using the short titles from the table above. The **"Concept Title"** column is longer and more descriptive — it's the headline used *inside* that lab's `.md` write-up, not the folder or file name. The files *inside* each folder follow the project-wide `AGENTS.md` / `CONSTITUTION.md` naming convention (Article III, UX-4): `lab-<topic-slug>.ipynb`, `lab-<topic-slug>.md`, and `lab-<topic-slug>-assignment.md`, all sharing the same slug and sitting together in that lab's folder.
 
@@ -300,12 +318,20 @@ Audit-DB-Labs/
 │   ├── lab-recording-agent-activity.md
 │   ├── lab-recording-agent-activity-assignment.md
 │   └── test_lab_recording_agent_activity.py
-├── Lab 2 - Modeling Runs, Spans & Tool Calls/
-│   ├── lab-modeling-runs-spans-tool-calls.ipynb
-│   ├── lab-modeling-runs-spans-tool-calls.md
-│   ├── lab-modeling-runs-spans-tool-calls-assignment.md
-│   └── test_lab_modeling_runs_spans_tool_calls.py
-└── ...
+├── Lab 2 - Modeling Runs, Spans, and Tool Calls/
+│   └── lab-modeling-runs-spans-tool-calls.{ipynb,md,-assignment.md} + test
+├── Lab 3 - Querying Across the Hierarchy with JOINs/
+│   └── lab-querying-hierarchy-joins.{ipynb,md,-assignment.md} + test
+├── Lab 4 - Filtering, Search, and Pagination/
+│   └── lab-filtering-search-pagination.{ipynb,md,-assignment.md} + test
+├── Lab 5 - Metrics and Dashboards/
+│   └── lab-metrics-dashboards.{ipynb,md,-assignment.md} + test
+├── Lab 6 - Alerting on Anomalies/
+│   └── lab-alerting-anomalies.{ipynb,md,-assignment.md} + test
+├── Lab 7 - Enforcing Access Control and Detecting Tampering/
+│   └── lab-enforcing-access-control-detecting-tampering.{ipynb,md,-assignment.md} + test
+└── Lab 8 - Capstone Project - Agent Audit and Compliance Platform/
+    └── lab-capstone-project.md + README.md   (documented only — not built)
 ```
 
 (Test files use underscores instead of hyphens — `test_<slug with underscores>.py` — since Python module names can't contain hyphens; pytest still discovers and runs them normally.)

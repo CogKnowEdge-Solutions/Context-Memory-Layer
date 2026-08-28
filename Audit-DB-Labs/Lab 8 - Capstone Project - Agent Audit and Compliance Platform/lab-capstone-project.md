@@ -2,9 +2,9 @@
 
 ## Capstone Project -- Integrating Event Logging, Hierarchy, Reporting, and Tamper Detection
 
-**Difficulty: Capstone (Advanced) | ~60 min per week for 2 weeks | Requires Labs 1-4 completed in this Supabase project**
+**Difficulty: Capstone (Advanced) | ~60 min per week for 2 weeks | Requires Labs 1-7 completed in this Supabase project**
 
-*Lab 5 of 5 in the Audit DB Labs module.*
+*Lab 8 of 8 in the Audit DB Labs module.*
 
 ---
 
@@ -12,28 +12,31 @@
 
 An organization running multiple AI agents needs a **compliance platform** that answers one question: *"Can we prove, to an auditor, that every agent action was logged, that the log hasn't been altered, and that only authorized people can read it?"*
 
-Labs 1-4 each solve one piece:
+Labs 1-7 each solve one piece:
 
 | Lab | What it proved |
 |-----|---------------|
 | **Lab 1** | Every agent action can be ingested as an append-only event |
 | **Lab 2** | Events, spans, tool calls, and guardrail checks form a queryable hierarchy |
 | **Lab 3** | Cross-run JOIN queries and window functions produce compliance reports |
-| **Lab 4** | Hash chains detect tampering; RBAC gives auditors read-only access |
+| **Lab 4** | Filtering, search, and pagination slice an unbounded log into readable answers |
+| **Lab 5** | Views and materialized views turn raw events into standing metrics |
+| **Lab 6** | Threshold queries over metrics detect anomalies automatically |
+| **Lab 7** | Hash chains detect tampering; RBAC gives auditors read-only access |
 
 But each piece is incomplete alone. A hierarchy with no reporting is unqueried data sitting in tables. Reporting on a mutable log is worthless -- an attacker could ALTER the rows before the report runs. A tamper-evident log without an auditor role means anyone with database access can read everything, including sensitive payloads.
 
-This capstone combines all four into one **Agent Audit & Compliance Platform**. Your implementation will ingest agent runs with full hierarchy, produce cross-run compliance reports, guarantee the log is tamper-evident via hash chains, and restrict auditor access to a read-only view. When complete, the notebook walks through every layer and produces a final compliance summary that a real auditor could review.
+This capstone combines all seven into one **Agent Audit & Compliance Platform**. Your implementation will ingest agent runs with full hierarchy, produce cross-run compliance reports, guarantee the log is tamper-evident via hash chains, and restrict auditor access to a read-only view. When complete, the notebook walks through every layer and produces a final compliance summary that a real auditor could review.
 
 ---
 
 # Underlying Concepts
 
-This lab doesn't re-teach Labs 1-4's individual concepts -- those already exist. Instead, it explains how they **compose**.
+This lab doesn't re-teach Labs 1-7's individual concepts -- those already exist. Instead, it explains how they **compose**.
 
-**The hash chain must sit on top of the exact same hierarchy.** Lab 4's `event_hash_chain` table references `event(event_id)` directly. The hash chain doesn't protect a separate "audit log" table -- it protects the `event` rows that are part of the run -> span -> event hierarchy from Lab 2. This means tampering with any event in the hierarchy is detectable, because the chain links every event to its predecessor. If the chain sat on a separate table, an attacker could modify the hierarchy tables without breaking the chain.
+**The hash chain must sit on top of the exact same hierarchy.** Lab 7's `event_hash_chain` table references `event(event_id)` directly. The hash chain doesn't protect a separate "audit log" table -- it protects the `event` rows that are part of the run -> span -> event hierarchy from Lab 2. This means tampering with any event in the hierarchy is detectable, because the chain links every event to its predecessor. If the chain sat on a separate table, an attacker could modify the hierarchy tables without breaking the chain.
 
-**Reporting queries must run through the auditor-facing view.** Lab 3's cross-run queries join `run`, `span`, `tool_call`, and `guardrail_event` directly. In the capstone, those same queries should run against `v_audit_trail` -- the view Lab 4 created. This matters because the auditor role only has `SELECT` on the view, not on the base tables. If the compliance report queried base tables directly, the RBAC layer would be bypassed.
+**Reporting queries must run through the auditor-facing view.** Lab 3's cross-run queries join `run`, `span`, `tool_call`, and `guardrail_event` directly. In the capstone, those same queries should run against `v_audit_trail` -- the view Lab 7 created. This matters because the auditor role only has `SELECT` on the view, not on the base tables. If the compliance report queried base tables directly, the RBAC layer would be bypassed.
 
 **The append-only trigger protects the foundation, not the report.** The `BEFORE UPDATE/DELETE` trigger on `event` fires before any modification reaches the table. The hash chain then detects if someone bypasses the trigger by dropping it. These are complementary layers: the trigger prevents casual modification; the hash chain catches privileged bypass. Neither alone is sufficient.
 
@@ -41,10 +44,10 @@ This lab doesn't re-teach Labs 1-4's individual concepts -- those already exist.
 flowchart TD
     A["Lab 1: Ingest events"] --> B["Lab 2: Hierarchy (run/span/tool_call/guardrail_event)"]
     B --> C["Lab 3: Cross-run JOINs + aggregation"]
-    B --> D["Lab 4: Append-only trigger on event"]
-    D --> E["Lab 4: Hash chain (event_hash_chain)"]
-    B --> F["Lab 4: v_audit_trail view"]
-    F --> G["Lab 4: Auditor role (SELECT only)"]
+    B --> D["Lab 7: Append-only trigger on event"]
+    D --> E["Lab 7: Hash chain (event_hash_chain)"]
+    B --> F["Lab 7: v_audit_trail view"]
+    F --> G["Lab 7: Auditor role (SELECT only)"]
     C --> H["Capstone: Compliance report via view"]
     E --> I["Capstone: Tamper detection verified"]
     G --> I
@@ -101,7 +104,7 @@ Your implementation should generate **synthetic, deterministic** data across the
 
 This gives the compliance report something real to aggregate: 3 runs, 5 spans, 3 tool calls, 5 guardrail checks (covering `pass`, `fail`, and `warn`), and 8 events. The guardrail outcomes should span all three CHECK-constrained values so the aggregation queries have meaningful variation.
 
-Tag each synthetic run with a distinguishable marker in `agent_name` (e.g. `pytest-lab5-<hex>`) so cleanup can find and delete all synthetic rows without touching real data from Labs 1-4.
+Tag each synthetic run with a distinguishable marker in `agent_name` (e.g. `pytest-lab5-<hex>`) so cleanup can find and delete all synthetic rows without touching real data from Labs 1-7.
 
 ---
 
@@ -216,7 +219,7 @@ All lab5 objects and tagged rows cleaned up.
 
 > **Compute & cost:** Runs fine on any laptop CPU -- the entire workload is a handful of small SQL statements and two PL/pgSQL trigger functions. Supabase's free tier covers it; nothing in this lab calls a paid API.
 
-> Credentials never appear in the notebook itself: they're read from `.env` at runtime (README Section 7), exactly as in Labs 1-4.
+> Credentials never appear in the notebook itself: they're read from `.env` at runtime (README Section 7), exactly as in Labs 1-7.
 
 ---
 
@@ -225,7 +228,7 @@ All lab5 objects and tagged rows cleaned up.
 - **Lab 1 (Recording Agent Activity) completed** -- the `run` and `event` tables must exist.
 - **Lab 2 (Modeling Runs, Spans, and Tool Calls) completed** -- the `span`, `tool_call`, and `guardrail_event` tables with foreign keys, CHECK constraints, and indexes.
 - **Lab 3 (Querying Across the Hierarchy with JOINs) completed** -- familiarity with LEFT JOINs, GROUP BY, window functions, and EXPLAIN ANALYZE.
-- **Lab 4 (Enforcing Access Control and Detecting Tampering) completed** -- the append-only trigger, hash chain, `v_audit_trail` view, and auditor role concepts.
+- **Lab 7 (Enforcing Access Control and Detecting Tampering) completed** -- the append-only trigger, hash chain, `v_audit_trail` view, and auditor role concepts.
 - **Supabase + `.env` setup completed** -- the same one-time setup from Audit-DB-Labs README Section 7. If you haven't done it, do Lab 1 first.
 
 ---
@@ -237,7 +240,7 @@ All lab5 objects and tagged rows cleaned up.
 | `python-dotenv` | Loads `.env` files so credentials stay out of the notebook |
 | `psycopg2-binary` | The standard Python driver that connects Python to Postgres |
 
-Install the two pinned packages (same versions Labs 1-4 already use):
+Install the two pinned packages (same versions Labs 1-7 already use):
 
 ```bash
 pip install python-dotenv==1.2.3 psycopg2-binary==2.9.12
@@ -257,7 +260,7 @@ Verify the database connection and confirm all prerequisite tables exist. Ingest
 
 ### Phase 2 -- Core Integration (Week 1, Days 3-5)
 
-Create the `v_audit_trail` view (the four-table LEFT JOIN from Lab 3, stored as a named query). Create the append-only trigger on `event` (Lab 4). Build and verify the hash chain for all events. Run the cross-run compliance queries through the view: failure rates, cost analysis, window-function rankings.
+Create the `v_audit_trail` view (the four-table LEFT JOIN from Lab 3, stored as a named query). Create the append-only trigger on `event` (Lab 7). Build and verify the hash chain for all events. Run the cross-run compliance queries through the view: failure rates, cost analysis, window-function rankings.
 
 ### Phase 3 -- Compliance Layer (Week 2, Days 1-3)
 
@@ -323,13 +326,13 @@ flowchart LR
 
 Create a second, more restricted auditor role called `lab5_guardrail_reader` that can only `SELECT` from `guardrail_event` -- not from `run`, `span`, `tool_call`, `event`, or `v_audit_trail`. Verify via `information_schema.role_table_grants` that this role has exactly one grant (`SELECT` on `guardrail_event`) and nothing else. Then connect as this role (or simulate the check via a permission query) and confirm it can read guardrail outcomes but cannot see any run metadata, span names, or event payloads.
 
-This exercises the principle of least privilege at a finer granularity than Lab 4's single auditor role: different auditors see different slices of the compliance data.
+This exercises the principle of least privilege at a finer granularity than Lab 7's single auditor role: different auditors see different slices of the compliance data.
 
 ---
 
 # What We Learnt
 
-- **Integration is where the value appears** -- no single lab produces a compliance platform; only combining event ingestion (Lab 1), hierarchy modeling (Lab 2), cross-run reporting (Lab 3), and tamper detection + RBAC (Lab 4) creates something an actual auditor could use.
+- **Integration is where the value appears** -- no single lab produces a compliance platform; only combining event ingestion (Lab 1), hierarchy modeling (Lab 2), cross-run reporting (Lab 3), and tamper detection + RBAC (Lab 7) creates something an actual auditor could use.
 - **The hash chain must protect the same rows the hierarchy uses** -- putting the chain on a separate table would let an attacker modify the hierarchy without detection; the chain references `event(event_id)` directly to close this gap.
 - **Reporting through the view enforces RBAC** -- if compliance queries hit base tables directly, the auditor role's restrictions are meaningless; the view is the single access path.
 - **Cleanup is harder than creation** -- creating triggers, views, roles, and hash chain tables is straightforward; dropping them in the right order (child before parent) without one failure rolling back the others requires SAVEPOINT-guarded teardown.
@@ -364,13 +367,13 @@ flowchart TD
         RUN --> EV["event table"]
     end
 
-    subgraph "Integrity Layer (Lab 4)"
+    subgraph "Integrity Layer (Lab 7)"
         TRIGGER["BEFORE trigger\nblocks UPDATE/DELETE"] -.-> EV
         HASH_TRIGGER["AFTER INSERT trigger\nauto-hash"] -.-> EV
         EV --> EHC["event_hash_chain\nrow_hash + prev_hash"]
     end
 
-    subgraph "Reporting Layer (Lab 3 + Lab 4)"
+    subgraph "Reporting Layer (Lab 3 + Lab 7)"
         RUN --> VIEW["v_audit_trail\n4-table LEFT JOIN"]
         SPAN --> VIEW
         TC --> VIEW
@@ -378,7 +381,7 @@ flowchart TD
         VIEW --> REPORT["Compliance report\nGROUP BY + window fn"]
     end
 
-    subgraph "Access Layer (Lab 4)"
+    subgraph "Access Layer (Lab 7)"
         VIEW --> AUDITOR["lab5_auditor\nSELECT only"]
         AUDITOR --> SUMMARY["Compliance summary"]
     end

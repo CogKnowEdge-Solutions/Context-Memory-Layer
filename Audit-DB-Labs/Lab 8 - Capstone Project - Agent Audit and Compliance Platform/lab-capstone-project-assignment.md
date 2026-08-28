@@ -1,4 +1,4 @@
-# Lab 5: Capstone Project -- Agent Audit and Compliance Platform
+# Lab 8: Capstone Project -- Agent Audit and Compliance Platform
 
 ## Assignment Brief (2 Weeks)
 
@@ -6,9 +6,9 @@
 
 # Objective Sheet
 
-This is the final lab in the Audit DB Labs module. You will build, from scratch, an **Agent Audit & Compliance Platform** that integrates everything from Labs 1-4 into a single, auditable pipeline.
+This is the final lab in the Audit DB Labs module. You will build, from scratch, an **Agent Audit & Compliance Platform** that integrates everything from Labs 1-7 into a single, auditable pipeline.
 
-**What you are building:** A notebook (`lab-capstone-project.ipynb`) that ingests agent runs with full hierarchy (Labs 1-2), produces cross-run compliance reports through an auditor-facing view (Lab 3), guarantees tamper detection via hash chains (Lab 4), and verifies RBAC through a read-only auditor role (Lab 4).
+**What you are building:** A notebook (`lab-capstone-project.ipynb`) that ingests agent runs with full hierarchy (Labs 1-2), produces cross-run compliance reports through an auditor-facing view (Lab 3), guarantees tamper detection via hash chains (Lab 7), and verifies RBAC through a read-only auditor role (Lab 7).
 
 **What you are NOT building:** This is not a take-home exam with hidden test cases. The rubric is fully transparent below. Every requirement is listed. There are no trick questions.
 
@@ -126,7 +126,7 @@ Your `submission/PROJECT_SUMMARY.md` must follow this template:
 [Submission date]
 
 ## Lab
-Lab 5 - Capstone Project
+Lab 8 - Capstone Project
 
 ## What I Built
 [2-3 sentences describing your implementation]
@@ -206,7 +206,7 @@ Your work will be evaluated on:
 **Q: Can I use a different database driver (e.g., SQLAlchemy)?**
 A: Yes, as long as the notebook's first cell installs it with a pinned version and the connection uses `os.getenv("DATABASE_URL")`.
 
-**Q: What if my Supabase project already has data from Labs 1-4?**
+**Q: What if my Supabase project already has data from Labs 1-7?**
 A: That's expected and good. Your synthetic rows should be tagged so cleanup can remove them without touching the existing data.
 
 **Q: Can I put everything in one long notebook?**
@@ -222,8 +222,8 @@ A: No. The output is illustrative. Your run ids, event ids, hash values, and exa
 
 # Resource Links
 
-- **Lab 5 companion file:** `lab-capstone-project.md` (in this directory)
-- **Labs 1-4 reference:** Same module directory
+- **Lab 8 companion file:** `lab-capstone-project.md` (in this directory)
+- **Labs 1-7 reference:** Same module directory
 - **Supabase dashboard:** https://supabase.com/dashboard
 - **PostgreSQL docs:** https://www.postgresql.org/docs/17/
 - **psycopg2 docs:** https://www.psycopg.org/docs/

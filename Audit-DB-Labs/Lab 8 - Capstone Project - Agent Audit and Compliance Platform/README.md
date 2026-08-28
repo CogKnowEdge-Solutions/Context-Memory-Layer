@@ -1,20 +1,20 @@
-# Lab 5: Capstone Project — Agent Audit and Compliance Platform
+# Lab 8: Capstone Project — Agent Audit and Compliance Platform
 
-**Capstone (Advanced) | 2-Week Timeline | Requires Labs 1-4 completed**
+**Capstone (Advanced) | 2-Week Timeline | Requires Labs 1-7 completed**
 
-An assignment spec — not a worked example — for a capstone that integrates Labs 1-4 into one Agent Audit & Compliance Platform, with a proposal stage, milestone check-ins, and a transparent 100-point rubric (+10 optional bonus).
+An assignment spec — not a worked example — for a capstone that integrates Labs 1-7 into one Agent Audit & Compliance Platform, with a proposal stage, milestone check-ins, and a transparent 100-point rubric (+10 optional bonus).
 
 ## File Structure
 
 ```
-Lab 5 - Capstone Project - Agent Audit and Compliance Platform/
+Lab 8 - Capstone Project - Agent Audit and Compliance Platform/
 ├── lab-capstone-project.md              # 13-section brief (read this first)
 ├── lab-capstone-project-assignment.md   # Full evaluation framework
 ├── test_lab_capstone_project.py         # Grading harness
 ├── lab-capstone-project.ipynb           # YOUR NOTEBOOK — you build this
 ├── submission/
 │   └── PROJECT_SUMMARY.md               # YOUR write-up — you build this
-├── .env                                 # Reuse Labs 1-4's .env (not committed)
+├── .env                                 # Reuse Labs 1-7's .env (not committed)
 └── README.md                            # This file
 ```
 
@@ -27,16 +27,16 @@ The `.md`, `-assignment.md`, and test file are provided. Everything else — the
 - Ingests agent runs as an append-only event log (Lab 1)
 - Organizes them into a queryable run/span/tool_call/guardrail_event hierarchy (Lab 2)
 - Produces cross-run compliance reports via JOINs, aggregation, and window functions (Lab 3)
-- Guarantees the log is tamper-evident via hash chains, and restricts auditor access via RBAC (Lab 4)
+- Guarantees the log is tamper-evident via hash chains, and restricts auditor access via RBAC (Lab 7)
 
-Integrates every concept from Labs 1-4:
+Integrates every concept from Labs 1-7:
 
 | Lab | Integration |
 |-----|-------------|
 | Lab 1 | Append-only event ingestion |
 | Lab 2 | run/span/tool_call/guardrail_event hierarchy — FKs, CHECK constraints, indexes |
 | Lab 3 | Cross-run JOINs, GROUP BY aggregation, window-function ranking, EXPLAIN ANALYZE |
-| Lab 4 | v_audit_trail view, append-only trigger, hash chain, auditor RBAC role |
+| Lab 7 | v_audit_trail view, append-only trigger, hash chain, auditor RBAC role |
 
 ## Evaluation Framework (2-Week Timeline)
 
@@ -107,7 +107,7 @@ The full checklist lives in `lab-capstone-project-assignment.md` under Success C
 ## Resources
 
 - **In this folder:** `lab-capstone-project.md` (read first), `lab-capstone-project-assignment.md` (evaluation framework), `test_lab_capstone_project.py`
-- **Reference:** Labs 1-4 in this module
+- **Reference:** Labs 1-7 in this module
 - **External:** Supabase dashboard, PostgreSQL docs, psycopg2 docs — links in the assignment file's Resource Links section
 
 ## Tips for Success
@@ -115,5 +115,5 @@ The full checklist lives in `lab-capstone-project-assignment.md` under Success C
 - **Start with the proposal** — a wrong assumption about which tables/tags already exist costs hours later.
 - **Test early, test often** — run the test suite after each phase, not just at the end.
 - **Tag before you insert** — every synthetic row needs its `pytest-lab5-<hex>` marker from the moment it's created, not added afterward.
-- **Reuse, don't copy** — this capstone is about composing Labs 1-4, not repeating their code.
+- **Reuse, don't copy** — this capstone is about composing Labs 1-7, not repeating their code.
 - **Cleanup order matters** — child objects before parent objects, SAVEPOINT-guarded, so one failed drop doesn't roll back earlier successes.
