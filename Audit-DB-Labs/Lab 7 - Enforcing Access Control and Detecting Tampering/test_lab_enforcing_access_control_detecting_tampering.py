@@ -5,7 +5,7 @@ Testing strategy (documented per AGENTS.md / TEST.md):
 (a) LIVE-DB TESTS -- when DATABASE_URL can be resolved the same way the
     notebook resolves it (walking upward from this file's folder for a .env),
     tests run against the real Supabase Postgres. All live-test writes are
-    tagged with a unique per-session marker ("pytest-lab4-<hex>" run rows),
+    tagged with a unique per-session marker ("pytest-lab7-<hex>" run rows),
     and the tagged-run fixture deletes every tagged row afterwards -- child
     tables first (guardrail_event, tool_call, span, event), then the run
     itself -- so the suite is safe to re-run and leaves no residue.
@@ -73,7 +73,7 @@ LAB4_REQUIRED_PATTERNS = [
 VENV_PATTERNS = [r"\bvenv\b", r"virtualenv", r"virtual\s+environment", r"python\s+-m\s+venv"]
 XLSX_PATTERNS = [r"\.xlsx\b", r"openpyxl", r"xlsxwriter"]
 
-RUN_MARKER_PREFIX = "pytest-lab4-"
+RUN_MARKER_PREFIX = "pytest-lab7-"
 
 RUN_TABLE_DDL = """
     CREATE TABLE IF NOT EXISTS run (
@@ -302,7 +302,7 @@ class TestDocumentationVsBehavior:
 class TestScopeGuards:
     """Lab 7 scope: views, triggers, roles/RBAC, hash-chaining. No Lab 3."""
 
-    def test_notebook_has_required_lab4_sql_patterns(self):
+    def test_notebook_has_required_lab7_sql_patterns(self):
         joined = "\n".join(notebook_code_sources())
         for pattern in LAB4_REQUIRED_PATTERNS:
             hits = re.findall(pattern, joined, re.I)
@@ -610,7 +610,7 @@ class TestAuditorRole:
             except Exception:
                 db.rollback()
         db.commit()
-        cur.execute("CREATE USER lab7_auditor WITH PASSWORD 'lab4_test_pass_2026'")
+        cur.execute("CREATE USER lab7_auditor WITH PASSWORD 'lab7_test_pass_2026'")
         cur.execute("GRANT SELECT ON v_audit_trail TO lab7_auditor")
         cur.execute("GRANT USAGE ON SCHEMA public TO lab7_auditor")
         db.commit()
@@ -638,7 +638,7 @@ class TestAuditorRole:
             except Exception:
                 db.rollback()
         db.commit()
-        cur.execute("CREATE USER lab7_auditor WITH PASSWORD 'lab4_test_pass_2026'")
+        cur.execute("CREATE USER lab7_auditor WITH PASSWORD 'lab7_test_pass_2026'")
         cur.execute("GRANT USAGE ON SCHEMA public TO lab7_auditor")
         db.commit()
 

@@ -513,7 +513,7 @@ for stmt in [
     except Exception: connection.rollback()
 connection.commit()
 # Create the auditor role with SELECT-only access on the view
-cursor.execute("CREATE USER lab7_auditor WITH PASSWORD 'lab4_test_pass_2026'")
+cursor.execute("CREATE USER lab7_auditor WITH PASSWORD 'lab7_test_pass_2026'")
 cursor.execute("GRANT SELECT ON v_audit_trail TO lab7_auditor")
 cursor.execute("GRANT USAGE ON SCHEMA public TO lab7_auditor")
 connection.commit()
