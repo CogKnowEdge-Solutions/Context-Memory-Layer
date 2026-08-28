@@ -4,7 +4,9 @@
 
 **Difficulty: Intermediate | ~40 min | Requires Lab 2 (Modeling Runs, Spans, and Tool Calls) done in this Supabase project**
 
-*Lab 3 of 5 in the Audit DB Labs module.*
+*Lab 3 of 8 in the Audit DB Labs module.*
+
+Reconstructing a full trace across `run` -> `span` -> `tool_call` is exactly how you answer the harness's core debugging question -- "what did my agent actually do on this run?" -- so the JOINs in this lab are the foundation of an audit layer built for a real AI harness.
 
 ---
 

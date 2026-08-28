@@ -8,7 +8,7 @@
 
 This is the final lab in the Audit DB Labs module. You will build, from scratch, an **Agent Audit & Compliance Platform** that integrates everything from Labs 1-7 into a single, auditable pipeline.
 
-**What you are building:** A notebook (`lab-capstone-project.ipynb`) that ingests agent runs with full hierarchy (Labs 1-2), produces cross-run compliance reports through an auditor-facing view (Lab 3), guarantees tamper detection via hash chains (Lab 7), and verifies RBAC through a read-only auditor role (Lab 7).
+**What you are building:** A notebook (`lab-capstone-project.ipynb`) that ingests agent runs with full hierarchy (Labs 1-2), produces cross-run compliance reports through an auditor-facing view (Lab 3), lets an auditor filter the log and read standing metrics off views (Labs 4-5), fires alerts when those metrics go wrong (Lab 6), guarantees tamper detection via hash chains (Lab 7), and verifies RBAC through a read-only auditor role (Lab 7).
 
 **What you are NOT building:** This is not a take-home exam with hidden test cases. The rubric is fully transparent below. Every requirement is listed. There are no trick questions.
 
@@ -35,8 +35,11 @@ All of the following **must** be present in your submission. Missing any one mea
 | 11 | Auditor role created with SELECT on v_audit_trail only | `information_schema.role_table_grants` query |
 | 12 | Cross-run compliance report: failure rates per agent, cost analysis, window-function ranking | Report output |
 | 13 | EXPLAIN ANALYZE shows index usage on JOINs | EXPLAIN output |
-| 14 | Cleanup: all triggers, view, hash chain table, auditor role, and tagged rows dropped/deleted | Final verification query |
-| 15 | No hardcoded credentials in notebook (DATABASE_URL loaded from .env) | Grep for postgres:// |
+| 14 | Filtered auditor query: "all failed runs in the last 24 hours, newest first" using a time-window `WHERE` with pagination (`LIMIT`/`OFFSET` or keyset) | Filtered query output |
+| 15 | At least one metrics `VIEW` and at least one `MATERIALIZED VIEW` with a `REFRESH`, both readable by a dashboard | View + materialized view existence and REFRESH |
+| 16 | At least one anomaly-detection alert query (cost spike or error-rate surge) that returns offending rows and is empty on healthy data | Alert query output on healthy vs. anomalous data |
+| 17 | Cleanup: all triggers, view, materialized view, filtered/metrics views, hash chain table, auditor role, and tagged rows dropped/deleted | Final verification query |
+| 18 | No hardcoded credentials in notebook (DATABASE_URL loaded from .env) | Grep for postgres:// |
 
 ---
 
@@ -71,13 +74,14 @@ Submit the following files:
 
 | Category | Points | What is assessed |
 |----------|--------|-----------------|
-| **Hierarchy integrity** | 15 points | All 5 tables present; FK constraints enforced; CHECK constraints on guardrail_event.outcome |
-| **Cross-run reporting correctness** | 20 points | JOIN queries through v_audit_trail; GROUP BY aggregation; window-function ranking; EXPLAIN ANALYZE shows index usage |
-| **Hash-chain / tamper-detection correctness** | 20 points | Chain built for all events; 0 content + 0 linkage breaks; tamper detected after privileged bypass; chain restored to clean |
-| **RBAC correctness** | 15 points | Auditor role created; SELECT on v_audit_trail verified; no INSERT on base tables; role cleaned up |
+| **Hierarchy integrity** | 10 points | All 5 tables present; FK constraints enforced; CHECK constraints on guardrail_event.outcome |
+| **Cross-run reporting correctness** | 15 points | JOIN queries through v_audit_trail; GROUP BY aggregation; window-function ranking; EXPLAIN ANALYZE shows index usage |
+| **Filtering, metrics & alerting** | 25 points | Filtered auditor queries (failed runs by time window, paginated); at least one metrics view + one materialized view with a REFRESH; at least one anomaly alert query that returns offending rows and is empty on healthy data |
+| **Hash-chain / tamper-detection correctness** | 15 points | Chain built for all events; 0 content + 0 linkage breaks; tamper detected after privileged bypass; chain restored to clean |
+| **RBAC correctness** | 10 points | Auditor role created; SELECT on v_audit_trail verified; no INSERT on base tables; role cleaned up |
 | **Compliance-log completeness** | 10 points | All 3 runs ingested with full hierarchy; events span multiple event_types; guardrail outcomes cover pass, fail, warn |
-| **Code quality** | 10 points | SAVEPOINT-guarded cleanup; child-first deletes; tagged rows; no hardcoded credentials; single pinned pip install |
-| **Documentation** | 10 points | Output section matches notebook; Mermaid diagrams present; Appendix A and B present; PROJECT_SUMMARY.md submitted |
+| **Code quality** | 8 points | SAVEPOINT-guarded cleanup; child-first deletes; tagged rows; no hardcoded credentials; single pinned pip install |
+| **Documentation** | 7 points | Output section matches notebook; Mermaid diagrams present; Appendix A and B present; PROJECT_SUMMARY.md submitted |
 
 **Grading bands:**
 
@@ -106,6 +110,9 @@ Before submitting, confirm **every** item in this checklist. If any box is unche
 - [ ] Auditor role exists with SELECT on v_audit_trail only
 - [ ] Compliance report prints failure rates, cost analysis, and window-function ranking
 - [ ] EXPLAIN ANALYZE shows index usage (not Seq Scan)
+- [ ] Filtered auditor query returns "all failed runs in the last 24 hours, newest first" with pagination
+- [ ] At least one metrics view and one materialized view exist, and the materialized view REFRESHes
+- [ ] At least one anomaly alert query returns rows on anomalous data and is empty on healthy data
 - [ ] Cleanup drops all objects and deletes all tagged rows
 - [ ] No hardcoded credentials in notebook
 - [ ] PROJECT_SUMMARY.md submitted in submission/ directory
@@ -183,8 +190,8 @@ If you cannot do these three things by Day 3, raise a flag immediately. The most
 | Milestone | Due | What to have working |
 |-----------|-----|---------------------|
 | **M1: Foundation** | End of Week 1, Day 5 | All 3 synthetic runs ingested with full hierarchy; tagged with pytest-lab8- prefix |
-| **M2: Core Integration** | End of Week 2, Day 2 | v_audit_trail view created; append-only trigger working; hash chain built and verified |
-| **M3: Compliance Layer** | End of Week 2, Day 4 | Tamper detection demonstrated; auditor role created and verified; EXPLAIN ANALYZE shows indexes |
+| **M2: Core Integration** | End of Week 2, Day 2 | v_audit_trail view created; append-only trigger working; hash chain built and verified; metrics views + materialized view + alert queries working |
+| **M3: Compliance Layer** | End of Week 2, Day 4 | Tamper detection demonstrated; auditor role created and verified; EXPLAIN ANALYZE shows indexes; filtered auditor views (Lab 4) working |
 | **M4: Polish** | End of Week 2, Day 5 | Cleanup complete; PROJECT_SUMMARY.md written; notebook runs cleanly top-to-bottom |
 
 ---
@@ -194,7 +201,7 @@ If you cannot do these three things by Day 3, raise a flag immediately. The most
 Your work will be evaluated on:
 
 1. **Correctness** -- Does the notebook run without errors? Do queries return expected results?
-2. **Completeness** -- Are all 15 Mandatory items addressed?
+2. **Completeness** -- Are all 18 Mandatory items addressed?
 3. **Integrity** -- Is the hash chain actually verified? Is the trigger actually append-only?
 4. **Cleanliness** -- Is the cleanup complete? Are all objects and tagged rows removed?
 5. **Documentation** -- Does the PROJECT_SUMMARY.md clearly explain what you built and how you verified it?

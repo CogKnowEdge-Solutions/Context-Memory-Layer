@@ -147,7 +147,7 @@ class TestMarkdownStructure:
 
     def test_md_mentions_labs_1_through_7(self):
         text = md_text()
-        for lab_num in ["Lab 1", "Lab 2", "Lab 3", "Lab 7"]:
+        for lab_num in ["Lab 1", "Lab 2", "Lab 3", "Lab 4", "Lab 5", "Lab 6", "Lab 7"]:
             assert lab_num in text, f"markdown must mention {lab_num}"
 
     def test_markdown_carries_pinned_versions(self):

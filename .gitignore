@@ -9,12 +9,20 @@ Thumbs.db
 
 # Env
 .env
+**/.env
 .env.*
 !.env.example
 
 # Python
 __pycache__/
+**/__pycache__/
 *.py[cod]
+.pytest_cache/
+**/.pytest_cache/
+
+# Test artifacts
+test-results/
+**/test-results/
 .venv/
 venv/
 *.egg-info/

@@ -6,6 +6,8 @@
 
 *Lab 4 of 8 in the Audit DB Labs module.*
 
+A live harness produces an unbounded log; filtering is how you pull out the one run, the one failure, or the last hour from millions of agent events, so it is the skill that makes a harness's audit log searchable in practice.
+
 ---
 
 # Problem Statement / Use Case Overview

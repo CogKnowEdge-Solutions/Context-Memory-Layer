@@ -4,7 +4,7 @@
 
 **Difficulty: Beginner | ~35 min | Requires Supabase setup (see Prerequisites)**
 
-*Lab 1 of 5 in the Audit DB Labs module.*
+*Lab 1 of 8 in the Audit DB Labs module.*
 
 ---
 

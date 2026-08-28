@@ -1,10 +1,12 @@
-# Audit DB Advanced: Views, Triggers, Hash Chains & RBAC
+# Audit DB Advanced: How to Trust and Police the Log
 
 ## Enforcing Access Control and Detecting Tampering
 
-**Difficulty: Advanced | ~50 min | Requires Lab 3 (Querying Across the Hierarchy with JOINs) done in this Supabase project**
+**Difficulty: Advanced | ~50 min | Requires Lab 6 (Alerting on Anomalies) done in this Supabase project; the tamper-evidence work builds directly on the Lab 1-3 schema**
 
 *Lab 7 of 8 in the Audit DB Labs module.*
+
+Triggers, RBAC, and hash chains are what let a harness prove to an outside auditor that its agent log was not altered.
 
 ---
 

@@ -6,6 +6,8 @@
 
 *Lab 5 of 8 in the Audit DB Labs module.*
 
+These views are what a harness dashboard reads to show cost, error rate, and latency per agent -- without rescanning the raw log every time.
+
 ---
 
 # Problem Statement / Use Case Overview

@@ -26,7 +26,7 @@ Labs 1-7 each solve one piece:
 
 But each piece is incomplete alone. A hierarchy with no reporting is unqueried data sitting in tables. Reporting on a mutable log is worthless -- an attacker could ALTER the rows before the report runs. A tamper-evident log without an auditor role means anyone with database access can read everything, including sensitive payloads.
 
-This capstone combines all seven into one **Agent Audit & Compliance Platform**. Your implementation will ingest agent runs with full hierarchy, produce cross-run compliance reports, guarantee the log is tamper-evident via hash chains, and restrict auditor access to a read-only view. When complete, the notebook walks through every layer and produces a final compliance summary that a real auditor could review.
+This capstone combines all seven into one **Agent Audit & Compliance Platform**. Your implementation will ingest agent runs with full hierarchy, produce cross-run compliance reports, let an auditor filter the log (Lab 4) and read standing metrics off views (Lab 5), fire alerts when those metrics go wrong (Lab 6), guarantee the log is tamper-evident via hash chains, and restrict auditor access to a read-only view. When complete, the notebook walks through every layer and produces a final compliance summary that a real auditor could review.
 
 ---
 
@@ -40,22 +40,37 @@ This lab doesn't re-teach Labs 1-7's individual concepts -- those already exist.
 
 **The append-only trigger protects the foundation, not the report.** The `BEFORE UPDATE/DELETE` trigger on `event` fires before any modification reaches the table. The hash chain then detects if someone bypasses the trigger by dropping it. These are complementary layers: the trigger prevents casual modification; the hash chain catches privileged bypass. Neither alone is sufficient.
 
+**The auditor experience lives on top of filtering, metrics, and alerts.** Labs 1-3 give you the raw, joinable history and Lab 7 makes it trustworthy -- but a compliance platform is only useful if an auditor can actually *use* that history. Lab 4's filtering and pagination turn the unbounded log into answerable questions ("all failed runs in the last 24 hours, newest first"); Lab 5's views and materialized views turn raw events into standing metrics (error rate, cost, latency) a dashboard reads without rescanning the whole log; Lab 6's threshold queries are what make the platform *proactive* -- they fire only when a cost spike, an error-rate surge, or a retry storm crosses its limit. Together these three are the part of the platform an auditor interacts with daily, sitting on top of the schema, reporting, and integrity layers beneath them.
+
+**Integrity and RBAC must extend to the new layers, not bypass them.** The filtered views, metrics views, and alert queries an auditor consumes should all read through the same auditor-facing access path (`v_audit_trail` and the Lab 7 role model) that the Lab 3 reports use -- otherwise you could leak a metric or a filtered slice that RBAC was supposed to hide.
+
 ```mermaid
 flowchart TD
     A["Lab 1: Ingest events"] --> B["Lab 2: Hierarchy (run/span/tool_call/guardrail_event)"]
     B --> C["Lab 3: Cross-run JOINs + aggregation"]
     B --> D["Lab 7: Append-only trigger on event"]
     D --> E["Lab 7: Hash chain (event_hash_chain)"]
-    B --> F["Lab 7: v_audit_trail view"]
+    C --> F["Lab 7: v_audit_trail view"]
     F --> G["Lab 7: Auditor role (SELECT only)"]
-    C --> H["Capstone: Compliance report via view"]
+    F --> FIL["Lab 4: Filtering layer<br/>(status/time/cost windows + pagination)"]
+    B --> MET["Lab 5: Metrics layer<br/>(views + materialized view)"]
+    MET --> AL["Lab 6: Alerting layer<br/>(cost spike / error surge / retry storm)"]
+    G --> H["Capstone: Compliance report via view"]
+    FIL --> K["Capstone: Auditor slicing session"]
+    MET --> L["Capstone: Dashboard metrics"]
+    AL --> N["Capstone: Anomaly alerts"]
     E --> I["Capstone: Tamper detection verified"]
     G --> I
-    H --> J["Capstone: Final compliance summary"]
+    K --> J["Capstone: Final compliance summary"]
+    H --> J
+    L --> J
+    N --> J
     I --> J
     style A fill:#fff9c4,stroke:#333,color:#111
     style D fill:#ffcdd2,stroke:#333,color:#111
     style E fill:#ffcdd2,stroke:#333,color:#111
+    style MET fill:#e1f5ff,stroke:#333,color:#111
+    style AL fill:#ffcdd2,stroke:#333,color:#111
     style J fill:#c8e6c9,stroke:#333,color:#111
 ```
 
@@ -110,14 +125,15 @@ Tag each synthetic run with a distinguishable marker in `agent_name` (e.g. `pyte
 
 # Processing
 
-Your pipeline should execute six phases:
+Your pipeline should execute seven phases:
 
 1. **Schema verification** -- confirm all five Lab 1-2 tables exist (run, event, span, tool_call, guardrail_event)
 2. **Data ingestion** -- insert tagged runs with full hierarchy (spans, tool calls, guardrails, events)
 3. **Audit layer** -- create `v_audit_trail` view, append-only trigger, and hash chain table with auto-hash trigger
 4. **Compliance report** -- run cross-run queries through the view: failure rates per agent, cost analysis, window-function rankings, EXPLAIN ANALYZE showing index usage
-5. **Integrity verification** -- build hash chain for all events, verify 0 content breaks and 0 linkage breaks, simulate a privileged bypass (drop trigger -> tamper -> re-create trigger) and confirm detection
-6. **RBAC exercise** -- create a read-only auditor role with SELECT on view only, verify via `information_schema`, then clean up everything
+5. **Auditor experience** -- build the Lab 4 filtered log views (e.g. failed runs in a time window, paginated), the Lab 5 metrics views plus one materialized view with a `REFRESH`, and the Lab 6 anomaly alert queries that return rows only when something is wrong
+6. **Integrity verification** -- build hash chain for all events, verify 0 content breaks and 0 linkage breaks, simulate a privileged bypass (drop trigger -> tamper -> re-create trigger) and confirm detection
+7. **RBAC exercise** -- create a read-only auditor role with SELECT on view only, verify via `information_schema`, then clean up everything
 
 ---
 
@@ -228,6 +244,9 @@ All lab5 objects and tagged rows cleaned up.
 - **Lab 1 (Recording Agent Activity) completed** -- the `run` and `event` tables must exist.
 - **Lab 2 (Modeling Runs, Spans, and Tool Calls) completed** -- the `span`, `tool_call`, and `guardrail_event` tables with foreign keys, CHECK constraints, and indexes.
 - **Lab 3 (Querying Across the Hierarchy with JOINs) completed** -- familiarity with LEFT JOINs, GROUP BY, window functions, and EXPLAIN ANALYZE.
+- **Lab 4 (Filtering, Search, and Pagination) completed** -- filtering and pagination for the auditor-facing log views, so an auditor can slice an unbounded log rather than dump every row.
+- **Lab 5 (Metrics and Dashboards) completed** -- views and materialized views that turn raw events into standing metrics (error rate, cost, latency) a compliance dashboard reads.
+- **Lab 6 (Alerting on Anomalies) completed** -- threshold queries that fire only when something is wrong (cost spike, error surge, retry storm), the automated half of the monitoring pipeline.
 - **Lab 7 (Enforcing Access Control and Detecting Tampering) completed** -- the append-only trigger, hash chain, `v_audit_trail` view, and auditor role concepts.
 - **Supabase + `.env` setup completed** -- the same one-time setup from Audit-DB-Labs README Section 7. If you haven't done it, do Lab 1 first.
 
@@ -260,15 +279,15 @@ Verify the database connection and confirm all prerequisite tables exist. Ingest
 
 ### Phase 2 -- Core Integration (Week 1, Days 3-5)
 
-Create the `v_audit_trail` view (the four-table LEFT JOIN from Lab 3, stored as a named query). Create the append-only trigger on `event` (Lab 7). Build and verify the hash chain for all events. Run the cross-run compliance queries through the view: failure rates, cost analysis, window-function rankings.
+Create the `v_audit_trail` view (the four-table LEFT JOIN from Lab 3, stored as a named query). Create the append-only trigger on `event` (Lab 7). Build and verify the hash chain for all events. Run the cross-run compliance queries through the view: failure rates, cost analysis, window-function rankings. Build the monitoring half of the platform here too: the Lab 5 metrics views plus one materialized view with a `REFRESH`, and the Lab 6 anomaly alert queries (cost spike, error surge, retry storm) that return rows only when something is wrong.
 
 ### Phase 3 -- Compliance Layer (Week 2, Days 1-3)
 
-Simulate a privileged bypass (drop trigger -> tamper -> re-create trigger) and confirm the hash chain detects it. Create the auditor role with SELECT on view only. Verify via `information_schema.role_table_grants`. Run EXPLAIN ANALYZE to confirm the JOIN queries use indexes.
+Simulate a privileged bypass (drop trigger -> tamper -> re-create trigger) and confirm the hash chain detects it. Create the auditor role with SELECT on view only. Verify via `information_schema.role_table_grants`. Run EXPLAIN ANALYZE to confirm the JOIN queries use indexes. Build the auditor-facing log views from Lab 4 -- filtered queries for "all failed runs in the last 24 hours, newest first", payload search, and pagination -- so the compliance report is backed by a real slicing experience, not a dump of every row.
 
 ### Phase 4 -- Polish (Week 2, Days 4-5)
 
-Clean up all objects (triggers, functions, view, hash chain table, auditor role) and all tagged rows using SAVEPOINT-guarded drops. Print a final compliance summary. Review against the Success Criteria Checklist in the assignment file.
+Clean up all objects (triggers, functions, views including the metrics and filtered views, materialized view, hash chain table, auditor role) and all tagged rows using SAVEPOINT-guarded drops. Print a final compliance summary that folds together the compliance report, the clipped metrics, the fired alerts, and the tamper check. Review against the Success Criteria Checklist in the assignment file.
 
 ```mermaid
 flowchart LR
@@ -278,14 +297,17 @@ flowchart LR
     subgraph "Phase 2: Core Integration"
         P2["Create view\n+ trigger\n+ hash chain"]
         P3["Compliance report\nvia view"]
+        P6["Metrics views\n+ materialized view\n+ alert queries"]
     end
     subgraph "Phase 3: Compliance Layer"
-        P4["Tamper detect\n+ RBAC verify"]
+        P4["Tamper detect\n+ RBAC verify\n+ filtered auditor views"]
     end
     subgraph "Phase 4: Polish"
         P5["Cleanup +\ncompliance summary"]
     end
     P1 --> P2 --> P3 --> P4 --> P5
+    P3 --> P6
+    P6 --> P4
     style P1 fill:#e1f5ff,stroke:#333,color:#111
     style P2 fill:#fff9c4,stroke:#333,color:#111
     style P3 fill:#c8e6c9,stroke:#333,color:#111
@@ -299,13 +321,14 @@ flowchart LR
 
 | Category | Points | What is assessed |
 |----------|--------|-----------------|
-| Hierarchy integrity | 15 | All 5 tables present; FK constraints enforced; CHECK constraints on guardrail_event.outcome |
-| Cross-run reporting correctness | 20 | JOIN queries through v_audit_trail; GROUP BY aggregation; window-function ranking; EXPLAIN ANALYZE shows index usage |
-| Hash-chain / tamper-detection correctness | 20 | Chain built for all events; 0 content + 0 linkage breaks; tamper detected after privileged bypass; chain restored to clean |
-| RBAC correctness | 15 | Auditor role created; SELECT on v_audit_trail verified; no INSERT on base tables; role cleaned up |
+| Hierarchy integrity | 10 | All 5 tables present; FK constraints enforced; CHECK constraints on guardrail_event.outcome |
+| Cross-run reporting correctness | 15 | JOIN queries through v_audit_trail; GROUP BY aggregation; window-function ranking; EXPLAIN ANALYZE shows index usage |
+| Filtering, metrics & alerting | 25 | Filtered auditor queries (failed runs by time window, paginated); at least one metrics view + one materialized view with a REFRESH; at least one anomaly alert query that returns offending rows and is empty on healthy data |
+| Hash-chain / tamper-detection correctness | 15 | Chain built for all events; 0 content + 0 linkage breaks; tamper detected after privileged bypass; chain restored to clean |
+| RBAC correctness | 10 | Auditor role created; SELECT on v_audit_trail verified; no INSERT on base tables; role cleaned up |
 | Compliance-log completeness | 10 | All 3 runs ingested with full hierarchy; events span multiple event_types; guardrail outcomes cover pass, fail, warn |
-| Code quality | 10 | SAVEPOINT-guarded cleanup; child-first deletes; tagged rows; no hardcoded credentials; single pinned pip install |
-| Documentation | 10 | Output section matches notebook; Mermaid diagrams present; Appendix A and B present; PROJECT_SUMMARY.md submitted |
+| Code quality | 8 | SAVEPOINT-guarded cleanup; child-first deletes; tagged rows; no hardcoded credentials; single pinned pip install |
+| Documentation | 7 | Output section matches notebook; Mermaid diagrams present; Appendix A and B present; PROJECT_SUMMARY.md submitted |
 | **Total** | **100** | |
 
 **Grading bands:**
@@ -332,7 +355,7 @@ This exercises the principle of least privilege at a finer granularity than Lab 
 
 # What We Learnt
 
-- **Integration is where the value appears** -- no single lab produces a compliance platform; only combining event ingestion (Lab 1), hierarchy modeling (Lab 2), cross-run reporting (Lab 3), and tamper detection + RBAC (Lab 7) creates something an actual auditor could use.
+- **Integration is where the value appears** -- no single lab produces a compliance platform; only combining event ingestion (Lab 1), hierarchy modeling (Lab 2), cross-run reporting (Lab 3), filtering and pagination (Lab 4), metrics and dashboards (Lab 5), anomaly alerting (Lab 6), and tamper detection + RBAC (Lab 7) creates something an actual auditor could use.
 - **The hash chain must protect the same rows the hierarchy uses** -- putting the chain on a separate table would let an attacker modify the hierarchy without detection; the chain references `event(event_id)` directly to close this gap.
 - **Reporting through the view enforces RBAC** -- if compliance queries hit base tables directly, the auditor role's restrictions are meaningless; the view is the single access path.
 - **Cleanup is harder than creation** -- creating triggers, views, roles, and hash chain tables is straightforward; dropping them in the right order (child before parent) without one failure rolling back the others requires SAVEPOINT-guarded teardown.
@@ -381,8 +404,16 @@ flowchart TD
         VIEW --> REPORT["Compliance report\nGROUP BY + window fn"]
     end
 
+    subgraph "Auditor Experience (Lab 4 + Lab 5 + Lab 6)"
+        VIEW --> FVIEWS["Lab 4: filtered views\n(time/cost windows + pagination)"]
+        VIEW --> METRICS["Lab 5: metrics views\n+ materialized view"]
+        METRICS --> ALERTS["Lab 6: alert queries\n(cost spike / error surge)"]
+    end
+
     subgraph "Access Layer (Lab 7)"
-        VIEW --> AUDITOR["lab8_auditor\nSELECT only"]
+        FVIEWS --> AUDITOR["lab8_auditor\nSELECT only"]
+        METRICS --> AUDITOR
+        ALERTS --> AUDITOR
         AUDITOR --> SUMMARY["Compliance summary"]
     end
 
@@ -392,5 +423,7 @@ flowchart TD
     style TRIGGER fill:#ffcdd2,stroke:#333,color:#111
     style EHC fill:#ffcdd2,stroke:#333,color:#111
     style VIEW fill:#e1f5ff,stroke:#333,color:#111
+    style METRICS fill:#e1f5ff,stroke:#333,color:#111
+    style ALERTS fill:#ffcdd2,stroke:#333,color:#111
     style SUMMARY fill:#c8e6c9,stroke:#333,color:#111
 ```

@@ -4,7 +4,7 @@
 
 **Difficulty: Intermediate | ~40 min | Requires Lab 1 (Recording Agent Activity) done in this Supabase project**
 
-*Lab 2 of 5 in the Audit DB Labs module.*
+*Lab 2 of 8 in the Audit DB Labs module.*
 
 ---
 

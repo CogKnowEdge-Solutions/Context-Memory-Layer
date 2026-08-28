@@ -14,7 +14,7 @@ Lab 8 - Capstone Project - Agent Audit and Compliance Platform/
 ├── lab-capstone-project.ipynb           # YOUR NOTEBOOK — you build this
 ├── submission/
 │   └── PROJECT_SUMMARY.md               # YOUR write-up — you build this
-├── .env                                 # Reuse Labs 1-7's .env (not committed)
+├── .env                                 # your DATABASE_URL .env, kept inside this module, never committed
 └── README.md                            # This file
 ```
 
@@ -27,6 +27,9 @@ The `.md`, `-assignment.md`, and test file are provided. Everything else — the
 - Ingests agent runs as an append-only event log (Lab 1)
 - Organizes them into a queryable run/span/tool_call/guardrail_event hierarchy (Lab 2)
 - Produces cross-run compliance reports via JOINs, aggregation, and window functions (Lab 3)
+- Lets an auditor slice the log — filtering, search, and pagination for the auditor-facing views (Lab 4)
+- Turns raw events into standing metrics via views and a materialized view (Lab 5)
+- Fires anomaly-detection alerts when those metrics go wrong (Lab 6)
 - Guarantees the log is tamper-evident via hash chains, and restricts auditor access via RBAC (Lab 7)
 
 Integrates every concept from Labs 1-7:
@@ -36,6 +39,9 @@ Integrates every concept from Labs 1-7:
 | Lab 1 | Append-only event ingestion |
 | Lab 2 | run/span/tool_call/guardrail_event hierarchy — FKs, CHECK constraints, indexes |
 | Lab 3 | Cross-run JOINs, GROUP BY aggregation, window-function ranking, EXPLAIN ANALYZE |
+| Lab 4 | Filtering/search/pagination for the auditor-facing log views |
+| Lab 5 | Metrics views + materialized view with a REFRESH |
+| Lab 6 | Anomaly-detection alert queries (cost spike / error surge) |
 | Lab 7 | v_audit_trail view, append-only trigger, hash chain, auditor RBAC role |
 
 ## Evaluation Framework (2-Week Timeline)
@@ -54,13 +60,14 @@ Integrates every concept from Labs 1-7:
 
 | Category | Points |
 |----------|--------|
-| Hierarchy integrity | 15 |
-| Cross-run reporting correctness | 20 |
-| Hash-chain / tamper-detection correctness | 20 |
-| RBAC correctness | 15 |
+| Hierarchy integrity | 10 |
+| Cross-run reporting correctness | 15 |
+| Filtering, metrics & alerting | 25 |
+| Hash-chain / tamper-detection correctness | 15 |
+| RBAC correctness | 10 |
 | Compliance-log completeness | 10 |
-| Code quality | 10 |
-| Documentation | 10 |
+| Code quality | 8 |
+| Documentation | 7 |
 | **Mandatory total** | **100** |
 | Optional exercises (bonus, on top of the 100) | up to +10 |
 
@@ -85,7 +92,7 @@ Integrates every concept from Labs 1-7:
 
 ## Mandatory Features (≥50 to pass)
 
-See the assignment file's Mandatory table for the full 15-item list. In short:
+See the assignment file's Mandatory table for the full 18-item list. In short:
 
 - ✅ Full Lab 1-2 hierarchy tagged and populated (`pytest-lab8-<hex>`)
 - ✅ `v_audit_trail` view with an append-only trigger on `event`

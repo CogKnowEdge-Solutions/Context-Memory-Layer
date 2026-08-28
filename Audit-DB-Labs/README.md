@@ -136,9 +136,9 @@ A **trigger** runs code automatically on write — used in Lab 7 to enforce appe
 
 ## 5. Postgres vs. a Document Database
 
-If you've done the MongoDB module, this table maps the two worlds:
+If you've used a document database before, this table maps the two worlds:
 
-| Aspect | MongoDB (document) | Postgres (relational) |
+| Aspect | Document database (document) | Postgres (relational) |
 |---|---|---|
 | Basic unit of data | A document in a collection | A row in a table |
 | Schema | Flexible — documents can differ | Fixed — every row has the same columns |
@@ -228,8 +228,8 @@ database = "postgres"
 print(f"postgresql://{user}:{quote_plus(password)}@{host}:{port}/{database}")
 ```
 
-**Step 7 — Create a `.env` file at the repository root.**
-In the root folder of this repository — the same level as this `README.md`, one level *above* the individual `Lab N - <Title>/` folders — create a file named `.env` containing exactly one line, using the string you just built:
+**Step 7 — Create a `.env` file inside this `Audit-DB-Labs/` folder.**
+In this `Audit-DB-Labs/` folder — the same level as this `README.md`, one level *above* the individual `Lab N - <Title>/` folders — create a file named `.env` containing exactly one line, using the string you just built:
 
 ```
 DATABASE_URL=<paste your full connection string here>
@@ -239,7 +239,7 @@ DATABASE_URL=<paste your full connection string here>
 Don't share it or commit it anywhere. If this project ever goes into a git repository, add `.env` to `.gitignore` first, so the real credentials are never committed.
 
 **Step 9 — Test the connection before opening Lab 1.**
-Save this as a throwaway script anywhere in the repo (it will find the root `.env` automatically) and run it:
+Save this as a throwaway script anywhere in the `Audit-DB-Labs/` folder (it will find the `.env` there automatically) and run it:
 
 ```python
 import os, sys
@@ -249,7 +249,7 @@ import psycopg2
 load_dotenv()
 db_url = os.getenv("DATABASE_URL")
 if not db_url:
-    print("FAILED: DATABASE_URL not found — check .env is at the repo root.")
+    print("FAILED: DATABASE_URL not found — check .env is inside the Audit-DB-Labs/ folder.")
     sys.exit(1)
 
 try:
@@ -266,13 +266,13 @@ except Exception as e:
 ```
 
 ```
-pip install python-dotenv psycopg2-binary
+pip install python-dotenv==1.2.3 psycopg2-binary==2.9.12
 python test_connection.py
 ```
 
 A `SUCCESS` line means you're ready for Lab 1. If it fails, the printed error will point at the actual cause (bad password, wrong host, or the special-character issue in Step 6) rather than a vague timeout.
 
-**That's the whole flow.** Every notebook in this module already contains the code that reads `DATABASE_URL` from this root-level `.env` file automatically, even though the notebook itself lives one folder down inside its own `Lab N - <Title>/` folder — no need to write or paste any connection code yourself. As long as the `.env` file exists at the repository root with that exact variable name, every lab connects on its own from here.
+**That's the whole flow.** Every notebook in this module already contains the code that reads `DATABASE_URL` from this module-level `.env` file automatically, even though the notebook itself lives one folder down inside its own `Lab N - <Title>/` folder — no need to write or paste any connection code yourself. As long as the `.env` file exists inside `Audit-DB-Labs/` with that exact variable name, every lab connects on its own from here.
 
 > **Tip:** Supabase also gives you a **Table Editor** and a **SQL Editor** in the dashboard. You don't need them for the labs — the notebooks do everything in code — but they're a handy way to *see* the rows your code writes.
 
@@ -307,7 +307,7 @@ flowchart LR
 
 The order is not the order these labs were written — Lab 7 (Integrity) was built before Labs 4–6 existed, then deliberately moved to sit just before the capstone. The reason is difficulty: filtering, metrics, and alerting all build only on the schema (Lab 2) and JOINs/aggregation (Lab 3), and none of them need Lab 7's trigger/role/hash-chain machinery — so they belong *before* it, letting the module climb smoothly to its hardest material instead of peaking in the middle and dropping back down.
 
-Each lab lives in its own folder, named `Lab N - <Title>` using the short titles from the table above. The **"Concept Title"** column is longer and more descriptive — it's the headline used *inside* that lab's `.md` write-up, not the folder or file name. The files *inside* each folder follow the project-wide `AGENTS.md` / `CONSTITUTION.md` naming convention (Article III, UX-4): `lab-<topic-slug>.ipynb`, `lab-<topic-slug>.md`, and `lab-<topic-slug>-assignment.md`, all sharing the same slug and sitting together in that lab's folder.
+Each lab lives in its own folder, named `Lab N - <Title>` using the short titles from the table above. The **"Concept Title"** column is longer and more descriptive — it's the headline used *inside* that lab's `.md` write-up, not the folder or file name. The files *inside* each folder follow a single naming convention so they're easy to spot: `lab-<topic-slug>.ipynb`, `lab-<topic-slug>.md`, and `lab-<topic-slug>-assignment.md`, all sharing the same slug and sitting together in that lab's folder.
 
 ### 8.2 Repository Structure
 
@@ -319,26 +319,45 @@ Audit-DB-Labs/
 │   ├── lab-recording-agent-activity-assignment.md
 │   └── test_lab_recording_agent_activity.py
 ├── Lab 2 - Modeling Runs, Spans, and Tool Calls/
-│   └── lab-modeling-runs-spans-tool-calls.{ipynb,md,-assignment.md} + test
+│   ├── lab-modeling-runs-spans-tool-calls.ipynb
+│   ├── lab-modeling-runs-spans-tool-calls.md
+│   ├── lab-modeling-runs-spans-tool-calls-assignment.md
+│   └── test_lab_modeling_runs_spans_tool_calls.py
 ├── Lab 3 - Querying Across the Hierarchy with JOINs/
-│   └── lab-querying-hierarchy-joins.{ipynb,md,-assignment.md} + test
+│   ├── lab-querying-hierarchy-joins.ipynb
+│   ├── lab-querying-hierarchy-joins.md
+│   ├── lab-querying-hierarchy-joins-assignment.md
+│   └── test_lab_querying_hierarchy_joins.py
 ├── Lab 4 - Filtering, Search, and Pagination/
-│   └── lab-filtering-search-pagination.{ipynb,md,-assignment.md} + test
+│   ├── lab-filtering-search-pagination.ipynb
+│   ├── lab-filtering-search-pagination.md
+│   ├── lab-filtering-search-pagination-assignment.md
+│   └── test_lab_filtering_search_pagination.py
 ├── Lab 5 - Metrics and Dashboards/
-│   └── lab-metrics-dashboards.{ipynb,md,-assignment.md} + test
+│   ├── lab-metrics-dashboards.ipynb
+│   ├── lab-metrics-dashboards.md
+│   ├── lab-metrics-dashboards-assignment.md
+│   └── test_lab_metrics_dashboards.py
 ├── Lab 6 - Alerting on Anomalies/
-│   └── lab-alerting-anomalies.{ipynb,md,-assignment.md} + test
+│   ├── lab-alerting-anomalies.ipynb
+│   ├── lab-alerting-anomalies.md
+│   ├── lab-alerting-anomalies-assignment.md
+│   └── test_lab_alerting_anomalies.py
 ├── Lab 7 - Enforcing Access Control and Detecting Tampering/
-│   └── lab-enforcing-access-control-detecting-tampering.{ipynb,md,-assignment.md} + test
+│   ├── lab-enforcing-access-control-detecting-tampering.ipynb
+│   ├── lab-enforcing-access-control-detecting-tampering.md
+│   ├── lab-enforcing-access-control-detecting-tampering-assignment.md
+│   └── test_lab_enforcing_access_control_detecting_tampering.py
 └── Lab 8 - Capstone Project - Agent Audit and Compliance Platform/
-    └── lab-capstone-project.md + README.md   (documented only — not built)
+    ├── lab-capstone-project.md
+    ├── lab-capstone-project-assignment.md
+    ├── test_lab_capstone_project.py
+    └── README.md   (documented only — not built)
 ```
 
 (Test files use underscores instead of hyphens — `test_<slug with underscores>.py` — since Python module names can't contain hyphens; pytest still discovers and runs them normally.)
 
-`.env` (Section 7) lives at the **repository root**, one level *above* `Audit-DB-Labs/`, `MongoDB-Labs/`, and `RAG-Labs/` — shared by every module, never committed. Every notebook reads it automatically regardless of which lab folder it's in.
-
-> **Note on existing modules:** `MongoDB-Labs` was built before this project adopted the `lab-<topic-slug>` naming standard in `CONSTITUTION.md`, and its files use a different convention (e.g. `lab4coursesinstructors.ipynb`). That's a known inconsistency, not something this README fixes on its own — see `CONSTITUTION.md`'s Governance section for the amendment/compatibility process if those files are ever brought into compliance.
+`.env` (Section 7) lives **inside `Audit-DB-Labs/`**, at the same level as this README, one level above the `Lab N` folders. It's never committed. Every notebook reads it by walking upward from its own lab folder, so regardless of which lab you're in, the same `.env` is found.
 
 ---
 
