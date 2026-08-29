@@ -63,6 +63,10 @@ Audit-DB-Labs/
 └── Lab 8 - Capstone Project - Agent Audit and Compliance Platform/ # Build it
 ```
 
+## Getting Started
+
+Each module is standalone, with its own `README.md` covering setup and a full lab roadmap. Start with whichever module you want to learn — there's no required order between them.
+
 ## License
 
 [MIT](LICENSE)
