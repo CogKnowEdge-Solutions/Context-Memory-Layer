@@ -30,19 +30,37 @@ These are complemented by **retrieval mechanisms** that select and surface the m
 
 ## Repository Structure
 
+The repo is organized into three learning modules, each with its own `README.md`:
+
 ```
 RAG-Labs/
-├── Agentic-RAG/           # Agentic RAG with tool use and multi-step reasoning
-├── Graph-and-Vector/      # Hybrid graph + vector retrieval
-├── Graph-RAG/             # Graph-based retrieval augmented generation
-├── HybridRAG/             # Hybrid RAG combining sparse + dense retrieval
-├── LLM-Wiki/              # LLM knowledge base with Wikipedia-style retrieval
-├── MultiVector-RAG/       # Multi-vector retrieval (LangChain + ColBERT)
-├── OCR-RAG/               # OCR-powered RAG for scanned documents
-└── Vectorless-RAG/        # RAG without vector embeddings
+├── Agentic-RAG/            # Agentic RAG with tool use and multi-step reasoning
+├── Graph-and-Vector/       # Hybrid graph + vector retrieval
+├── Graph-RAG/              # Graph-based retrieval augmented generation
+├── HybridRAG/              # Hybrid RAG combining sparse + dense retrieval
+├── LLM-Wiki/               # LLM knowledge base with Wikipedia-style retrieval
+├── MultiVector-RAG/        # Multi-vector retrieval (LangChain + ColBERT)
+├── OCR-RAG/                # OCR-powered RAG for scanned documents
+└── Vectorless-RAG/         # RAG without vector embeddings
 
 MongoDB-Labs/
-└── Lab 1 - Student Records Lookup/  # MongoDB Atlas CRUD, queries, indexing
+├── Lab 1 - Student Records Lookup/       # MongoDB Atlas CRUD, queries, indexing
+├── Lab 2 - Student Enrollment Tracker/   # Full CRUD lifecycle, upserts
+├── Lab 3 - Academic Performance Analytics/ # Aggregation pipelines, indexing
+├── Lab 4 - Courses and Instructors/      # Schema design, $lookup, text search
+├── Lab 5 - Enrollment Transactions/      # Transactions, change streams
+├── Lab 6 - Scaling the University Database/ # Replica sets, RBAC, TLS
+└── Lab 7 - AI Agent Memory Service/      # Documented capstone (build your own)
+
+Audit-DB-Labs/
+├── Lab 1 - Recording Agent Activity/     # Append-only audit logging on Supabase
+├── Lab 2 - Modeling Runs, Spans, and Tool Calls/ # Hierarchical event modeling
+├── Lab 3 - Querying Across the Hierarchy with JOINs/ # Recursive query patterns
+├── Lab 4 - Filtering, Search, and Pagination/ # Search on audit history
+├── Lab 5 - Metrics and Dashboards/       # Aggregate metrics and reporting
+├── Lab 6 - Alerting on Anomalies/        # Alerting on unusual activity
+├── Lab 7 - Enforcing Access Control and Detecting Tampering/ # RBAC, integrity
+└── Lab 8 - Capstone Project - Agent Audit and Compliance Platform/ # Build it
 ```
 
 ## License
