@@ -24,6 +24,7 @@ __pycache__/
 test-results/
 **/test-results/
 !MongoDB-Labs/test-results/
+!Audit-DB-Labs/test-results/
 .venv/
 venv/
 *.egg-info/
