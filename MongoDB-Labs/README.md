@@ -245,18 +245,48 @@ flowchart LR
 
 ### 9.2 Repository Structure
 
-Each lab lives in its own folder, named `Lab N - <Title>`. Inside each folder are the same three pieces every lab follows: a notebook (the runnable pipeline), a markdown write-up (problem statement, diagrams, step-by-step explanation), and an assignment file (practice exercises plus an answer key).
+Each lab lives in its own folder, named `Lab N - <Title>`. Inside each folder are the same four pieces every lab follows: a notebook (the runnable pipeline), a markdown write-up (problem statement, diagrams, step-by-step explanation), an assignment file (practice exercises plus an answer key), and a test file (the grading harness).
 
 ```
 MongoDB-Labs/
-├── Lab 1 - <Title>/
-│   ├── <notebook>.ipynb        # the runnable pipeline
-│   ├── <notes>.md              # concept write-up
-│   └── <assignment>.md         # practice exercises + answer key
-├── Lab 2 - <Title>/
-│   └── ...
-├── .env                          # your Atlas connection string (Section 8) — shared by every lab, never committed
-└── README.md                     # this file
+├── Lab 1 - Student Records Lookup/
+│   ├── lab-1-student-records-lookup.ipynb
+│   ├── lab-1-student-records-lookup.md
+│   ├── lab-1-student-records-lookup-assignment.md
+│   └── test_lab1_student_records_lookup.py
+├── Lab 2 - Student Enrollment Tracker/
+│   ├── lab-2-student-enrollment-tracker.ipynb
+│   ├── lab-2-student-enrollment-tracker.md
+│   ├── lab-2-student-enrollment-tracker-assignment.md
+│   └── test_lab2_student_enrollment_tracker.py
+├── Lab 3 - Academic Performance Analytics/
+│   ├── lab-3-academic-performance-analytics.ipynb
+│   ├── lab-3-academic-performance-analytics.md
+│   ├── lab-3-academic-performance-analytics-assignment.md
+│   └── test_lab3_academic_performance_analytics.py
+├── Lab 4 - Courses and Instructors/
+│   ├── lab-4-courses-instructors.ipynb
+│   ├── lab-4-courses-instructors.md
+│   ├── lab-4-courses-instructors-assignment.md
+│   └── test_lab4_courses_instructors.py
+├── Lab 5 - Enrollment Transactions/
+│   ├── lab-5-enrollment-transactions.ipynb
+│   ├── lab-5-enrollment-transactions.md
+│   ├── lab-5-enrollment-transactions-assignment.md
+│   └── test_lab5_enrollment_transactions.py
+├── Lab 6 - Scaling the University Database/
+│   ├── lab-6-scaling-university-database.ipynb
+│   ├── lab-6-scaling-university-database.md
+│   ├── lab-6-scaling-university-database-assignment.md
+│   └── test_lab6_scaling_university_database.py
+└── Lab 7 - AI Agent Memory Service/   (documented capstone — no notebook, you build it)
+    ├── lab-agent-memory-service.md
+    ├── lab-agent-memory-service-assignment.md
+    ├── test_lab_agent_memory_service.py
+    └── README.md
+
+.env                        # your MONGODB_URI, kept inside this module, never committed
+README.md                   # this file
 ```
 
 The `.env` file sits once at the root, not inside each lab folder — every notebook reads the same shared connection string from it, regardless of which lab folder it's in. Open the `.ipynb` to run a lab, read its `.md` if a step needs more explanation, and use the assignment file afterward to verify understanding.

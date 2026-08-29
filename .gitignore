@@ -23,6 +23,7 @@ __pycache__/
 # Test artifacts
 test-results/
 **/test-results/
+!MongoDB-Labs/test-results/
 .venv/
 venv/
 *.egg-info/
