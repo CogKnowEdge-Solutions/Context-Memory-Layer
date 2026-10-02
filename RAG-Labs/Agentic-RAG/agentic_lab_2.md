@@ -1,6 +1,6 @@
 # Agentic Hybrid RAG with Dynamic Routing
 
-**Difficulty:** Advanced | **Time:** ~60 min | **Requires:** Lab 13 (Agentic RAG with Self-Correction) and a Neo4j Aura instance
+**Difficulty:** Advanced | **Time:** ~60 min | **Requires:** Lab 14 (Agentic RAG with Self-Correction) and a Neo4j Aura instance
 
 ---
 

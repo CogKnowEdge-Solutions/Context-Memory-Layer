@@ -1,6 +1,6 @@
 # Vectorless RAG: Multi-Hop Retrieval with Explainability Tracking
 
-**Difficulty:** Advanced | **Time:** ~50 min | **Requires:** Lab 10 (Vectorless RAG)
+**Difficulty:** Advanced | **Time:** ~50 min | **Requires:** Lab 11 (Vectorless RAG)
 
 ---
 

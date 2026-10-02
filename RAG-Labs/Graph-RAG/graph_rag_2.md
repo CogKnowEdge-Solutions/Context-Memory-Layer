@@ -1,6 +1,6 @@
 # End-to-End Graph RAG with Neo4j
 
-**Difficulty:** Advanced | **Time:** ~55 min | **Requires:** Lab 7 (Generalized Graph RAG) and a Neo4j Aura instance
+**Difficulty:** Advanced | **Time:** ~55 min | **Requires:** Lab 8 (Generalized Graph RAG) and a Neo4j Aura instance
 
 ---
 

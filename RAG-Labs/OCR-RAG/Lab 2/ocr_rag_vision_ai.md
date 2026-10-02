@@ -1,6 +1,6 @@
 # Automated Document Q&A: OCR + RAG on a Scanned PDF (OpenRouter)
 
-**Difficulty:** Intermediate | **Time:** ~45 min | **Requires:** Lab 4 (Structured OCR + RAG) and an OpenRouter API key
+**Difficulty:** Intermediate | **Time:** ~45 min | **Requires:** Lab 5 (Structured OCR + RAG) and an OpenRouter API key
 
 ---
 

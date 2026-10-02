@@ -1,6 +1,6 @@
 # Vectorless RAG: Structured Table Retrieval with Explainability Tracking
 
-**Difficulty:** Intermediate | **Time:** ~45 min | **Requires:** Lab 10 (Vectorless RAG)
+**Difficulty:** Intermediate | **Time:** ~45 min | **Requires:** Lab 11 (Vectorless RAG)
 
 ---
 

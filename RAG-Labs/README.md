@@ -1,6 +1,6 @@
 # RAG Labs -- From First Principles to Production Patterns
 
-This module teaches Retrieval-Augmented Generation (RAG) from first principles through fourteen hands-on labs, organized into five sections. Each section tackles a different family of RAG techniques -- from chunking, fusion, and late interaction, through OCR, multimodal documents, and knowledge graphs, all the way to vectorless and agentic retrieval. No single lab assumes you've done all the others, but each section builds on concepts introduced earlier in its own sequence.
+This module teaches Retrieval-Augmented Generation (RAG) from first principles through fifteen hands-on labs, organized into six sections. Each section tackles a different family of RAG techniques -- from the canonical RAG pipeline, through chunking, fusion, and late interaction, OCR and multimodal documents, and knowledge graphs, all the way to vectorless and agentic retrieval. No single lab assumes you've done all the others, but each section builds on concepts introduced earlier in its own sequence.
 
 Most labs download a PDF automatically at runtime, so you don't need to supply your own documents to get started. A few labs require a free cloud account (Qdrant, Neo4j Aura, or MongoDB Atlas) -- those steps are covered in Section 8. This README first explains what RAG is and how it works, then walks through the environment setup, and finally lays out how the labs are organized. Read it fully before opening Lab 1.
 
@@ -150,8 +150,11 @@ The practical guidance: RAG is a strong default when your LLM needs to answer qu
 | Term | Meaning |
 |------|---------|
 | RAG | Retrieval-Augmented Generation -- retrieving relevant chunks before generating an answer |
+| Classical RAG | The canonical pipeline: load a document, chunk it, embed the chunks, store them, retrieve the top matches, and generate a grounded answer |
 | Chunk | A small piece of a document, split from a larger file so it can be embedded and searched |
 | Embedding | A vector of numbers that represents the meaning of a piece of text |
+| Cosine Similarity | A measure of how closely two vectors point in the same direction; used to rank chunks by relevance to a query |
+| Top-k Retrieval | Returning the k highest-scoring chunks for a query |
 | Vector Store | A database that holds embeddings and finds the closest match to a new query vector |
 | Dense Retrieval | Finding chunks by vector similarity (meaning-based) |
 | Sparse Retrieval | Finding chunks by keyword overlap (e.g., BM25) |
@@ -181,8 +184,8 @@ Different labs require different external services. The table below summarizes w
 
 | Credential | Where to get it | Used by |
 |-----------|----------------|---------|
-| **OpenAI API Key** | `platform.openai.com` | Agentic RAG, Graph RAG (NetworkX), MultiVector RAG, OCR RAG (Lab 4), Hybrid RAG, LLM-Wiki (via OpenRouter) |
-| **OpenRouter API Key** | `openrouter.ai` | OCR RAG (Lab 5), any lab using OpenRouter as a proxy |
+| **OpenAI API Key** | `platform.openai.com` | Agentic RAG, Graph RAG (NetworkX), MultiVector RAG, OCR RAG (Lab 5), Hybrid RAG, LLM-Wiki (via OpenRouter) |
+| **OpenRouter API Key** | `openrouter.ai` | Classical RAG (Lab 1), OCR RAG (Lab 6), any lab using OpenRouter as a proxy |
 | **AWS Bedrock Credentials** (Access Key, Secret Key, Endpoint URL, Region) | AWS Console -> IAM -> Security Credentials | Vectorless RAG (all 3 labs), LLM-Wiki |
 
 Create a `.env` file in the `RAG-Labs/` root with whichever keys you need:
@@ -200,7 +203,7 @@ AWS_REGION=us-east-1
 | Service | Free tier | Used by | Setup |
 |---------|----------|---------|-------|
 | **Qdrant Cloud** | Yes (1 GB) | MultiVector RAG (both labs) | Sign up at `cloud.qdrant.io` -> create a cluster -> copy URL + API key into `.env` as `QDRANT_URL` and `QDRANT_API_KEY` |
-| **Neo4j Aura** | Yes (50 GB, 1 project) | Graph RAG (Lab 8), Agentic RAG (Lab 14), Graph-and-Vector (Lab 9) | Sign up at `neo4j.com/cloud/aura-free` -> create an instance -> copy URI, username, password into `.env` as `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD` |
+| **Neo4j Aura** | Yes (50 GB, 1 project) | Graph RAG (Lab 9), Agentic RAG (Lab 15), Graph-and-Vector (Lab 10) | Sign up at `neo4j.com/cloud/aura-free` -> create an instance -> copy URI, username, password into `.env` as `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD` |
 | **PageIndex API Key** | Varies | Vectorless RAG (all 3 labs) | Sign up at `pageindex.ai` -> copy API key into `.env` as `PAGEINDEX_API_KEY` |
 
 ### 8.3 Local Setup
@@ -215,35 +218,37 @@ Most embedding models (Sentence Transformers, ColBERT) and OCR libraries (RapidO
 
 ### 9.1 Lab Sequence
 
-The fourteen labs are organized into five sections. Within each section, labs progress from foundational to advanced.
+The fifteen labs are organized into six sections. Within each section, labs progress from foundational to advanced.
 
 ```mermaid
 flowchart LR
-    R["Retrieval-Variations<br/>Labs 1-3<br/>Chunking, fusion &amp; late interaction"] --> S["Structure-and-Multimodal<br/>Labs 4-6<br/>OCR, scanned PDFs &amp; knowledge bases"]
-    S --> K["Knowledge-Graphs<br/>Labs 7-9<br/>NetworkX, Neo4j &amp; vector+graph"]
-    K --> VL["Vectorless<br/>Labs 10-12<br/>Tree-based reasoning"]
-    VL --> A["Adaptive-and-Agentic<br/>Labs 13-14<br/>Self-correction &amp; routing"]
+    C["Classical-RAG<br/>Lab 1<br/>Load, chunk, embed, retrieve, generate"] --> R["Retrieval-Variations<br/>Labs 2-4<br/>Chunking, fusion &amp; late interaction"]
+    R --> S["Structure-and-Multimodal<br/>Labs 5-7<br/>OCR, scanned PDFs &amp; knowledge bases"]
+    S --> K["Knowledge-Graphs<br/>Labs 8-10<br/>NetworkX, Neo4j &amp; vector+graph"]
+    K --> VL["Vectorless<br/>Labs 11-13<br/>Tree-based reasoning"]
+    VL --> A["Adaptive-and-Agentic<br/>Labs 14-15<br/>Self-correction &amp; routing"]
 
     classDef defaultStyle fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
-    class R,S,K,VL,A defaultStyle
+    class C,R,S,K,VL,A defaultStyle
 ```
 
 | # | Section | Lab | Concept Title | Level | What You Learn |
 |---|---------|-----|--------------|-------|----------------|
-| 1 | Retrieval-Variations | HybridRAG | Hybrid RAG (Dense + Sparse) with Semantic Chunking | Beginner | Dense vs. sparse retrieval, reciprocal rerank fusion, semantic chunking, BM25, FAISS |
-| 2 | Retrieval-Variations | MultiVector Lab 1 | Parent-Child & Summary-Based Multi-Vector RAG | Intermediate | Parent/child chunk architecture, LLM-generated summaries, Qdrant multi-collection indexing |
-| 3 | Retrieval-Variations | MultiVector Lab 2 | ColBERT & Late Interaction RAG | Advanced | Token-level embeddings, MaxSim scoring, late interaction search, Qdrant multivector collections |
-| 4 | Structure-and-Multimodal | OCR-RAG Lab 1 | Structured OCR + RAG Chatbot with RapidOCR and Gemini | Beginner | Layout-preserving OCR, document-level embeddings, source-tagged answers |
-| 5 | Structure-and-Multimodal | OCR-RAG Lab 2 | Automated Document Q&A with OCR + RAG (OpenRouter) | Intermediate | Scanned PDF chunking, FAISS vector database, multi-chunk retrieval with explainability |
-| 6 | Structure-and-Multimodal | LLM-Wiki | Automated Ingestion: Structured Knowledge Base (LLM Wiki + OKF) | Advanced | LLM-driven PDF-to-file ingestion, index-based retrieval, structured knowledge base building |
-| 7 | Knowledge-Graphs | Graph-RAG Lab 1 | End-to-End Generalized Graph RAG | Intermediate | LLM-based entity extraction, NetworkX knowledge graphs, graph traversal, explainability traces |
-| 8 | Knowledge-Graphs | Graph-RAG Lab 2 | End-to-End Graph RAG with Neo4j | Intermediate | Neo4j database, Cypher queries, persistent knowledge graphs, visual graph exploration |
-| 9 | Knowledge-Graphs | Graph-and-Vector | Hybrid RAG: Vector Search + Graph Traversal on Neo4j | Advanced | Vector-indexed graph nodes, dual-mode retrieval (vector + Cypher), combined scoring |
-| 10 | Vectorless | Vectorless-RAG Lab 1 | Vectorless RAG: Reasoning-Based Retrieval without Embeddings | Intermediate | PageIndex tree-based parsing, LLM-driven section selection, no-vector retrieval |
-| 11 | Vectorless | Vectorless-RAG Lab 2 | Vectorless RAG: Multi-Hop Retrieval with Explainability | Advanced | Multi-section traversal, cumulative fact gathering, explainability tracking per section |
-| 12 | Vectorless | Vectorless-RAG Lab 3 | Vectorless RAG: Structured Table Retrieval with Explainability | Intermediate | Table-preserving PageIndex parsing, per-figure citation tags, explainability checks |
-| 13 | Adaptive-and-Agentic | Agentic-RAG Lab 1 | Agentic RAG with Self-Correction | Advanced | LangGraph agent loops, retrieval grading, question rewriting, retry logic |
-| 14 | Adaptive-and-Agentic | Agentic-RAG Lab 2 | Agentic Hybrid RAG with Dynamic Routing | Advanced | Multi-tool routing, tool-swap fallback, combined graph + vector agent pipeline |
+| 1 | Classical-RAG | Classical-RAG | Classical RAG: The Canonical Pipeline | Beginner | Document loading, fixed-size chunking, embeddings (Sentence Transformers), FAISS indexing, cosine similarity, top-k retrieval, grounded generation |
+| 2 | Retrieval-Variations | HybridRAG | Hybrid RAG (Dense + Sparse) with Semantic Chunking | Beginner | Dense vs. sparse retrieval, reciprocal rerank fusion, semantic chunking, BM25, FAISS |
+| 3 | Retrieval-Variations | MultiVector Lab 1 | Parent-Child & Summary-Based Multi-Vector RAG | Intermediate | Parent/child chunk architecture, LLM-generated summaries, Qdrant multi-collection indexing |
+| 4 | Retrieval-Variations | MultiVector Lab 2 | ColBERT & Late Interaction RAG | Advanced | Token-level embeddings, MaxSim scoring, late interaction search, Qdrant multivector collections |
+| 5 | Structure-and-Multimodal | OCR-RAG Lab 1 | Structured OCR + RAG Chatbot with RapidOCR and Gemini | Beginner | Layout-preserving OCR, document-level embeddings, source-tagged answers |
+| 6 | Structure-and-Multimodal | OCR-RAG Lab 2 | Automated Document Q&A with OCR + RAG (OpenRouter) | Intermediate | Scanned PDF chunking, FAISS vector database, multi-chunk retrieval with explainability |
+| 7 | Structure-and-Multimodal | LLM-Wiki | Automated Ingestion: Structured Knowledge Base (LLM Wiki + OKF) | Advanced | LLM-driven PDF-to-file ingestion, index-based retrieval, structured knowledge base building |
+| 8 | Knowledge-Graphs | Graph-RAG Lab 1 | End-to-End Generalized Graph RAG | Intermediate | LLM-based entity extraction, NetworkX knowledge graphs, graph traversal, explainability traces |
+| 9 | Knowledge-Graphs | Graph-RAG Lab 2 | End-to-End Graph RAG with Neo4j | Intermediate | Neo4j database, Cypher queries, persistent knowledge graphs, visual graph exploration |
+| 10 | Knowledge-Graphs | Graph-and-Vector | Hybrid RAG: Vector Search + Graph Traversal on Neo4j | Advanced | Vector-indexed graph nodes, dual-mode retrieval (vector + Cypher), combined scoring |
+| 11 | Vectorless | Vectorless-RAG Lab 1 | Vectorless RAG: Reasoning-Based Retrieval without Embeddings | Intermediate | PageIndex tree-based parsing, LLM-driven section selection, no-vector retrieval |
+| 12 | Vectorless | Vectorless-RAG Lab 2 | Vectorless RAG: Multi-Hop Retrieval with Explainability | Advanced | Multi-section traversal, cumulative fact gathering, explainability tracking per section |
+| 13 | Vectorless | Vectorless-RAG Lab 3 | Vectorless RAG: Structured Table Retrieval with Explainability | Intermediate | Table-preserving PageIndex parsing, per-figure citation tags, explainability checks |
+| 14 | Adaptive-and-Agentic | Agentic-RAG Lab 1 | Agentic RAG with Self-Correction | Advanced | LangGraph agent loops, retrieval grading, question rewriting, retry logic |
+| 15 | Adaptive-and-Agentic | Agentic-RAG Lab 2 | Agentic Hybrid RAG with Dynamic Routing | Advanced | Multi-tool routing, tool-swap fallback, combined graph + vector agent pipeline |
 
 ### 9.2 Repository Structure
 
@@ -252,62 +257,68 @@ Each section is a group of folders inside `RAG-Labs/`. Inside each folder, a lab
 ```
 RAG-Labs/
 ├── Agentic-RAG/
-│   ├── agentic_lab_1.ipynb        # Lab 13: self-correcting agent
+│   ├── agentic_lab_1.ipynb        # Lab 14: self-correcting agent
 │   ├── agentic_lab_1.md
-│   ├── agentic_lab_2.ipynb        # Lab 14: dynamic routing agent
+│   ├── agentic_lab_2.ipynb        # Lab 15: dynamic routing agent
 │   └── agentic_lab_2.md
+├── Classical-RAG/
+│   ├── data/
+│   │   └── sample_text_document.pdf
+│   ├── lab_classical_rag.ipynb    # Lab 1: canonical RAG pipeline
+│   └── lab_classical_rag.md
 ├── Graph-and-Vector/
-│   ├── vector_graph_hybrid.ipynb  # Lab 9: vector + graph on Neo4j
+│   ├── vector_graph_hybrid.ipynb  # Lab 10: vector + graph on Neo4j
 │   └── vector_graph_hybrid.md
 ├── Graph-RAG/
-│   ├── graph_rag_1.ipynb          # Lab 7: NetworkX knowledge graph
+│   ├── graph_rag_1.ipynb          # Lab 8: NetworkX knowledge graph
 │   ├── graph_rag_1.md
-│   ├── graph_rag_2.ipynb          # Lab 8: Neo4j knowledge graph
+│   ├── graph_rag_2.ipynb          # Lab 9: Neo4j knowledge graph
 │   └── graph_rag_2.md
 ├── HybridRAG/
 │   ├── data/
 │   │   └── sample_text_document.pdf
-│   ├── lab.ipynb                  # Lab 1: hybrid dense+sparse retrieval
+│   ├── lab.ipynb                  # Lab 2: hybrid dense+sparse retrieval
 │   └── lab.md
 ├── LLM-Wiki/
 │   ├── data/
 │   │   └── SunFactSheet.pdf
-│   ├── llm_wiki.ipynb             # Lab 6: structured knowledge base
+│   ├── llm_wiki.ipynb             # Lab 7: structured knowledge base
 │   └── llm_wiki.md
 ├── MultiVector-RAG/
-│   ├── lab1_langchain.ipynb       # Lab 2: parent-child + summary RAG
+│   ├── lab1_langchain.ipynb       # Lab 3: parent-child + summary RAG
 │   ├── lab1_langchain.md
-│   ├── lab2_colbert.ipynb         # Lab 3: ColBERT late interaction
+│   ├── lab2_colbert.ipynb         # Lab 4: ColBERT late interaction
 │   └── lab2_colbert.md
 ├── OCR-RAG/
 │   ├── Lab 1/
-│   │   ├── rag_ocr_lab.ipynb      # Lab 4: OCR + Gemini chatbot
+│   │   ├── rag_ocr_lab.ipynb      # Lab 5: OCR + Gemini chatbot
 │   │   └── rag_ocr_lab.md
 │   └── Lab 2/
-│       ├── ocr_rag_vision_ai.ipynb # Lab 5: scanned PDF + FAISS
+│       ├── ocr_rag_vision_ai.ipynb # Lab 6: scanned PDF + FAISS
 │       └── ocr_rag_vision_ai.md
 ├── Vectorless-RAG/
 │   ├── lab1/
-│   │   ├── vectorless_rag.ipynb   # Lab 10: tree-based retrieval
+│   │   ├── vectorless_rag.ipynb   # Lab 11: tree-based retrieval
 │   │   ├── lab1_vectorless_rag.md
 │   │   └── requirements.txt
 │   ├── lab2/
-│   │   ├── vectorless_rag_advanced_1.ipynb # Lab 11: multi-hop retrieval
+│   │   ├── vectorless_rag_advanced_1.ipynb # Lab 12: multi-hop retrieval
 │   │   ├── lab2_vectorless_rag_advanced.md
 │   │   └── requirements.txt
 │   └── lab3/
-│       ├── lab3_table_retrieval_1.ipynb # Lab 12: table retrieval
+│       ├── lab3_table_retrieval_1.ipynb # Lab 13: table retrieval
 │       └── lab3.md
 ├── learnyst-html/                 # publish-ready bundle, grouped by section
-│   ├── section-2-retrieval-variations/       # Labs 1-3
-│   ├── section-3-structure-and-multimodal/   # Labs 4-6
-│   ├── section-4-knowledge-graphs/           # Labs 7-9
-│   ├── section-5-vectorless/                 # Labs 10-12
-│   └── section-6-adaptive-and-agentic/       # Labs 13-14
+│   ├── section-1-classical-rag/              # Lab 1
+│   ├── section-2-retrieval-variations/       # Labs 2-4
+│   ├── section-3-structure-and-multimodal/   # Labs 5-7
+│   ├── section-4-knowledge-graphs/           # Labs 8-10
+│   ├── section-5-vectorless/                 # Labs 11-13
+│   └── section-6-adaptive-and-agentic/       # Labs 14-15
 └── README.md                      # this file
 ```
 
-Open the `.ipynb` to run a lab; read the matching `.md` for the full explanation. Every lab also ships a `lab-<slug>-assignment.md` practice sheet of coding problems (with a matching `.html`). The `learnyst-html/` folder is the publish-ready bundle: each section holds its labs as `NN-lab.html` plus `NN-assignment.html`, numbered sequentially 01-14 in the order listed above. Some labs (Vectorless-RAG) include a `requirements.txt` -- run `pip install -r requirements.txt` before the notebook if present.
+Open the `.ipynb` to run a lab; read the matching `.md` for the full explanation. Every lab also ships a `lab-<slug>-assignment.md` practice sheet of coding problems (with a matching `.html`). The `learnyst-html/` folder is the publish-ready bundle: each section holds its labs as `NN-lab.html` plus `NN-assignment.html`, numbered sequentially 01-15 in the order listed above. Some labs (Vectorless-RAG) include a `requirements.txt` -- run `pip install -r requirements.txt` before the notebook if present.
 
 ---
 
@@ -317,14 +328,14 @@ Open the `.ipynb` to run a lab; read the matching `.md` for the full explanation
 - **One terminal / notebook environment** -- Jupyter, Google Colab, or VS Code with a Python kernel.
 - **The relevant API keys and cloud accounts** from Section 8 -- nothing will run without at least one LLM credential.
 
-No prior knowledge of embeddings, vector databases, or RAG itself is required -- the first two labs introduce those concepts from scratch.
+No prior knowledge of embeddings, vector databases, or RAG itself is required -- the first lab (Classical RAG) introduces the whole pipeline from scratch, and the labs that follow build on it.
 
 ---
 
 ## 11. Getting Started
 
 1. Complete the relevant parts of Section 8 first -- nothing below works without at least one API key.
-2. Start with Lab 1 (HybridRAG) if you're new to RAG -- it introduces all core concepts in one place. Otherwise, jump into whichever section interests you.
+2. Start with Lab 1 (Classical RAG) if you're new to RAG -- it introduces the full load -> chunk -> embed -> retrieve -> generate pipeline in one place. Lab 2 (HybridRAG) builds directly on it. Otherwise, jump into whichever section interests you.
 3. Run the `!pip install` cell at the top of each notebook before anything else.
 4. Refer to the matching `.md` file if a step needs more explanation.
 5. If a lab has a `data/` folder, the PDF is already included; if it has a download link in the notebook, it runs automatically.
