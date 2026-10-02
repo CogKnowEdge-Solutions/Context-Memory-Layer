@@ -47,6 +47,9 @@ yarn-error.log*
 tmp/
 *.tmp
 
+# md_to_html build scratch (rendered mermaid PNGs)
+.html-cache/
+
 
 AGENTS.md
 CONSTITUTION.md
