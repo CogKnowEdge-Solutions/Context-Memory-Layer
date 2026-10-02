@@ -1,10 +1,14 @@
 # Vectorless RAG: Multi-Hop Retrieval with Explainability Tracking
 
+**Difficulty:** Advanced | **Time:** ~50 min | **Requires:** Lab 10 (Vectorless RAG)
+
 ---
 
 # Problem Statement / Use Case Overview
 
 Some questions can't be answered from just one paragraph of a document. They need one number from one part of the document, and another number from a completely different part, so the two can be compared.
+
+### How This Lab Solves It
 
 This lab handles exactly that. Instead of stopping at the first matching section, it **hops** from one relevant part of the document to the next — collecting pieces of information along the way — until it has everything it needs to answer the question fully.
 

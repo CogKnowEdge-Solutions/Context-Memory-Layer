@@ -1,10 +1,14 @@
 # Structured OCR + RAG Chatbot: Chatting with Invoices Using RapidOCR and Gemini
 
+**Difficulty:** Intermediate | **Time:** ~40 min | **Requires:** A Gemini API key
+
 ---
 
 # Problem Statement / Use Case Overview
 
 Invoices, receipts, and purchase orders usually exist as scanned images or photos, not as searchable text. To ask a question like "what was the total on this invoice?", the numbers first have to be pulled out of the image correctly — and this is where most simple OCR setups fall apart. A basic OCR pass reads every text box on the page but throws away the layout, so an invoice's neatly organized rows and columns turn into a jumbled bag of words. Once that happens, an LLM reading the output can no longer tell which number belongs to which field, and it starts guessing.
+
+### How This Lab Solves It
 
 This lab avoids that problem by keeping the page's layout intact when the text is extracted, so a number like `$56,651.49` still sits next to the label `Charges` instead of floating loose in a wall of text. Each document is then turned into its own searchable unit, so when you ask a question, only the relevant document(s) are pulled in as context — and the LLM is told to tag every fact it uses with the exact document it came from.
 

@@ -1,12 +1,16 @@
 # Parent-Child & Summary-Based Multi-Vector RAG
 
+**Difficulty:** Advanced | **Time:** ~50 min | **Requires:** Basic RAG and embedding familiarity, plus a Qdrant Cloud cluster
+
 ---
 
 # Problem Statement / Use Case Overview
 
 A standard RAG pipeline embeds the exact same piece of text it later hands to the LLM. That creates a tug-of-war between two goals that both want a different chunk size. Small chunks embed precisely and match a question well, but they don't give the LLM enough surrounding context to answer fully. Large chunks give the LLM plenty of context, but they embed poorly, since a big block of mixed topics rarely matches a specific question closely.
 
-This document covers a way around that trade-off: stop using the same chunk for both jobs. A document is split into large **parent** chunks, which hold all the context the LLM will eventually need. Each parent is then split further into small **child** chunks, and also condensed into a short **summary** — both of which are built specifically to be easy to search. The children and summaries are the only things actually embedded and searched; the parents are stored separately and never touched during search. When a question comes in, the search step finds the closest-matching child or summary, and a retriever swaps it out for its full parent document before that goes to the LLM — meaning the piece that wins the search is never the piece the LLM actually reads.
+### How This Lab Solves It
+
+This lab builds a way around that trade-off: stop using the same chunk for both jobs. A document is split into large **parent** chunks, which hold all the context the LLM will eventually need. Each parent is then split further into small **child** chunks, and also condensed into a short **summary** — both of which are built specifically to be easy to search. The children and summaries are the only things actually embedded and searched; the parents are stored separately and never touched during search. When a question comes in, the search step finds the closest-matching child or summary, and a retriever swaps it out for its full parent document before that goes to the LLM — meaning the piece that wins the search is never the piece the LLM actually reads.
 
 **This pipeline has four connected parts:**
 
@@ -104,7 +108,7 @@ Every one of those four searchable pieces — the three children and the summary
 
 ### Walking Through a Sample Retrieval
 
-Now here's the reverse direction — a real question coming in and actually finding its way to an answer, using the question from this document's own sample run:
+Now here's the reverse direction — a real question coming in and actually finding its way to an answer, using the question from this lab's own sample run:
 
 ```mermaid
 flowchart TB
@@ -597,7 +601,7 @@ response = run_rag_pipeline(query)
 
 # What We Learnt
 
-By the end of this document, a single document has been indexed twice over — once as small, precise children and summaries for searching, and once as large, complete parents for answering — with a retriever in between that automatically swaps one for the other.
+By the end of this lab, a single document has been indexed twice over — once as small, precise children and summaries for searching, and once as large, complete parents for answering — with a retriever in between that automatically swaps one for the other.
 
 **Key takeaways:**
 - **Search precision and answer context don't have to come from the same chunk** — small children and summaries are what get searched, while their much larger parents are what actually get read by the LLM.

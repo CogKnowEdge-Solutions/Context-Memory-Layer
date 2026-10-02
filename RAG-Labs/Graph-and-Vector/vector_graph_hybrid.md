@@ -1,12 +1,16 @@
 # Hybrid RAG: Vector Search + Graph Traversal on Neo4j
 
+**Difficulty:** Advanced | **Time:** ~55 min | **Requires:** Graph RAG Labs 1-2, Cypher basics, and a Neo4j Aura instance with APOC
+
 ---
 
 # Problem Statement / Use Case Overview
 
 Pure vector search finds nodes that are *semantically close* to a question — great for figuring out roughly what a question is about, but it has no idea how that node connects to anything else. Pure graph traversal is the opposite: once you're standing on the right node, it's excellent at following relationships outward, but it has no way to figure out where to start unless the exact name is already known.
 
-This document covers a pipeline that combines both. A knowledge graph is built inside Neo4j the same way as before, but this time every node also gets a **vector embedding** stored alongside it. When a question comes in, it's converted into a vector too, and Neo4j's **vector index** is used to instantly find the nodes closest in meaning to the question — these become "seed nodes." From each seed, a single Cypher query then expands outward to pull in every directly connected relationship. The result is a short list of graph facts that are both *semantically relevant* and *structurally connected*, which are handed to the LLM to produce the final answer.
+### How This Lab Solves It
+
+This lab builds a pipeline that combines both. A knowledge graph is built inside Neo4j the same way as before, but this time every node also gets a **vector embedding** stored alongside it. When a question comes in, it's converted into a vector too, and Neo4j's **vector index** is used to instantly find the nodes closest in meaning to the question — these become "seed nodes." From each seed, a single Cypher query then expands outward to pull in every directly connected relationship. The result is a short list of graph facts that are both *semantically relevant* and *structurally connected*, which are handed to the LLM to produce the final answer.
 
 **This pipeline has three connected parts:**
 

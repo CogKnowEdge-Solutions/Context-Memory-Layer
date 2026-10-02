@@ -1,12 +1,16 @@
 # Agentic RAG with Self-Correction
 
+**Difficulty:** Advanced | **Time:** ~50 min | **Requires:** Basic RAG and embedding familiarity
+
 ---
 
 # Problem Statement / Use Case Overview
 
 A standard RAG pipeline follows one fixed path: retrieve some chunks, hand them to the LLM, get an answer back. It never stops to check whether the chunks it found are actually any good. If the retrieval step pulls back weak or unrelated text, the LLM still has to answer with whatever it was given, and the final answer suffers as a result.
 
-This document covers a version that adds a checkpoint in the middle of that path. Before answering, the pipeline stops and asks the LLM a second question: "Do these retrieved chunks actually help answer this?" If the answer is no, the original question is rewritten into a clearer, easier-to-search version, and retrieval is tried again — up to a set number of times — before the pipeline finally answers using whatever it has. This back-and-forth is called **self-correction**, and it's what turns a simple RAG pipeline into an **agent**: something that can evaluate its own progress and decide what to do next, rather than always moving forward in a straight line.
+### How This Lab Solves It
+
+This lab builds a version that adds a checkpoint in the middle of that path. Before answering, the pipeline stops and asks the LLM a second question: "Do these retrieved chunks actually help answer this?" If the answer is no, the original question is rewritten into a clearer, easier-to-search version, and retrieval is tried again — up to a set number of times — before the pipeline finally answers using whatever it has. This back-and-forth is called **self-correction**, and it's what turns a simple RAG pipeline into an **agent**: something that can evaluate its own progress and decide what to do next, rather than always moving forward in a straight line.
 
 To make that kind of decision-making possible, this pipeline is built with **LangGraph**, a library for wiring individual steps together into a graph, where the path taken can branch and loop depending on what happens at each step — instead of every step just running once, in order, like a plain script.
 
@@ -97,7 +101,7 @@ This is the actual structure the notebook builds — the same diagram it produce
 
 ### Walking Through a Retry, Step by Step
 
-The example run in this document happens to get a good grade on the very first try, so the loop only runs once. To show what the retry path actually looks like, here's how the state would move through two attempts if the first one came back with a **NO**:
+The example run in this lab happens to get a good grade on the very first try, so the loop only runs once. To show what the retry path actually looks like, here's how the state would move through two attempts if the first one came back with a **NO**:
 
 ```mermaid
 flowchart TB
@@ -531,7 +535,7 @@ agent = builder.compile()
 print("Agent graph compiled successfully!")
 ```
 
-Each `add_node` call registers one of the functions from Steps 7–10 under a short name. The `add_edge` calls wire the fixed paths together, while `add_conditional_edges` connects the `grade` node to the routing function from Step 11, giving it two possible destinations to choose between. `builder.compile()` turns all of this into a single runnable object, matching the wiring diagram shown earlier in this document.
+Each `add_node` call registers one of the functions from Steps 7–10 under a short name. The `add_edge` calls wire the fixed paths together, while `add_conditional_edges` connects the `grade` node to the routing function from Step 11, giving it two possible destinations to choose between. `builder.compile()` turns all of this into a single runnable object, matching the wiring diagram shown earlier in this lab.
 
 ```python
 from IPython.display import Image, display
@@ -563,7 +567,7 @@ print(result["final_answer"])
 
 # What We Learnt
 
-By the end of this document, a plain retrieval pipeline has been turned into an agent that checks its own results before answering, using LangGraph to wire retrieval, grading, rewriting, and generation into a graph that can loop back on itself instead of only moving forward.
+By the end of this lab, a plain retrieval pipeline has been turned into an agent that checks its own results before answering, using LangGraph to wire retrieval, grading, rewriting, and generation into a graph that can loop back on itself instead of only moving forward.
 
 **Key takeaways:**
 - **Grading catches weak retrieval before it reaches the final answer** — instead of blindly answering with whatever was retrieved, the pipeline checks first.

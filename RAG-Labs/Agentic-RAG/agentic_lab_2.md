@@ -1,12 +1,16 @@
 # Agentic Hybrid RAG with Dynamic Routing
 
+**Difficulty:** Advanced | **Time:** ~60 min | **Requires:** Lab 13 (Agentic RAG with Self-Correction) and a Neo4j Aura instance
+
 ---
 
 # Problem Statement / Use Case Overview
 
 A self-correcting agent that only knows how to search one way — plain vector similarity, say — is still limited by what that one method is good at. Some questions are really about *meaning* ("what is X?"), and a vector search handles those well. Other questions are really about *connections* ("what is X linked to, and what is that linked to?"), and a graph traversal handles those far better. Forcing every question through the same tool means one type of question always gets a worse-than-necessary search.
 
-This document covers a version that gives the agent a choice. Before retrieving anything, a **router** step reads the question and decides which of two tools fits it best: a **graph traversal** through Neo4j, for questions about connections and components, or a **vector search** over the same Neo4j data, for questions about general meaning. If the chosen tool comes back with weak results, the agent doesn't just rewrite the question right away — it first tries **switching tools** on the very next attempt, since a bad result is sometimes a sign the wrong tool was picked, not that the question itself was badly worded. Only if that swapped tool also comes up short does the agent fall back to rewriting the question, the same way as before.
+### How This Lab Solves It
+
+This lab builds a version that gives the agent a choice. Before retrieving anything, a **router** step reads the question and decides which of two tools fits it best: a **graph traversal** through Neo4j, for questions about connections and components, or a **vector search** over the same Neo4j data, for questions about general meaning. If the chosen tool comes back with weak results, the agent doesn't just rewrite the question right away — it first tries **switching tools** on the very next attempt, since a bad result is sometimes a sign the wrong tool was picked, not that the question itself was badly worded. Only if that swapped tool also comes up short does the agent fall back to rewriting the question, the same way as before.
 
 **This pipeline has five connected parts, wired together as a loop:**
 
@@ -129,7 +133,7 @@ This is the actual structure the notebook builds. `router` always runs first and
 
 ### Walking Through Both Fallback Strategies
 
-The example run in this document gets a good grade on the very first try, using the graph tool the router picked. To see both fallback strategies in action, here's how the state would move if that first attempt had failed, and then the swapped tool had failed too:
+The example run in this lab gets a good grade on the very first try, using the graph tool the router picked. To see both fallback strategies in action, here's how the state would move if that first attempt had failed, and then the swapped tool had failed too:
 
 ```mermaid
 flowchart TB
@@ -760,7 +764,7 @@ This renders the full graph built in Step 5 as an interactive, zoomable widget i
 
 # What We Learnt
 
-By the end of this document, a self-correcting agent has been given a choice between two different ways of searching the same knowledge graph, along with a fallback strategy that tries switching tools before it tries rewriting the question.
+By the end of this lab, a self-correcting agent has been given a choice between two different ways of searching the same knowledge graph, along with a fallback strategy that tries switching tools before it tries rewriting the question.
 
 **Key takeaways:**
 - **Routing lets one pipeline handle more than one kind of question well** — a router decision, made once per question, sends the search toward whichever tool suits it better.

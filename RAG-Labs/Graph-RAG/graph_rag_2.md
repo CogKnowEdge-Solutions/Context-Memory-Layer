@@ -1,5 +1,7 @@
 # End-to-End Graph RAG with Neo4j
 
+**Difficulty:** Advanced | **Time:** ~55 min | **Requires:** Lab 7 (Generalized Graph RAG) and a Neo4j Aura instance
+
 ---
 
 # Problem Statement / Use Case Overview
@@ -8,7 +10,9 @@ A normal RAG pipeline finds chunks of text that are *similar* to a question and 
 
 Building the knowledge graph purely in memory, using a library like NetworkX, works well for a single notebook session — but the graph disappears the moment the notebook stops running, and there's no way to browse it visually or query it from outside Python.
 
-This document covers a version that solves that by storing the same kind of knowledge graph inside **Neo4j**, a dedicated graph database. It reads a PDF, asks an LLM to pull out entities and how they relate to each other, and writes those relationships into Neo4j using **Cypher**, the query language Neo4j understands. When a question comes in, the pipeline searches the database for the right starting point, pulls out every directly connected fact using a Cypher query, and only then asks the LLM to answer — along with a clear, step-by-step trace of how it got there. Because the graph lives in a real database, it persists between sessions and can be opened and explored visually in the Neo4j browser.
+### How This Lab Solves It
+
+This lab builds a version that solves that by storing the same kind of knowledge graph inside **Neo4j**, a dedicated graph database. It reads a PDF, asks an LLM to pull out entities and how they relate to each other, and writes those relationships into Neo4j using **Cypher**, the query language Neo4j understands. When a question comes in, the pipeline searches the database for the right starting point, pulls out every directly connected fact using a Cypher query, and only then asks the LLM to answer — along with a clear, step-by-step trace of how it got there. Because the graph lives in a real database, it persists between sessions and can be opened and explored visually in the Neo4j browser.
 
 **This pipeline has two connected parts:**
 

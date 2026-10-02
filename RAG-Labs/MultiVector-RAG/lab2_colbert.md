@@ -1,10 +1,14 @@
 # ColBERT & Late Interaction RAG
 
+**Difficulty:** Advanced | **Time:** ~55 min | **Requires:** Lab 2 (Multi-Vector RAG) and a Qdrant Cloud cluster
+
 ---
 
 # Problem Statement / Use Case Overview
 
 In standard RAG, every text chunk is squeezed into a single dense vector. That works fine for small, focused chunks, but it fails when a chunk covers many topics. A long chunk gets compressed into one averaged number, so the meaning of individual words gets blurred together. If your question matches only one small detail inside that chunk, the search may not find it, because the detail is lost inside the averaged vector.
+
+### How This Lab Solves It
 
 ColBERT takes a completely different approach. Instead of keeping **one vector per chunk**, it keeps **one vector per TOKEN**. This means every single word in the chunk gets its own separate vector, so the fine-grained meaning of every word is preserved. Nothing gets averaged out.
 
@@ -14,7 +18,7 @@ But keeping a vector per token creates a new problem: how do you compare two set
 2. For each query token, keep only its single **maximum** (best) score — the one document token it matched most strongly.
 3. **Add** those maxima together to get one final score for the chunk.
 
-A chunk scores well when a few of its tokens match the query's tokens very precisely, even if the rest of the chunk is unrelated. Whenever you see "MaxSim" later in this document, it always means this same three-step rule.
+A chunk scores well when a few of its tokens match the query's tokens very precisely, even if the rest of the chunk is unrelated. Whenever you see "MaxSim" later in this lab, it always means this same three-step rule.
 
 **This pipeline has four connected parts:**
 
@@ -58,7 +62,7 @@ flowchart LR
     class PDF,DL,CH,CE,M,QD ingestStyle
 ```
 
-The big difference from Lab 1 is what gets stored. In Lab 1, each chunk became one vector. Here, each chunk becomes a whole **matrix** of vectors — one 128-dimensional vector for every token in the chunk. A chunk with 93 tokens produces a `(93, 128)` matrix. The whole collection is created with the `MAX_SIM` comparator, which tells Qdrant to score matches the ColBERT way instead of the normal cosine way.
+The big difference from Lab 2 is what gets stored. In Lab 2, each chunk became one vector. Here, each chunk becomes a whole **matrix** of vectors — one 128-dimensional vector for every token in the chunk. A chunk with 93 tokens produces a `(93, 128)` matrix. The whole collection is created with the `MAX_SIM` comparator, which tells Qdrant to score matches the ColBERT way instead of the normal cosine way.
 
 ### Part B — How a Question Finds Its Answer
 
@@ -79,11 +83,11 @@ The question itself is embedded the same way as the documents — as a token mat
 
 ### One Chunk vs One Token Matrix
 
-Here is the core difference between this lab and Lab 1, side by side:
+Here is the core difference between this lab and Lab 2, side by side:
 
 ```mermaid
 flowchart TB
-    subgraph Standard["Standard RAG (Lab 1)"]
+    subgraph Standard["Standard RAG (Lab 2)"]
         direction LR
         C1["Chunk: 'BERT uses masked<br/>language models...'"] --> V1["ONE averaged vector<br/>(all words blurred together)"]
     end
@@ -143,7 +147,7 @@ Step 2 reads the grid row by row: for q1 the best cell is 0.8 (vs *models*); for
 
 ### Walking Through a Sample Retrieval
 
-Here is a real question going through the pipeline, using the question from this document's own sample run:
+Here is a real question going through the pipeline, using the question from this lab's own sample run:
 
 ```mermaid
 flowchart TB
@@ -189,7 +193,7 @@ ColBERT uses a method called **late interaction**. The word "late" means that th
 
 **Why is ColBERT used in this lab?**
 
-The storage part is already explained in Lab 1, so we do not repeat it here. What is new in this lab is the kind of data we store. In Lab 1, each chunk became one single vector. Here, each chunk becomes a full matrix of word vectors. Qdrant supports this through **multivector collections**, which can hold more than one vector per item. This lets Qdrant store the whole token matrix of a chunk and compare it using the MaxSim method instead of the usual cosine similarity. In short, ColBERT decides what we store, and Qdrant decides where it is kept.
+The storage part is already explained in Lab 2, so we do not repeat it here. What is new in this lab is the kind of data we store. In Lab 2, each chunk became one single vector. Here, each chunk becomes a full matrix of word vectors. Qdrant supports this through **multivector collections**, which can hold more than one vector per item. This lets Qdrant store the whole token matrix of a chunk and compare it using the MaxSim method instead of the usual cosine similarity. In short, ColBERT decides what we store, and Qdrant decides where it is kept.
 
 ---
 
@@ -457,14 +461,14 @@ This step downloads the BERT paper ("Attention Is All You Need"'s famous success
 ### Step 5 — Chunk the Document
 
 ```python
-# Smaller chunks than Lab 1: ColBERT embeds every token, so big chunks would mean huge matrices
+# Smaller chunks than Lab 2: ColBERT embeds every token, so big chunks would mean huge matrices
 chunk_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
 chunks = chunk_splitter.split_text(raw_text)
 
 print(f"Created {len(chunks)} chunks.")
 ```
 
-Chunks here are much smaller than in Lab 1 (500 characters instead of 10,000). Why? Because ColBERT embeds every single token. A big chunk would produce a huge matrix, which is slow to embed and slow to store. Smaller chunks keep each matrix small while still holding enough context. By the end of this step, `chunks` holds a list of 500-character text pieces.
+Chunks here are much smaller than in Lab 2 (500 characters instead of 10,000). Why? Because ColBERT embeds every single token. A big chunk would produce a huge matrix, which is slow to embed and slow to store. Smaller chunks keep each matrix small while still holding enough context. By the end of this step, `chunks` holds a list of 500-character text pieces.
 
 ---
 
@@ -479,7 +483,7 @@ def stable_id(text):
     # Use a fixed namespace (e.g., NAMESPACE_URL) to ensure stability
     return str(uuid.uuid5(uuid.NAMESPACE_URL, text))
 
-# Same reasoning as Lab 1's Step 6 fix: stable payload IDs keep Qdrant consistent if this notebook is rerun
+# Same reasoning as Lab 2's Step 6 fix: stable payload IDs keep Qdrant consistent if this notebook is rerun
 chunk_ids = [stable_id(chunk) for chunk in chunks]
 ```
 
@@ -610,7 +614,7 @@ hits, answer = run_colbert_rag(query)
 
 # What We Learnt
 
-By the end of this document, a document has been indexed at the finest possible level — one vector per token — and searched with a matching rule that rewards precise, word-level hits.
+By the end of this lab, a document has been indexed at the finest possible level — one vector per token — and searched with a matching rule that rewards precise, word-level hits.
 
 **Key takeaways:**
 - **ColBERT keeps every word separate** — instead of one averaged vector per chunk, every token gets its own vector, so a single precise detail inside a long chunk survives intact.

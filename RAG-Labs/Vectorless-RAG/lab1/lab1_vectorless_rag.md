@@ -1,5 +1,7 @@
 # Vectorless RAG: Reasoning-Based Retrieval without Embeddings
 
+**Difficulty:** Intermediate | **Time:** ~40 min | **Requires:** A PageIndex API key and LLM API credentials
+
 > **Vectorless RAG** is a retrieval-augmented generation approach that replaces embedding models and vector databases with LLM-based reasoning. Instead of encoding text into vectors and searching via cosine similarity, the LLM reads a hierarchical tree of document titles and summaries to identify relevant sections, then reads extracted text from those pages to generate answers.
 
 ---
@@ -7,6 +9,8 @@
 # Problem Statement / Use Case Overview
 
 How do we query a PDF and get accurate answers without building a vector database?
+
+### How This Lab Solves It
 
 **The pipeline works in two stages:**
 
@@ -547,13 +551,25 @@ print(answer)
 
 ---
 
-# Optional Exercise
+### Step 5 — Variations Worth Trying
 
-Challenge yourself to extend or modify this lab:
+The pipeline above is deliberately simple. Once it runs end to end, these are
+the swaps that show you which parts actually matter — change one at a time and
+re-run Step 3 and Step 4 to compare answers.
 
-- Change the LLM from **Amazon Nova Lite** to a different Bedrock model (e.g., `global.anthropic.claude-haiku-4-5-20251001-v1:0` or `global.anthropic.claude-sonnet-4-5-20250929-v1:0`) and compare answer quality.
-- Swap **PageIndex** for a different document parsing approach and observe how the retrieval quality changes.
-- Try modifying the `QUERY` variable with different questions about the ISS (e.g., "What are the main modules?", "How is the station powered?", "Who manages the ISS?") and verify the answers.
+- **Swap the model.** Change `model` in `call_llm` from Amazon Nova Lite to
+  another Bedrock model (e.g. `global.anthropic.claude-haiku-4-5-20251001-v1:0`
+  or `global.anthropic.claude-sonnet-4-5-20250929-v1:0`) and compare answer
+  quality on the same `QUERY`. Node selection is a reasoning task, so a
+  stronger model should pick better sections.
+- **Swap the parser.** PageIndex is doing one job here — turning a PDF into a
+  tree. Replace it with any parser that gives you titles and summaries
+  (PyMuPDF headings, a markdown parser, a hand-built outline) and see how much
+  the retrieval quality actually depends on tree quality versus the LLM.
+- **Change the question.** Swap `QUERY` for other ISS questions — "What are the
+  main modules?", "How is the station powered?", "Who manages the ISS?" — and
+  check that the sections the LLM selects still make sense. A retrieval pipeline
+  that only works for one question isn't a pipeline.
 
 ---
 

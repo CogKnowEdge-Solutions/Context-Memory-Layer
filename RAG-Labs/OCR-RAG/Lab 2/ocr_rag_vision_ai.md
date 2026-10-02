@@ -1,5 +1,7 @@
 # Automated Document Q&A: OCR + RAG on a Scanned PDF (OpenRouter)
 
+**Difficulty:** Intermediate | **Time:** ~45 min | **Requires:** Lab 4 (Structured OCR + RAG) and an OpenRouter API key
+
 ---
 
 # Problem Statement / Use Case Overview
@@ -7,6 +9,8 @@
 Many important documents — old scanned forms, printed transcripts, faxed reports — exist only as **images of text**, not as text an AI can read directly. Before any question can be answered about a scanned document, the words trapped inside the image have to be pulled out first.
 
 Even once that text exists, a second problem shows up: a scanned document can be long, and an LLM can't just be handed the entire thing for every question — it's inefficient, and it makes the AI more likely to lose track of which part of the document actually answers the question.
+
+### How This Lab Solves It
 
 This lab solves both problems in one pipeline. It downloads a scanned PDF, reads the text out of each page using local OCR, breaks that text into small overlapping chunks, and stores those chunks in a searchable vector database. When a question comes in, only the handful of chunks that are actually relevant to that question are retrieved and handed to the LLM — along with a trace showing exactly which chunks were used and how.
 

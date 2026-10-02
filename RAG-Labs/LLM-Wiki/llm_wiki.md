@@ -1,10 +1,14 @@
 # Automated Ingestion: Building a Structured Knowledge Base (LLM Wiki + OKF)
 
+**Difficulty:** Intermediate | **Time:** ~45 min | **Requires:** Basic RAG familiarity and AWS Bedrock credentials
+
 ---
 
 # Problem Statement / Use Case Overview
 
 Most AI tools handle a big document by chopping it into small, randomly-sized pieces, then pulling out a handful of pieces that "look similar" to a question. This has a well-known problem — chopping can separate a fact from the context that explains it, and "looks similar" isn't the same as "actually answers the question." When the pulled-out pieces don't fully cover the answer, the AI tends to fill the gap with a guess, which is what people call **hallucination**.
+
+### How This Lab Solves It
 
 This lab avoids that by building a small, organized knowledge base instead. It reads a messy PDF and turns it into a folder of clean, self-contained files — one file per fact — plus one master index describing what's in each file. When a question comes in later, the AI doesn't guess from scraps of text. It checks the index, picks the exact file(s) that matter, and reads them in full before answering.
 

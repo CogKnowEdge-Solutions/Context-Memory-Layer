@@ -1,10 +1,14 @@
 # Vectorless RAG: Structured Table Retrieval with Explainability Tracking
 
+**Difficulty:** Intermediate | **Time:** ~45 min | **Requires:** Lab 10 (Vectorless RAG)
+
 ---
 
 # Problem Statement / Use Case Overview
 
 Most AI systems break a document into fixed-size pieces of text, just by word count. When a document has a financial table, this often cuts right through the middle of it — separating the numbers from their column headers. Once a table is split apart like that, the AI loses the context and starts guessing, which leads to wrong answers.
+
+### How This Lab Solves It
 
 This lab avoids that problem entirely. It looks at the actual layout of the page instead of counting words, so every table is kept as one whole, unbroken piece. When you ask a question about financial data, the whole table comes back together — headers, rows, and footnotes all in one place — so the answer doesn't need any guesswork.
 

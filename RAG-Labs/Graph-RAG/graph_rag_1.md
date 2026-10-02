@@ -1,10 +1,14 @@
 # End-to-End Generalized Graph RAG
 
+**Difficulty:** Advanced | **Time:** ~50 min | **Requires:** Basic RAG and knowledge-graph familiarity
+
 ---
 
 # Problem Statement / Use Case Overview
 
 A normal RAG pipeline finds chunks of text that are *similar* to a question and hands them to an LLM. But similarity isn't the same as connection — it can miss how one fact actually links to another, especially when the answer depends on following a chain of relationships rather than just matching keywords.
+
+### How This Lab Solves It
 
 This lab solves that by building a **knowledge graph** instead of a plain list of text chunks. It reads a PDF, asks an LLM to pull out entities and how they relate to each other, and stores those relationships as a graph. When a question comes in, the pipeline finds the right starting point in the graph, walks outward a few steps to gather every connected fact, and only then asks the LLM to answer — along with a clear, step-by-step trace of how it got there.
 
