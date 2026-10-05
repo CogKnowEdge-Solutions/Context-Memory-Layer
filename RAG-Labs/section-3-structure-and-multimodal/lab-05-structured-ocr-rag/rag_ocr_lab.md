@@ -1,21 +1,19 @@
-# Structured OCR + RAG Chatbot: Chatting with Invoices Using RapidOCR and Gemini
+# Structured OCR + RAG Chatbot: Chatting with Scanned Invoices
 
-**Difficulty:** Intermediate | **Time:** ~40 min | **Requires:** A Gemini API key
+**Difficulty:** Intermediate | **Time:** ~40 min | **Requires:** Basic RAG familiarity
 
 ---
 
 # Problem Statement / Use Case Overview
 
-Invoices, receipts, and purchase orders usually exist as scanned images or photos, not as searchable text. To ask a question like "what was the total on this invoice?", the numbers first have to be pulled out of the image correctly — and this is where most simple OCR setups fall apart. A basic OCR pass reads every text box on the page but throws away the layout, so an invoice's neatly organized rows and columns turn into a jumbled bag of words. Once that happens, an LLM reading the output can no longer tell which number belongs to which field, and it starts guessing.
+An accounts-payable clerk has three scanned documents: an invoice, a receipt, and a purchase order. Someone asks, "what was the invoice number and total on the Contoso invoice?" To answer that at all, the text has to be pulled out of the images first — and that is where a basic OCR setup falls apart. It reads every text box on the page but throws away the layout, so the invoice's neat rows and columns become a jumbled bag of words. Once `Invoice Number` and `34278587` are no longer neighbours, an LLM reading the output can no longer tell which number belongs to which field, and it starts guessing.
 
-### How This Lab Solves It
-
-This lab avoids that problem by keeping the page's layout intact when the text is extracted, so a number like `$56,651.49` still sits next to the label `Charges` instead of floating loose in a wall of text. Each document is then turned into its own searchable unit, so when you ask a question, only the relevant document(s) are pulled in as context — and the LLM is told to tag every fact it uses with the exact document it came from.
+This lab keeps the page's layout intact while extracting text, so `$56,651.49` still sits next to the label `Charges`. Each document then becomes one searchable unit, so a question pulls in only the relevant document, and the LLM is told to tag every fact it uses with the exact document it came from. You can then check the answer against the source instead of trusting it.
 
 This is especially useful for:
 - **Digitizing invoices and receipts** — turning scanned images into something you can actually query
-- **Expense and purchase-order tracking** — quickly pulling a specific number out of a pile of documents
-- **Any situation where an answer needs to be traceable back to the exact document it came from**
+- **Expense and purchase-order tracking** — pulling a specific number out of a pile of documents
+- **Any situation where an answer must be traceable** back to the exact document it came from
 
 ---
 
@@ -23,9 +21,10 @@ This is especially useful for:
 
 | Item | Detail |
 |------|--------|
-| **Your question** | A question about one or more of the invoices/receipts (e.g. "What's the invoice number on the Contoso invoice?") |
+| **Your question** | A question about the invoices (e.g. "What is the invoice number and total charge on the Contoso invoice?") |
 | **The sample documents** | An invoice, a receipt, and a purchase order — downloaded automatically from GitHub links, no need to have them saved beforehand |
-| **Gemini API Key** | Used both to embed each document for retrieval, and to generate the final answer |
+| **Embedding model** | `all-MiniLM-L6-v2`, run locally via Sentence Transformers — downloads once (~90 MB), no API key needed |
+| **LLM API key** | OpenRouter, used only to generate the final answer from the retrieved text |
 
 ---
 
@@ -33,33 +32,146 @@ This is especially useful for:
 
 ### The Full Flow
 
-*(Diagram to be added here)*
+```mermaid
+flowchart TD
+    D["Download 3 sample<br/>documents"] --> O["RapidOCR<br/>reads each image"]
+    O --> S["to_markdown()<br/>rebuilds layout"]
+    S --> E["Embed each document<br/>(one vector each)"]
+    E --> K["Knowledge base<br/>(3 entries)"]
+    Q["User question"] --> QE["Embed the question"]
+    QE --> C["Cosine similarity<br/>vs every document"]
+    K --> C
+    C --> R["Top-k documents"]
+    R --> L["Labelled context<br/>[Source: filename]"]
+    L --> G["LLM writes answer<br/>with citations"]
 
-Every question goes through the same five stages: the sample documents are downloaded, each one is read by RapidOCR and turned into structured text, that text is embedded and stored as a tiny knowledge base, the question is compared against that knowledge base to find the closest match(es), and Gemini writes the final answer using only what was retrieved — tagging every fact with the document it came from.
+    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    class D,O,S,E,K,Q,QE,C,R,L,G defaultStyle
+```
+
+Every question goes through the same five stages: the sample documents are downloaded, each one is read by RapidOCR and turned into structured text, that text is embedded and stored as a tiny knowledge base, the question is compared against that knowledge base to find the closest match(es), and the LLM writes the final answer using only what was retrieved — tagging every fact with the document it came from.
 
 ### How Each Document Becomes Searchable
 
-*(Diagram to be added here)*
+```mermaid
+flowchart LR
+    I["Image file"] --> B["OCR text boxes<br/>(text + coordinates)"]
+    B --> M["to_markdown()<br/>rebuilds reading order"]
+    M --> T["One text blob<br/>per document"]
+    T --> V["One embedding<br/>per document"]
+
+    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    class I,B,M,T,V defaultStyle
+```
 
 Each image goes through OCR once, is converted into layout-preserving text, and is embedded into a single vector. There's no splitting into a dozen fragments and no vector database to manage — with only a handful of short documents, one embedding per document is enough to make retrieval accurate.
 
 ### Answering a Question, Step by Step
 
-*(Diagram to be added here)*
+```mermaid
+flowchart LR
+    Q["Question"] --> QE["Question embedding"]
+    QE --> S["Cosine score<br/>vs each document"]
+    S --> T["Top 2 by score"]
+    T --> C["Context with<br/>[Source: name] labels"]
+    C --> A["Answer with<br/>citations"]
+    A --> X["Explainability check:<br/>was each doc cited?"]
 
-The question is embedded the same way the documents were, compared against every document's embedding using cosine similarity, and the top matches are handed to Gemini as labeled context. Gemini is instructed to answer only from that context and to cite the source document for every fact.
+    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    class Q,QE,S,T,C,A,X defaultStyle
+```
+
+The question is embedded the same way the documents were, compared against every document's embedding using cosine similarity, and the top matches are handed to the LLM as labelled context. It is instructed to answer only from that context and to cite the source document for every fact.
 
 ---
 
 # Output
 
-A plain, accurate answer built from the OCR'd text of the relevant document(s), with every fact tagged to the document it came from. For example:
+The notebook below was executed end to end; this is its real output, reproduced in full.
 
-> _"The total charge on the Contoso invoice was $56,651.49. [Source: simple-invoice.png]"_
+**load_dotenv(".env")**
 
-Along with the answer, the lab also prints:
-- **The document(s) it retrieved**, along with their similarity score to the question
-- **A short explanation for each document** — whether it was actually cited in the answer, and why it mattered
+```text
+Key loaded.
+LLM ready.
+```
+
+**INVOICE_URLS = {**
+
+```text
+Downloaded simple-invoice.png (166.8 KB)
+Downloaded contoso-receipt.png (1769.2 KB)
+Downloaded purchase-order-1.jpg (468.0 KB)
+```
+
+**engine = RapidOCR(params={"Global.log_level": "error"})**
+
+```text
+simple-invoice.png: found 18 text boxes in 0.62s
+contoso-receipt.png: found 19 text boxes in 0.49s
+purchase-order-1.jpg: found 54 text boxes in 1.28s
+```
+
+**document_texts = {}**
+
+```text
+Contoso
+Address:         Invoice For: Microsoft
+1 Redmond way Suite    1020 Enterprise Way
+6000 Redmond, WA     Sunnayvale, CA 87659
+99243
+
+Invoice Number Invoice Date Invoice Due Date Charges   VAT ID
+
+34278587  6/18/2017  6/24/2017    $56,651.49 PT
+```
+
+**embedder = SentenceTransformer("all-MiniLM-L6-v2")**
+
+```text
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Knowledge base built with 3 documents.
+Each embedding has 384 dimensions.
+```
+
+**query = "What is the invoice number and total charge on the Contoso invoice?"**
+
+```text
+--- DOCUMENTS RETRIEVED ---
+simple-invoice.png  (similarity: 0.643)
+contoso-receipt.png  (similarity: 0.443)
+
+--- ANSWER ---
+The invoice number is **34278587** and the total charge is **$56,651.49** [Source: simple-invoice.png].
+```
+
+**print("\n--- EXPLAINABILITY ---")**
+
+```text
+--- EXPLAINABILITY ---
+
+Document: "simple-invoice.png"
+similarity: 0.643 | USED in answer
+Why: The document displays the Contoso invoice header with "Invoice Number 34278587" and a "Charges" field showing "$56,651.49". These two fields directly provide the invoice number and total charge requested. The layout confirms this is a Contoso invoice issued to Microsoft.
+
+Document: "contoso-receipt.png"
+similarity: 0.443 | retrieved but NOT used
+Why: The document shows a Contoso receipt with a **Total of $1203.39** (listed at the bottom) and transaction details (date 6/10/2019, items, subtotal $1098.99, tax $104.40). No explicit invoice number appears in the provided text.
+```
+
+**follow_up = "Which items were purchased on the Surface Pro receipt?"**
+
+```text
+--- ALL DOCUMENTS, RANKED ---
+0.466  contoso-receipt.png
+0.359  purchase-order-1.jpg
+0.271  simple-invoice.png
+
+--- ANSWER ---
+The Surface Pro receipt shows the following items purchased:
+
+1. **1 Surface Pro 6** – 256GB / Intel Core i5 / 8GB RAM (Black) [Source: contoso-receipt.png]  
+2. **1 SurfacePen** [Source: contoso-receipt.png]
+```
 
 ---
 
@@ -67,12 +179,14 @@ Along with the answer, the lab also prints:
 
 | Component | Tool |
 |---|---|
-| **Reading the documents** | RapidOCR — a fast, CPU-only OCR engine that detects and reads text boxes in each image |
+| **Reading the documents** | `rapidocr` — a fast, CPU-only OCR engine that detects and reads text boxes in each image |
+| **OCR backend** | `onnxruntime` — the CPU runtime RapidOCR executes its models on, no GPU needed |
 | **Structuring the OCR output** | RapidOCR's `.to_markdown()` — rebuilds a reading order from the box coordinates, so rows and columns stay roughly aligned instead of turning into a flat list |
-| **Building the knowledge base** | Gemini Embedding API (`gemini-embedding-001`) — turns each document's structured text into a vector |
+| **Embedding** | `all-MiniLM-L6-v2` via `sentence-transformers` — turns each document's structured text into a 384-dimension vector, runs locally |
 | **Searching for relevant documents** | Cosine similarity (plain NumPy) — compares the question's embedding to every document's embedding, no vector database needed |
-| **Writing the answer** | Gemini Chat model (`gemini-2.5-flash`) — reads the retrieved document(s) and writes the answer, tagging every fact with its source |
+| **Writing the answer** | `nvidia/nemotron-3-ultra-550b-a55b:free` via `langchain-openai` pointed at OpenRouter — a free tier model, so a full run costs nothing |
 | **Downloading the sample documents** | `requests` — grabs each sample invoice/receipt from GitHub and saves it locally |
+| **Secrets** | `python-dotenv` — reads `OPENROUTER_API_KEY` from a `.env` file |
 
 ---
 
@@ -82,7 +196,7 @@ A plain OCR engine gives you text boxes with coordinates, but no sense of layout
 
 Once the text is structured, this becomes a standard **RAG (Retrieval-Augmented Generation)** setup, just applied to OCR output instead of plain text files:
 - **Retrieval** — every document is embedded once, and a question is matched against those embeddings using cosine similarity, so only the most relevant document(s) are used.
-- **Generation** — the matched document(s) are handed to Gemini as context, with instructions to answer only from what's given and to cite the source document for every fact, using a tag like `[Source: filename]`.
+- **Generation** — the matched document(s) are handed to the LLM as context, with instructions to answer only from what's given and to cite the source document for every fact, using a tag like `[Source: filename]`.
 
 That citation tag is what makes the explainability check possible afterward — the lab doesn't have to guess which documents actually mattered, it just checks whether each document's tag shows up in the final answer.
 
@@ -90,8 +204,10 @@ That citation tag is what makes the explainability check possible afterward — 
 
 # Pre-requisites
 
-- A Gemini API key (free at https://aistudio.google.com/apikey)
-- A basic idea of what OCR and an LLM are
+- **Basic familiarity** with Python (functions, loops, `import` statements, dictionaries).
+- **A general sense of what RAG and embeddings are** — retrieving relevant text by similarity before asking an LLM to answer. The `RAG-Labs/README.md` covers this if you need a refresher.
+- **An LLM API key** — used only to generate the final answer.
+- **~500 MB of free disk** for the OCR and embedding models, and roughly 4 GB RAM. No GPU needed; everything runs on CPU.
 
 ---
 
@@ -103,57 +219,109 @@ The cell below installs all required Python packages:
 |---------|---------|
 | `rapidocr` | Reads each image and extracts its text, box by box |
 | `onnxruntime` | The CPU backend RapidOCR runs its models on |
-| `google-genai` | Connects to Gemini for both embeddings and chat generation |
+| `sentence-transformers` | Runs the local embedding model that builds the knowledge base |
+| `langchain-openai` | Connects the LLM to OpenRouter for answer generation |
 | `requests` | Downloads the sample invoices from GitHub |
 | `numpy` | Does the cosine similarity math for retrieval |
+| `python-dotenv` | Loads the API key from `.env` |
 
 ```python
-# rapidocr        -> the OCR engine (runs fully on CPU via onnxruntime)
-# onnxruntime      -> the backend RapidOCR uses to run its models
-# google-genai     -> the official Gemini API SDK (chat + embeddings)
-# requests, numpy  -> downloading files & doing the similarity math
-!pip install rapidocr onnxruntime google-genai requests numpy --quiet
+!pip install -q rapidocr onnxruntime sentence-transformers langchain-openai requests numpy python-dotenv
 ```
 
-## Import Libraries
+### Getting an OpenRouter API key
+
+The LLM here is accessed through OpenRouter, which provides a single API key that works across many models, including free ones.
+
+1. Go to [openrouter.ai](https://openrouter.ai) and sign up, or log in if an account already exists.
+2. From the dashboard, open the **Keys** section.
+3. Click **Create Key**, give it a name, and confirm.
+4. **Copy the key immediately** — it is shown in full only once.
+5. Put it in a `.env` file next to the notebook:
+
+```
+OPENROUTER_API_KEY=sk-or-v1-...
+```
+
+The notebook reads this file automatically and falls back to prompting you interactively if it is missing, so a missing `.env` will not crash the run.
+
+---
+
+# Step-wise Instructions — Development
+
+---
+
+### Setup — Import Libraries
 
 ```python
-# Standard library
 import os
-import json
 
 # For downloading the sample invoices and doing vector math
 import requests
 import numpy as np
 
-# RapidOCR -- our OCR engine
+# RapidOCR -- our OCR engine (runs on CPU via onnxruntime)
 from rapidocr import RapidOCR
 
-# Gemini SDK -- used both for embeddings (retrieval) and chat (generation)
-from google import genai
+# Local embedding model -- turns text into vectors, no API key needed
+from sentence_transformers import SentenceTransformer
+
+# The LLM, pointed at OpenRouter
+from langchain_openai import ChatOpenAI
+
+# Reads OPENROUTER_API_KEY from .env
+from dotenv import load_dotenv
 ```
 
-## Add Your Key
+### Setup — Silence Noisy Logs
+
+OCR engines and model downloaders log every model they load. None of that is interesting here, and it buries the output you actually want to read, so it gets turned off.
 
 ```python
-# Paste your key when prompted (get one for free at https://aistudio.google.com/apikey)
-GEMINI_API_KEY = input("Enter your Gemini API key: ").strip()
+import logging
+import os
 
-# Create one Gemini client we'll reuse for both embeddings and chat generation
-client = genai.Client(api_key=GEMINI_API_KEY)
-
-# Model names -- change these if Google renames/updates them later
-CHAT_MODEL = "gemini-2.5-flash"
-EMBED_MODEL = "gemini-embedding-001"
-
-print("Gemini client ready.")
+# Hide the download progress bar and rate-limit hints -- they appear only on a
+# cold model cache, which would make the output differ between first and later runs.
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
+logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
+logging.getLogger("httpx").setLevel(logging.ERROR)
 ```
 
-> 📝 **Note:** This is the only manual input the notebook needs — everything else, from downloading the documents to running OCR, happens automatically.
+RapidOCR needs its own approach, handled in Step 2 — it re-sets its own log level every time the engine is created, so changing the logging config beforehand has no effect.
 
----
+The progress bar is hidden deliberately. It only appears when the embedding model is downloaded for the first time, which means the same notebook prints different output on a fresh machine versus a second run — and an output section that changes between runs cannot be checked against anything.
 
-# Step-wise Instructions — Development
+### Setup — Load API Key & Configure the LLM
+
+This cell loads the key and sets up the one LLM the lab needs. The embedding model is deliberately *not* configured here — it is loaded in Step 4, because it is the first cell that actually needs it.
+
+```python
+load_dotenv(".env")
+
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+
+if not OPENROUTER_API_KEY:
+    OPENROUTER_API_KEY = input("Enter your OpenRouter API key (get one at https://openrouter.ai): ").strip()
+
+print("Key loaded.")
+
+# A free tier model, so running this lab costs nothing
+llm = ChatOpenAI(
+    model="nvidia/nemotron-3-ultra-550b-a55b:free",
+    api_key=OPENROUTER_API_KEY,
+    base_url="https://openrouter.ai/api/v1",
+    temperature=0,
+    max_tokens=400,
+)
+
+print("LLM ready.")
+```
+
+- The key is loaded from `.env`, with a fallback that asks for it directly if the file is missing — so the notebook doesn't just crash.
+- `temperature=0` asks for the most predictable answer possible. For a lab where you are checking exact figures, you want the model to follow the document rather than be creative.
+- `base_url` is what points OpenAI's client at OpenRouter instead of OpenAI itself. Same client, different server.
 
 ---
 
@@ -190,7 +358,8 @@ RapidOCR detects every text box on the page, then reads the text inside each one
 
 ```python
 # Initialize the OCR engine once -- this loads the detection, classification, and recognition models
-engine = RapidOCR()
+# The log_level parameter turns off the "model loaded" messages it prints on startup
+engine = RapidOCR(params={"Global.log_level": "error"})
 
 ocr_results = {}
 for filename, path in invoice_paths.items():
@@ -198,6 +367,10 @@ for filename, path in invoice_paths.items():
     ocr_results[filename] = result
     print(f"{filename}: found {len(result.txts)} text boxes in {result.elapse:.2f}s")
 ```
+
+- The engine is created **once** and reused for all three documents. Creating a fresh `RapidOCR()` per image would reload the models each time.
+- `params` overrides defaults from RapidOCR's own config file. `log_level` is one of them, and `"error"` leaves only real errors visible.
+- `result.elapse` is the time OCR actually took, per document — useful for spotting which pages are expensive.
 
 ---
 
@@ -215,7 +388,9 @@ for filename, result in ocr_results.items():
 print(document_texts["simple-invoice.png"])
 ```
 
-This is the difference between "structured" and plain OCR: instead of `Invoice Number Invoice Date 34278587 6/18/2017 ...` all run together, the layout-aware version keeps the header row and the value row visibly separate.
+This is the difference between "structured" and plain OCR. The flat list gives you a single stream of tokens in whatever order the engine found them — every label, every date, every amount, indistinguishable. The layout-aware version instead reproduces the table: `Invoice Number` and `34278587` land in the **same column** on their own rows, so you can tell which value belongs to which header.
+
+Worth being precise about what this does and does not do. The structured output still separates the header row from the value row, so a naive test like "is the label and the value on the same line?" comes out **False** here — and would come out `True` for the flat text, purely because flattening collapses everything onto one line. That test measures nothing. The property that actually matters is *column alignment*, which only the structured version has.
 
 ---
 
@@ -224,10 +399,13 @@ This is the difference between "structured" and plain OCR: instead of `Invoice N
 Each document is short, so the whole thing is treated as a single retrieval unit. For longer documents you'd split the text into smaller overlapping chunks first, but with invoice-length text, one chunk per document keeps things simple without losing accuracy.
 
 ```python
+# Load the embedding model once. It runs on CPU and needs no API key.
+embedder = SentenceTransformer("all-MiniLM-L6-v2")
+
 def embed_text(text):
-    """Get a Gemini embedding vector for a piece of text."""
-    response = client.models.embed_content(model=EMBED_MODEL, contents=text)
-    return np.array(response.embeddings[0].values)
+    """Get an embedding vector for a piece of text."""
+    # encode() takes a list and returns a 2D numpy array; take the first row.
+    return embedder.encode([text])[0]
 
 # Build the knowledge base: one entry per document, with its text and embedding
 knowledge_base = []
@@ -239,7 +417,11 @@ for filename, text in document_texts.items():
     })
 
 print(f"Knowledge base built with {len(knowledge_base)} documents.")
+print(f"Each embedding has {len(knowledge_base[0]['embedding'])} dimensions.")
 ```
+
+- `SentenceTransformer` is loaded once and reused. Loading it per document would re-read the model weights each time, which is slow and pointless.
+- `encode()` expects a list of strings even for one string, and returns a 2D array — hence the `[0]` to pull out a single 384-dimension vector.
 
 ---
 
@@ -273,15 +455,15 @@ def retrieve(query, top_k=2):
 
 ---
 
-### Step 6 — Combine Retrieved Documents and Ask Gemini, With Citations
+### Step 6 — Combine Retrieved Documents and Ask the LLM, With Citations
 
-This ties retrieval and generation together — it calls the retrieval function, labels each retrieved document clearly (e.g. `[Source: simple-invoice.png]`), and tells Gemini to tag every fact it uses with the document it came from. That tag is what makes the explainability check in Step 8 possible without needing a separate pass just to figure out what was used.
+This ties retrieval and generation together — it calls the retrieval function, labels each retrieved document clearly (e.g. `[Source: simple-invoice.png]`), and tells the LLM to tag every fact it uses with the document it came from. That tag is what makes the explainability check in Step 8 possible without a separate pass just to figure out what was used.
 
 ```python
 def rag_answer(query, top_k=2):
     retrieved_docs = retrieve(query, top_k=top_k)
 
-    # Label each document so Gemini can cite exactly which one it used
+    # Label each document so the LLM can cite exactly which one it used
     labeled_context = "\n\n".join(
         f"[Source: {doc['source']}]\n{doc['text']}" for doc in retrieved_docs
     )
@@ -296,9 +478,12 @@ Context:
 Question: {query}
 Answer:"""
 
-    response = client.models.generate_content(model=CHAT_MODEL, contents=prompt)
-    return response.text, retrieved_docs
+    response = llm.invoke(prompt)
+    return response.content, retrieved_docs
 ```
+
+- `.invoke()` is LangChain's single call method — it sends the prompt and returns a response object.
+- `response.content` is the text. The full response object also carries token counts and metadata, which you do not need here.
 
 ---
 
@@ -323,14 +508,14 @@ A good test question, because the answer lives entirely inside one document (`si
 
 ### Step 8 — See Why Each Document Was Used
 
-For every document the lab checked, this prints its similarity score, whether it was actually cited in the answer, and — asking Gemini directly — why it mattered.
+For every document the lab checked, this prints its similarity score, whether it was actually cited in the answer, and — asking the LLM directly — why it mattered.
 
-Unlike a rough guess, the "was it used" check here is exact: it looks for the citation tag itself (e.g. `[Source: simple-invoice.png]`) inside the final answer, so it only counts a document as used if Gemini actually cited it.
+Unlike a rough guess, the "was it used" check here is exact: it looks for the citation tag itself (e.g. `[Source: simple-invoice.png]`) inside the final answer, so it only counts a document as used if the LLM actually cited it.
 
 ```python
 print("\n--- EXPLAINABILITY ---")
 for doc in retrieved_docs:
-    # Check if the citation tag is actually present in Gemini's answer
+    # Check if the citation tag is actually present in the LLM's answer
     was_used = f"[Source: {doc['source']}]" in answer
 
     status = "USED in answer" if was_used else "retrieved but NOT used"
@@ -338,7 +523,7 @@ for doc in retrieved_docs:
     print(f"\nDocument: \"{doc['source']}\"")
     print(f"similarity: {doc['score']:.3f} | {status}")
 
-    # Ask Gemini why this document is relevant, using the actual text that was retrieved
+    # Ask the LLM why this document is relevant, using the text that was retrieved
     explain_prompt = f"""
 In 3-4 short lines, explain why the document below is relevant to the question.
 Be specific -- mention the actual numbers or fields that connect to the question.
@@ -349,29 +534,39 @@ Question: {query}
 Document source: {doc['source']}
 Document content: {doc['text']}
 """
-    explanation_response = client.models.generate_content(model=CHAT_MODEL, contents=explain_prompt)
-    print(f"Why: {explanation_response.text.strip()}")
+    explanation_response = llm.invoke(explain_prompt)
+    print(f"Why: {explanation_response.content.strip()}")
 ```
+
+A retrieved document is not necessarily a *used* one. Step 7 asks for the top 2 by similarity, so if only one document is relevant, the other will be retrieved and then ignored. Step 8 is what separates the two cases.
 
 ---
 
-### Step 9 — Simple Interactive Chatbot (Optional)
+### Step 9 — Ask More Questions
 
-A minimal chat loop over the same `rag_answer` function, so you can ask follow-up questions about any of the three documents without re-running earlier cells.
+`rag_answer` is a plain function, so asking another question takes one line. Everything above it — OCR, the knowledge base, the embedding model — is already built. This step asks a question that should favour a *different* document, and retrieves all 3 so you can watch the ranking actually move.
 
 ```python
-while True:
-    question = input("Ask about your invoices (or 'exit'): ").strip()
-    if question.lower() == "exit":
-        print("Goodbye!")
-        break
+# A follow-up that should pull in a different document
+follow_up = "Which items were purchased on the Surface Pro receipt?"
 
-    answer, retrieved_docs = rag_answer(question)
-    sources = ", ".join(doc["source"] for doc in retrieved_docs)
-    print(f"\n[Retrieved: {sources}]")
-    print(answer)
-    print()
+# top_k=3 so every document's score is visible, not just the winners
+print("--- ALL DOCUMENTS, RANKED ---")
+for doc in retrieve(follow_up, top_k=3):
+    print(f"{doc['score']:.3f}  {doc['source']}")
+
+follow_up_answer, follow_up_docs = rag_answer(follow_up)
+
+print("\n--- ANSWER ---")
+print(follow_up_answer)
 ```
+
+Now run the ranking part with `query` from Step 7 as well, and compare the two questions column by column.
+
+- **The first question** (`invoice number and total charge`) should rank `simple-invoice.png` highest.
+- **This question** (`items purchased on the Surface Pro receipt`) should rank `contoso-receipt.png` highest and push the invoice down.
+
+If the top result does **not** change between the two questions, retrieval is not actually discriminating between your documents — the same document is winning for everything, which usually means the knowledge base is too small or the questions are too similar to tell apart.
 
 ---
 
@@ -381,6 +576,7 @@ This lab turns scanned invoices into something you can actually query, and check
 
 - **Layout is preserved during OCR** — text is read using its position on the page, not just detected in whatever order the engine happens to find it, so rows and columns stay meaningfully together.
 - **Retrieval needs no vector database** — with a small set of short documents, one embedding per document and plain cosine similarity is enough to find the right match.
-- **Every fact in the answer is tagged to its document** — Gemini is told to cite `[Source: filename]` for every fact it uses.
+- **Every fact in the answer is tagged to its document** — the LLM is told to cite `[Source: filename]` for every fact it uses.
 - **The "was it used" check is exact, not a guess** — it looks for the actual citation tag in the answer, so there's no ambiguity about which documents mattered.
+- **Retrieved is not the same as used** — asking for top-2 means one document can be retrieved and then ignored. The citation check is what tells the two apart.
 - **The sample documents are downloaded automatically** — no need to have them saved on your computer beforehand.
