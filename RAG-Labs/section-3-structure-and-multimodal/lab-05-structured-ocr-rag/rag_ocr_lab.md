@@ -107,9 +107,9 @@ Downloaded purchase-order-1.jpg (468.0 KB)
 **engine = RapidOCR(params={"Global.log_level": "error"})**
 
 ```text
-simple-invoice.png: found 18 text boxes in 0.62s
-contoso-receipt.png: found 19 text boxes in 0.49s
-purchase-order-1.jpg: found 54 text boxes in 1.28s
+simple-invoice.png: found 18 text boxes in 0.77s
+contoso-receipt.png: found 19 text boxes in 0.55s
+purchase-order-1.jpg: found 54 text boxes in 1.46s
 ```
 
 **document_texts = {}**
@@ -141,7 +141,8 @@ simple-invoice.png  (similarity: 0.643)
 contoso-receipt.png  (similarity: 0.443)
 
 --- ANSWER ---
-The invoice number is **34278587** and the total charge is **$56,651.49** [Source: simple-invoice.png].
+Invoice number: 34278587 [Source: simple-invoice.png]  
+Total charge: $56,651.49 [Source: simple-invoice.png]
 ```
 
 **print("\n--- EXPLAINABILITY ---")**
@@ -151,11 +152,13 @@ The invoice number is **34278587** and the total charge is **$56,651.49** [Sourc
 
 Document: "simple-invoice.png"
 similarity: 0.643 | USED in answer
-Why: The document displays the Contoso invoice header with "Invoice Number 34278587" and a "Charges" field showing "$56,651.49". These two fields directly provide the invoice number and total charge requested. The layout confirms this is a Contoso invoice issued to Microsoft.
+Why: The document lists the invoice number as 34278587.  
+It shows the total charge amount as $56,651.49 under the Charges column.  
+These fields directly answer the question about the invoice number and total charge.
 
 Document: "contoso-receipt.png"
 similarity: 0.443 | retrieved but NOT used
-Why: The document shows a Contoso receipt with a **Total of $1203.39** (listed at the bottom) and transaction details (date 6/10/2019, items, subtotal $1098.99, tax $104.40). No explicit invoice number appears in the provided text.
+Why: - The receipt shows the total charge as **$1203.39** under the
 ```
 
 **follow_up = "Which items were purchased on the Surface Pro receipt?"**
@@ -167,10 +170,7 @@ Why: The document shows a Contoso receipt with a **Total of $1203.39** (listed a
 0.271  simple-invoice.png
 
 --- ANSWER ---
-The Surface Pro receipt shows the following items purchased:
-
-1. **1 Surface Pro 6** – 256GB / Intel Core i5 / 8GB RAM (Black) [Source: contoso-receipt.png]  
-2. **1 SurfacePen** [Source: contoso-receipt.png]
+The Surface Pro receipt shows two items purchased: a Surface Pro 6 (256 GB, Intel Core i5, 8 GB RAM, Black) and a Surface Pen. [Source: contoso-receipt.png]
 ```
 
 ---
@@ -184,7 +184,7 @@ The Surface Pro receipt shows the following items purchased:
 | **Structuring the OCR output** | RapidOCR's `.to_markdown()` — rebuilds a reading order from the box coordinates, so rows and columns stay roughly aligned instead of turning into a flat list |
 | **Embedding** | `all-MiniLM-L6-v2` via `sentence-transformers` — turns each document's structured text into a 384-dimension vector, runs locally |
 | **Searching for relevant documents** | Cosine similarity (plain NumPy) — compares the question's embedding to every document's embedding, no vector database needed |
-| **Writing the answer** | `nvidia/nemotron-3-ultra-550b-a55b:free` via `langchain-openai` pointed at OpenRouter — a free tier model, so a full run costs nothing |
+| **Writing the answer** | `nvidia/nemotron-3-super-120b-a12b:free` via `langchain-openai` pointed at OpenRouter — a free tier model, so a full run costs nothing |
 | **Downloading the sample documents** | `requests` — grabs each sample invoice/receipt from GitHub and saves it locally |
 | **Secrets** | `python-dotenv` — reads `OPENROUTER_API_KEY` from a `.env` file |
 
@@ -309,7 +309,7 @@ print("Key loaded.")
 
 # A free tier model, so running this lab costs nothing
 llm = ChatOpenAI(
-    model="nvidia/nemotron-3-ultra-550b-a55b:free",
+    model="nvidia/nemotron-3-super-120b-a12b:free",
     api_key=OPENROUTER_API_KEY,
     base_url="https://openrouter.ai/api/v1",
     temperature=0,
