@@ -178,39 +178,130 @@ The practical guidance: RAG is a strong default when your LLM needs to answer qu
 
 ## 8. Environment Setup -- Required Before You Start
 
-Different labs require different external services. The table below summarizes what's needed so you can set up only what you plan to use. Every lab that calls an LLM or embedding API requires at least one set of credentials.
+Different labs require different external services, so set up only what you actually plan to run. There are only two credential families to worry about:
 
-### 8.1 API Keys (all labs that use an LLM)
+- **OpenRouter** — the LLM used by every lab in this module. One key covers all fifteen labs, and each lab uses a `:free` model, so running them costs nothing.
+- **A managed service** — needed only by specific labs: Neo4j Aura (Labs 9, 10, 15), Qdrant Cloud (Labs 3, 4), or PageIndex (Labs 11, 12, 13).
 
-| Credential | Where to get it | Used by |
-|-----------|----------------|---------|
-| **OpenAI API Key** | `platform.openai.com` | Agentic RAG, Graph RAG (NetworkX), MultiVector RAG, OCR RAG (Lab 5), Hybrid RAG, LLM-Wiki (via OpenRouter) |
-| **OpenRouter API Key** | `openrouter.ai` | Classical RAG (Lab 1), OCR RAG (Lab 6), any lab using OpenRouter as a proxy |
-| **AWS Bedrock Credentials** (Access Key, Secret Key, Endpoint URL, Region) | AWS Console -> IAM -> Security Credentials | Vectorless RAG (all 3 labs), LLM-Wiki |
+### 8.1 OpenRouter API Key — needed by every lab
 
-Create a `.env` file in the `RAG-Labs/` root with whichever keys you need:
+All labs call their LLM through [OpenRouter](https://openrouter.ai), which fronts many models behind a single key and offers free tiers. You never need an OpenAI key.
+
+1. Go to [openrouter.ai](https://openrouter.ai) and sign up or log in.
+2. Open the dashboard and go to the **Keys** section.
+3. Click **Create Key**, name it something like `rag-labs`, and confirm.
+4. **Copy the key immediately** — it is shown in full only once.
+5. Put it in a `.env` file **inside each lab folder** you intend to run:
+
 ```
-OPENAI_API_KEY=sk-...
-OPENROUTER_API_KEY=sk-or-...
-AWS_ACCESS_KEY_ID=...
-AWS_SECRET_ACCESS_KEY=...
-AWS_BEDROCK_ENDPOINT_URL=https://...
-AWS_REGION=us-east-1
+OPENROUTER_API_KEY=sk-or-v1-...
 ```
 
-### 8.2 Cloud Database Accounts (specific labs only)
+Each lab reads `.env` from its own directory, so a key in `RAG-Labs/` root is not picked up. Every lab's `.gitignore` already excludes `.env`, so your key will not be committed by accident.
 
-| Service | Free tier | Used by | Setup |
-|---------|----------|---------|-------|
-| **Qdrant Cloud** | Yes (1 GB) | MultiVector RAG (both labs) | Sign up at `cloud.qdrant.io` -> create a cluster -> copy URL + API key into `.env` as `QDRANT_URL` and `QDRANT_API_KEY` |
-| **Neo4j Aura** | Yes (50 GB, 1 project) | Graph RAG (Lab 9), Agentic RAG (Lab 15), Graph-and-Vector (Lab 10) | Sign up at `neo4j.com/cloud/aura-free` -> create an instance -> copy URI, username, password into `.env` as `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD` |
-| **PageIndex API Key** | Varies | Vectorless RAG (all 3 labs) | Sign up at `pageindex.ai` -> copy API key into `.env` as `PAGEINDEX_API_KEY` |
+### 8.2 Neo4j Aura Free — Labs 9, 10, 15
 
-### 8.3 Local Setup
+Neo4j Aura gives you a free cloud graph database with a browser UI you can use to see the graph your lab builds.
+
+1. Go to [console.neo4j.io](https://console.neo4j.io) and sign up or log in.
+2. Click **Create instance**, then choose the **Free** plan. No card is required.
+3. Wait a minute or two while the instance provisions. The status shows in the instances list.
+4. Click the instance, then **Connect** in the sidebar. A credentials dialog appears.
+5. Copy each value into the lab's `.env` file:
+
+```
+NEO4J_URI=neo4j+s://xxxxxxxx.databases.neo4j.io
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=<the generated password>
+NEO4J_DATABASE=neo4j
+```
+
+- `NEO4J_URI` must keep the `neo4j+s://` prefix — that `s` is what enables the encrypted connection Aura requires.
+- On Aura Free the username is literally `neo4j` and the database name is also `neo4j`. If you created a custom instance, these differ and the **Connect** dialog shows the right values.
+- The password is generated for you. If you lose it, use **Reset password** in the same dialog; you cannot view it later.
+
+You can verify the credentials before running any notebook:
+
+```python
+from neo4j import GraphDatabase
+driver = GraphDatabase.driver("neo4j+s://xxx.databases.neo4j.io",
+                              auth=("neo4j", "your-password"))
+driver.verify_connectivity()
+print("connected")
+driver.close()
+```
+
+### 8.3 Qdrant Cloud Free — Labs 3, 4
+
+Qdrant is the vector database for the multi-vector and ColBERT labs. The free tier is 1 GB, which is far more than these labs need.
+
+1. Go to [cloud.qdrant.io](https://cloud.qdrant.io) and sign up or log in.
+2. Click **Create new cluster**. Choose the **Free** tier in the region closest to you.
+3. Wait for the cluster to finish provisioning.
+4. Open the cluster, then go to **API Keys** in the sidebar and click **Create API Key**.
+5. Copy the cluster URL and the key into the lab's `.env`:
+
+```
+QDRANT_URL=https://your-cluster-id.eu-central.aws.cloud.qdrant.io:6333
+QDRANT_API_KEY=...
+```
+
+- Keep the `:6333` port at the end of the URL. Without it the client cannot connect.
+- Name the key after its lab (e.g. `lab-04`) so you can revoke it independently later.
+- Both labs **recreate their collections on every run**, which means anything already in that cluster for those collection names is deleted. Use a dedicated cluster or dedicated collection names if you share one across labs.
+
+### 8.4 PageIndex API Key — Labs 11, 12, 13
+
+PageIndex parses a document into a tree structure, which is what the vectorless labs retrieve over instead of embeddings.
+
+1. Go to [pageindex.ai](https://pageindex.ai) and sign up or log in.
+2. Open the dashboard and find the **API Keys** section.
+3. Click to create a new key and copy it.
+4. Put it in the lab's `.env`:
+
+```
+PAGEINDEX_API_KEY=...
+```
+
+Labs 11, 12 and 13 also need the OpenRouter key from 8.1, so their `.env` files contain both lines.
+
+### 8.5 What each lab needs
+
+| Lab | OpenRouter | Neo4j | Qdrant | PageIndex |
+|-----|-----------|-------|--------|-----------|
+| 1. Classical RAG | yes | | | |
+| 2. Hybrid RAG | yes | | | |
+| 3. Parent-Child Multi-Vector | yes | | yes | |
+| 4. ColBERT Late Interaction | yes | | yes | |
+| 5. Structured OCR | yes | | | |
+| 6. OCR Scanned PDF | yes | | | |
+| 7. LLM Wiki | yes | | | |
+| 8. Graph RAG (NetworkX) | yes | | | |
+| 9. Graph RAG (Neo4j) | yes | yes | | |
+| 10. Graph + Vector Hybrid | yes | yes | | |
+| 11. Vectorless Reasoning | yes | | | yes |
+| 12. Vectorless Multi-Hop | yes | | | yes |
+| 13. Vectorless Table Retrieval | yes | | | yes |
+| 14. Agentic Self-Correction | yes | | | |
+| 15. Agentic Hybrid Routing | yes | yes | | |
+
+### 8.6 Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `AuthenticationError` on any lab | `.env` missing, or in the wrong folder | The file must sit next to the `.ipynb`, not in `RAG-Labs/` |
+| `401 Unauthorized` from OpenRouter | Key copied with a trailing space, or revoked | Re-copy the key; make sure no quotes surround it |
+| `ServiceUnavailable: 503` or `504` | Free-tier model is overloaded | Re-run the cell. These models recover within seconds |
+| `Answer: Empty Response` | Free model returned an empty completion | Re-run the cell; it is transient, not a code bug |
+| `ServiceUnavailable: The client is unable to verify that the certificate is valid` (Neo4j) | Aura needs TLS | Use the `neo4j+s://` URI |
+| `ConnectTimeout` to `qdrant.io` | Missing `:6333` port | Add it to `QDRANT_URL` |
+| Notebook asks for a key interactively | `.env` not found in the lab folder | Create it there; the `input()` prompt is the fallback, not the intended path |
+
+### 8.7 Local Setup
 
 Most embedding models (Sentence Transformers, ColBERT) and OCR libraries (RapidOCR, PyMuPDF) are downloaded automatically on first use. No extra setup is needed beyond running the `!pip install` cell at the top of each notebook.
 
-**That's the whole flow.** Each notebook handles its own `!pip install` cell and credential loading. As long as your `.env` file exists in `RAG-Labs/` with the relevant keys, every lab connects on its own.
+**That's the whole flow.** Each notebook handles its own `!pip install` cell and credential loading. Create the `.env` file inside the specific lab folder using the sections above, and that lab connects on its own.
 
 ---
 
@@ -252,73 +343,40 @@ flowchart LR
 
 ### 9.2 Repository Structure
 
-Each section is a group of folders inside `RAG-Labs/`. Inside each folder, a lab has a notebook (`.ipynb`), a markdown write-up (`.md`), and a matching `lab-<slug>-assignment.md` practice sheet. Every lab and assignment also has a rendered `.html` version (with the standard header and footer) sitting beside its source.
+The repository mirrors the Table of Contents: one folder per section, and inside each section one numbered folder per lab (`lab-NN-<slug>/`). Each lab folder holds everything for that lab -- the notebook (`.ipynb`), the markdown write-up (`.md`), the matching `lab-<slug>-assignment.md` practice sheet, rendered `.html` versions of both, and any `data/` or `requirements.txt` it needs.
 
 ```
 RAG-Labs/
-├── Agentic-RAG/
-│   ├── agentic_lab_1.ipynb        # Lab 14: self-correcting agent
-│   ├── agentic_lab_1.md
-│   ├── agentic_lab_2.ipynb        # Lab 15: dynamic routing agent
-│   └── agentic_lab_2.md
-├── Classical-RAG/
-│   ├── data/
-│   │   └── sample_text_document.pdf
-│   ├── lab_classical_rag.ipynb    # Lab 1: canonical RAG pipeline
-│   └── lab_classical_rag.md
-├── Graph-and-Vector/
-│   ├── vector_graph_hybrid.ipynb  # Lab 10: vector + graph on Neo4j
-│   └── vector_graph_hybrid.md
-├── Graph-RAG/
-│   ├── graph_rag_1.ipynb          # Lab 8: NetworkX knowledge graph
-│   ├── graph_rag_1.md
-│   ├── graph_rag_2.ipynb          # Lab 9: Neo4j knowledge graph
-│   └── graph_rag_2.md
-├── HybridRAG/
-│   ├── data/
-│   │   └── sample_text_document.pdf
-│   ├── lab.ipynb                  # Lab 2: hybrid dense+sparse retrieval
-│   └── lab.md
-├── LLM-Wiki/
-│   ├── data/
-│   │   └── SunFactSheet.pdf
-│   ├── llm_wiki.ipynb             # Lab 7: structured knowledge base
-│   └── llm_wiki.md
-├── MultiVector-RAG/
-│   ├── lab1_langchain.ipynb       # Lab 3: parent-child + summary RAG
-│   ├── lab1_langchain.md
-│   ├── lab2_colbert.ipynb         # Lab 4: ColBERT late interaction
-│   └── lab2_colbert.md
-├── OCR-RAG/
-│   ├── Lab 1/
-│   │   ├── rag_ocr_lab.ipynb      # Lab 5: OCR + Gemini chatbot
-│   │   └── rag_ocr_lab.md
-│   └── Lab 2/
-│       ├── ocr_rag_vision_ai.ipynb # Lab 6: scanned PDF + FAISS
-│       └── ocr_rag_vision_ai.md
-├── Vectorless-RAG/
-│   ├── lab1/
-│   │   ├── vectorless_rag.ipynb   # Lab 11: tree-based retrieval
-│   │   ├── lab1_vectorless_rag.md
-│   │   └── requirements.txt
-│   ├── lab2/
-│   │   ├── vectorless_rag_advanced_1.ipynb # Lab 12: multi-hop retrieval
-│   │   ├── lab2_vectorless_rag_advanced.md
-│   │   └── requirements.txt
-│   └── lab3/
-│       ├── lab3_table_retrieval_1.ipynb # Lab 13: table retrieval
-│       └── lab3.md
-├── learnyst-html/                 # publish-ready bundle, grouped by section
-│   ├── section-1-classical-rag/              # Lab 1
-│   ├── section-2-retrieval-variations/       # Labs 2-4
-│   ├── section-3-structure-and-multimodal/   # Labs 5-7
-│   ├── section-4-knowledge-graphs/           # Labs 8-10
-│   ├── section-5-vectorless/                 # Labs 11-13
-│   └── section-6-adaptive-and-agentic/       # Labs 14-15
-└── README.md                      # this file
+├── section-1-classical-rag/
+│   └── lab-01-classical-rag/               # Lab 1: canonical RAG pipeline
+├── section-2-retrieval-variations/
+│   ├── lab-02-hybrid-rag/                  # Lab 2: dense + sparse, semantic chunking
+│   ├── lab-03-multivector-parent-child/    # Lab 3: parent-child + summary multi-vector
+│   └── lab-04-colbert-late-interaction/    # Lab 4: ColBERT / MaxSim
+├── section-3-structure-and-multimodal/
+│   ├── lab-05-structured-ocr-rag/          # Lab 5: RapidOCR + Gemini chatbot
+│   ├── lab-06-ocr-scanned-pdf-rag/         # Lab 6: scanned PDF + FAISS
+│   └── lab-07-llm-wiki/                    # Lab 7: LLM Wiki + OKF knowledge base
+├── section-4-knowledge-graphs/
+│   ├── lab-08-graph-rag-networkx/          # Lab 8: generalized Graph RAG
+│   ├── lab-09-graph-rag-neo4j/             # Lab 9: Graph RAG on Neo4j
+│   └── lab-10-graph-vector-hybrid/         # Lab 10: vector + graph on Neo4j
+├── section-5-vectorless/
+│   ├── lab-11-vectorless-reasoning-retrieval/   # Lab 11
+│   ├── lab-12-vectorless-multihop/              # Lab 12
+│   └── lab-13-vectorless-table-retrieval/       # Lab 13
+├── section-6-adaptive-and-agentic/
+│   ├── lab-14-agentic-rag-self-correction/ # Lab 14: LangGraph self-correction
+│   └── lab-15-agentic-hybrid-routing/      # Lab 15: dynamic routing
+├── section-7-capstone/
+│   └── lab-16-agentic-research-assistant/  # Capstone: 8-document design-and-build spec
+├── learnyst-html/                          # publish-ready bundle, grouped by section (NN-lab.html / NN-assignment.html)
+├── RAG-Labs-Table-of-Contents.html         # course table of contents
+├── MOVE_MAP.md                             # old -> new path for every moved lab
+└── README.md                               # this file
 ```
 
-Open the `.ipynb` to run a lab; read the matching `.md` for the full explanation. Every lab also ships a `lab-<slug>-assignment.md` practice sheet of coding problems (with a matching `.html`). The `learnyst-html/` folder is the publish-ready bundle: each section holds its labs as `NN-lab.html` plus `NN-assignment.html`, numbered sequentially 01-15 in the order listed above. Some labs (Vectorless-RAG) include a `requirements.txt` -- run `pip install -r requirements.txt` before the notebook if present.
+Open the `.ipynb` inside a lab folder to run it; read the matching `.md` for the full explanation. Section folders are numbered 1-6 (plus 7 for the capstone) in the same order as the TOC, and `learnyst-html/` uses the same section names, numbered sequentially 01-15. Some labs (Vectorless) include a `requirements.txt` -- run `pip install -r requirements.txt` before the notebook if present.
 
 ---
 
