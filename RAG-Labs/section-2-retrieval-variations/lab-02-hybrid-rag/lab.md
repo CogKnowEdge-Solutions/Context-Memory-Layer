@@ -1,7 +1,5 @@
 # Hybrid RAG (Dense + Sparse) with Semantic Chunking
 
-**Difficulty:** Intermediate | **Time:** ~40 min | **Requires:** Basic RAG and embedding familiarity
-
 ---
 
 # Problem Statement / Use Case Overview
@@ -548,25 +546,19 @@ The notebook reads this file automatically, and falls back to prompting you inte
 
 ### Setup — Import Libraries
 
-This cell loads every tool the pipeline needs, grouped by role: the core pieces for building an index and querying it, the two retrievers that make up the "hybrid" part along with the tool that fuses them, and the LLM and embedding integrations that do the reading and understanding.
+This cell loads every tool the pipeline needs: the core pieces for building an index and querying it, the two retrievers that make up the "hybrid" part along with the tool that fuses them, and the LLM integration.
 
 ```python
 import os
-from dotenv import load_dotenv
 
-# Core LlamaIndex components
+from dotenv import load_dotenv
 from llama_index.core import VectorStoreIndex, Settings
 from llama_index.core.node_parser import SemanticSplitterNodeParser
-from llama_index.readers.file import PDFReader
 from llama_index.core.query_engine import RetrieverQueryEngine
-
-# Hybrid Search Specifics
-from llama_index.retrievers.bm25 import BM25Retriever
 from llama_index.core.retrievers import QueryFusionRetriever
-
-# LLM and Embedding integrations
 from llama_index.llms.openrouter import OpenRouter
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.readers.file import PDFReader
+from llama_index.retrievers.bm25 import BM25Retriever
 ```
 
 ### Setup — Silence Noisy Logs
@@ -574,27 +566,24 @@ from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 This cell doesn't touch the pipeline at all — it's purely there to keep the notebook's output readable.
 
 ```python
-import warnings
 import logging
+import warnings
 
-# Silence general Python warnings
 warnings.filterwarnings("ignore")
 
-# Silence HuggingFace download / info logs
-logging.getLogger("transformers").setLevel(logging.ERROR)
-logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
-logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
-logging.getLogger("httpx").setLevel(logging.ERROR)
+for noisy in ("transformers", "sentence_transformers", "huggingface_hub", "httpx"):
+    logging.getLogger(noisy).setLevel(logging.ERROR)
+```
 
-# bm25s (behind the BM25Retriever) logs a DEBUG line every time it builds its
-# index. It attaches its own handler at import time, so stopping propagation is
-# what actually silences it -- setLevel alone leaves the line in place.
+`bm25s`, the library behind `BM25Retriever`, needs one extra step. It logs a DEBUG line every time it builds its index, and it attaches its own handler at import time — so it has to be stopped from propagating to the root logger. Setting its level alone leaves the line on screen.
+
+```python
 bm25_logger = logging.getLogger("bm25s")
 bm25_logger.setLevel(logging.ERROR)
 bm25_logger.propagate = False
 ```
 
-It suppresses routine warning, info, and debug messages from the underlying libraries, so only meaningful output shows up in later cells. The `bm25s` block is the one that matters visually: without it, a stray `Building index from IDs objects` DEBUG line lands in the middle of Step 2's output, right between the code and the confirmation message.
+The `bm25s` block is the one that matters visually. Without it, a stray `Building index from IDs objects` DEBUG line lands in the middle of Step 2's output, right between the code and the confirmation message.
 
 ### Setup — Load API Keys & Configure LlamaIndex Settings
 

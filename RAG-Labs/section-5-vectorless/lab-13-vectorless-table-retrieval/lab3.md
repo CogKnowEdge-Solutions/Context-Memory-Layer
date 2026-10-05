@@ -1,7 +1,5 @@
 # Vectorless RAG: Structured Table Retrieval with Explainability Tracking
 
-**Difficulty:** Intermediate | **Time:** ~45 min | **Requires:** Lab 11 (Vectorless RAG)
-
 ---
 
 # Problem Statement / Use Case Overview
@@ -148,25 +146,19 @@ The cell below installs all required Python packages:
 | `requests` | Downloads the PDF from a link |
 
 ```python
-# Install our required libraries.
-# We use PageIndex to keep tables intact, and LangChain's AWS Bedrock wrapper for the LLM.
 !pip install pageindex langchain-aws boto3 requests
 ```
 
 ## Import Libraries
 
 ```python
-# Import core modules
 import os
 import time
 import re
 import requests
 
-# Import PageIndex for vectorless retrieval
 from pageindex import PageIndexClient
 import pageindex.utils as utils
-
-# Import LangChain's AWS Bedrock wrapper
 from langchain_aws import ChatBedrockConverse
 ```
 
@@ -270,26 +262,16 @@ Temperature is kept low so the model sticks to the actual numbers instead of rou
 
 ### Step 4 — Define the Table-Safe Retrieval Function
 
-This function sends the question to the tree and pulls back the top matching table(s), whole. For each one, it records the table title, the node's unique ID, and the page number(s) — the same kind of explainability information used for tracking sections, just applied here to whole tables.
+These three small functions send the question to the tree and pull back the top matching table(s), whole. For each one, they record the table title, the node's unique ID, and the page number(s) — the same kind of explainability information used for tracking sections, just applied here to whole tables.
 
 ```python
-def retrieve_from_pageindex(query, doc_id, top_k=2):
-    """
-    Retrieves whole logical sections (like full tables) that match the query.
-    Every table returned here is tagged with:
-      - which table it was (1st match, 2nd match, ...)
-      - the section/table title
-      - the node id (the tree's unique ID for that section)
-      - the page number(s) the table came from
-    This metadata is what lets us explain WHY a table was picked, later.
-    """
+def fetch_retrieved_nodes(query, doc_id):
+    """Submit the query to PageIndex and poll until the search finishes."""
     response = pi_client.submit_query(doc_id=doc_id, query=query)
     retrieval_id = response.get("retrieval_id")
-
     if not retrieval_id:
         return []
 
-    # Poll until the search finishes
     while True:
         retrieval = pi_client.get_retrieval(retrieval_id)
         status = retrieval.get("status")
@@ -299,40 +281,41 @@ def retrieve_from_pageindex(query, doc_id, top_k=2):
             return []
         time.sleep(1)
 
-    nodes = retrieval.get("retrieved_nodes", [])
-    tables = []
+    return retrieval.get("retrieved_nodes", [])
+```
 
-    # Extract the full tables/sections, one at a time
-    for index, node in enumerate(nodes[:top_k]):
-        node_name = node.get("title") or f"Table {index + 1}"
-        node_id = node.get("id", "unknown")  # PageIndex returns the node's ID under "id"
-        relevant_contents = node.get("relevant_contents", [])
+Each matching node then becomes a table entry, tagged with the metadata that explains WHY it was picked:
 
-        section_text = []
-        page_numbers = []
-        for group in relevant_contents:
-            for item in group:
-                content = item.get("relevant_content")
-                if content:
-                    section_text.append(content)
+```python
+def node_to_table(node, index):
+    node_name = node.get("title") or f"Table {index + 1}"
+    node_id = node.get("id", "unknown")
 
-                # page number is embedded in a string like "<physical_index_6>"
-                raw_page = item.get("physical_index", "")
-                match = re.search(r"(\d+)", raw_page) if isinstance(raw_page, str) else None
-                if match:
-                    page_num = int(match.group(1))
-                    if page_num not in page_numbers:
-                        page_numbers.append(page_num)
+    section_text = []
+    page_numbers = []
+    for group in node.get("relevant_contents", []):
+        for item in group:
+            content = item.get("relevant_content")
+            if content:
+                section_text.append(content)
 
-        tables.append({
-            "table_number": index + 1,
-            "section": node_name,
-            "node_id": node_id,
-            "pages": page_numbers,
-            "text": "\n".join(section_text)
-        })
+            raw_page = item.get("physical_index", "")  # looks like "<physical_index_6>"
+            match = re.search(r"(\d+)", raw_page) if isinstance(raw_page, str) else None
+            if match:
+                page_num = int(match.group(1))
+                if page_num not in page_numbers:
+                    page_numbers.append(page_num)
 
-    return tables
+    return {"table_number": index + 1, "section": node_name, "node_id": node_id,
+            "pages": page_numbers, "text": "\n".join(section_text)}
+```
+
+And the two are joined under the name the rest of the lab calls:
+
+```python
+def retrieve_from_pageindex(query, doc_id, top_k=2):
+    nodes = fetch_retrieved_nodes(query, doc_id)
+    return [node_to_table(node, i) for i, node in enumerate(nodes[:top_k])]
 ```
 
 **What's happening here, step by step:**
@@ -346,22 +329,10 @@ def retrieve_from_pageindex(query, doc_id, top_k=2):
 
 ### Step 5 — Combine the Tables and Ask the LLM, With Citations
 
+The prompt is defined on its own so it can be read without function logic in the way. Note what it insists on: every number tagged with its table, like `[Table 1]` — that tag is what powers the explainability report later.
+
 ```python
-def vectorless_rag(query, doc_id):
-    # Get the preserved table data, tagged with table number, node id, and pages
-    tables = retrieve_from_pageindex(query, doc_id)
-
-    if not tables:
-        return "No relevant context found.", [], ""
-
-    # Label each table clearly so the LLM can refer back to it (e.g. "[Table 1]")
-    labeled_context = "\n\n".join(
-        f"[Table {t['table_number']} - {t['section']}]\n{t['text']}" for t in tables
-    )
-
-    # Prompt updated to handle structured data carefully, and to cite which
-    # table each fact came from -- this is what powers the explainability report
-    prompt = f"""
+prompt_template = """
 You are a financial data analyst. Answer the question ONLY using the provided text/tables below.
 Pay strict attention to table rows, columns, and footnotes. Do not round numbers unless asked.
 
@@ -375,11 +346,23 @@ Context:
 
 Question: {query}
 """
+```
 
+Then the function: retrieve, label each table clearly so the LLM can refer back to it (e.g. `[Table 1]`), fill the prompt, and answer.
+
+```python
+def vectorless_rag(query, doc_id):
+    tables = retrieve_from_pageindex(query, doc_id)
+
+    if not tables:
+        return "No relevant context found.", [], ""
+
+    labeled_context = "\n\n".join(
+        f"[Table {t['table_number']} - {t['section']}]\n{t['text']}" for t in tables
+    )
+    prompt = prompt_template.format(labeled_context=labeled_context, query=query)
     response = llm.invoke(prompt)
-    final_answer = response.content
-
-    return final_answer, tables, labeled_context
+    return response.content, tables, labeled_context
 ```
 
 This ties it together — it calls the retrieval function, labels each table clearly in the context (e.g. `[Table 1 - Consolidated Balance Sheets]`), and tells the LLM to tag every number it uses with the table it came from. That tag is what makes the explainability check in the next step possible, without needing another LLM call just to figure out what was used.

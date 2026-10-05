@@ -42,7 +42,6 @@ pre code{background:none;padding:0;font-family:'SFMono-Regular',Consolas,'Libera
 </p>
 
 <h1>End-to-End Generalized Graph RAG</h1>
-<p><strong>Difficulty:</strong> Advanced | <strong>Time:</strong> ~50 min | <strong>Requires:</strong> Basic RAG and knowledge-graph familiarity</p>
 <hr/>
 <h2>Problem Statement / Use Case Overview</h2>
 <p>A normal RAG pipeline finds chunks of text that are <em>similar</em> to a question and hands them to an LLM. But similarity isn't the same as connection — it can miss how one fact actually links to another, especially when the answer depends on following a chain of relationships rather than just matching keywords.</p>
@@ -193,24 +192,27 @@ PDF_PATH = os.path.<span style="color:#61afef;">join</span>(<span style="color:#
 <hr/>
 <h3>Step 3 — Domain-Agnostic Entity Extraction</h3>
 <p>This step asks the LLM to read the text and return a structured list of relationships, with no fixed list of entity types to look for — it works the same way regardless of what the document is about.</p>
+<p>The prompt lives at module level so the function stays readable:</p>
+<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;">EXTRACT_PROMPT = <span style="color:#98c379;">&quot;&quot;&quot;</span>
+<span style="color:#98c379;">You are an expert knowledge graph builder. Read the text below and extract all key entities and their relationships.</span>
+
+<span style="color:#98c379;">Text:</span>
+<span style="color:#98c379;">{text}</span>
+
+<span style="color:#98c379;">CRITICAL INSTRUCTIONS:</span>
+<span style="color:#98c379;">Output ONLY a valid JSON list of objects with keys &quot;source&quot;, &quot;relation&quot;, and &quot;target&quot;.</span>
+<span style="color:#98c379;">Example format:</span>
+<span style="color:#98c379;">[</span>
+<span style="color:#98c379;">  {{&quot;source&quot;: &quot;Entity_A&quot;, &quot;relation&quot;: &quot;RELATES_TO&quot;, &quot;target&quot;: &quot;Entity_B&quot;}},</span>
+<span style="color:#98c379;">  {{&quot;source&quot;: &quot;Entity_C&quot;, &quot;relation&quot;: &quot;CAUSES&quot;, &quot;target&quot;: &quot;Entity_D&quot;}}</span>
+<span style="color:#98c379;">]</span>
+<span style="color:#98c379;">Do not add any Markdown code blocks, explanations, or introductory text. Return ONLY pure JSON.</span>
+<span style="color:#98c379;">&quot;&quot;&quot;</span>
+</div></div>
+<p>The function itself is then just the HTTP call and the JSON unwrapping:</p>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#c678dd;">def</span> <span style="color:#61afef;">extract_graph_elements</span>(text):
     <span style="color:#98c379;">&quot;&quot;&quot;Uses LLM to convert raw text into structured Nodes and Edges.&quot;&quot;&quot;</span>
-
-    prompt = <span style="color:#98c379;">f&quot;&quot;&quot;</span>
-<span style="color:#98c379;">    You are an expert knowledge graph builder. Read the text below and extract all key entities and their relationships.</span>
-
-<span style="color:#98c379;">    Text:</span>
-<span style="color:#98c379;">    {</span>text<span style="color:#98c379;">}</span>
-
-<span style="color:#98c379;">    CRITICAL INSTRUCTIONS:</span>
-<span style="color:#98c379;">    Output ONLY a valid JSON list of objects with keys &quot;source&quot;, &quot;relation&quot;, and &quot;target&quot;.</span>
-<span style="color:#98c379;">    Example format:</span>
-<span style="color:#98c379;">    [</span>
-<span style="color:#98c379;">      {{&quot;source&quot;: &quot;Entity_A&quot;, &quot;relation&quot;: &quot;RELATES_TO&quot;, &quot;target&quot;: &quot;Entity_B&quot;}},</span>
-<span style="color:#98c379;">      {{&quot;source&quot;: &quot;Entity_C&quot;, &quot;relation&quot;: &quot;CAUSES&quot;, &quot;target&quot;: &quot;Entity_D&quot;}}</span>
-<span style="color:#98c379;">    ]</span>
-<span style="color:#98c379;">    Do not add any Markdown code blocks, explanations, or introductory text. Return ONLY pure JSON.</span>
-<span style="color:#98c379;">    &quot;&quot;&quot;</span>
+    prompt = EXTRACT_PROMPT.<span style="color:#61afef;">format</span>(text=text)
 
     payload = {
         <span style="color:#98c379;">&quot;model&quot;</span>: TEXT_MODEL,
@@ -224,7 +226,6 @@ PDF_PATH = os.path.<span style="color:#61afef;">join</span>(<span style="color:#
         resp.<span style="color:#61afef;">raise_for_status</span>()
         raw_json = resp.<span style="color:#61afef;">json</span>()[<span style="color:#98c379;">&quot;choices&quot;</span>][<span style="color:#d19a66;">0</span>][<span style="color:#98c379;">&quot;message&quot;</span>][<span style="color:#98c379;">&quot;content&quot;</span>].<span style="color:#61afef;">strip</span>()
 
-        <span style="color:#7f848e;font-style:italic;"># Clean up unexpected markdown</span>
         <span style="color:#c678dd;">if</span> raw_json.<span style="color:#61afef;">startswith</span>(<span style="color:#98c379;">&quot;```&quot;</span>):
             raw_json = raw_json.<span style="color:#61afef;">split</span>(<span style="color:#98c379;">&quot;\n&quot;</span>, <span style="color:#d19a66;">1</span>)[<span style="color:#d19a66;">1</span>].<span style="color:#61afef;">rsplit</span>(<span style="color:#98c379;">&quot;```&quot;</span>, <span style="color:#d19a66;">1</span>)[<span style="color:#d19a66;">0</span>].<span style="color:#61afef;">strip</span>()
 
@@ -232,8 +233,9 @@ PDF_PATH = os.path.<span style="color:#61afef;">join</span>(<span style="color:#
     <span style="color:#c678dd;">except</span> Exception <span style="color:#c678dd;">as</span> e:
         <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;Extraction Error: {</span>e<span style="color:#98c379;">}&quot;</span>)
         <span style="color:#c678dd;">return</span> []
-
-extracted_relationships = <span style="color:#61afef;">extract_graph_elements</span>(sample_text)
+</div></div>
+<p>Run it against the sample text and inspect what came back:</p>
+<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;">extracted_relationships = <span style="color:#61afef;">extract_graph_elements</span>(sample_text)
 <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;Extracted {</span><span style="color:#61afef;">len</span>(extracted_relationships)<span style="color:#98c379;">} relationships:\n&quot;</span>)
 <span style="color:#61afef;">print</span>(json.<span style="color:#61afef;">dumps</span>(extracted_relationships, indent=<span style="color:#d19a66;">2</span>))
 </div></div>
@@ -290,52 +292,44 @@ extracted_relationships = <span style="color:#61afef;">extract_graph_elements</s
 <hr/>
 <h3>Step 6 — The Generalized RAG Engine</h3>
 <p>This step ties everything together: find the entity, gather its connected facts, and ask the LLM for a direct answer plus an explainability trace, all in one function.</p>
+<p>The prompt is defined once, outside the function, so the pipeline logic stays easy to follow:</p>
+<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;">QA_TEMPLATE = <span style="color:#98c379;">&quot;&quot;&quot;</span>
+<span style="color:#98c379;">You are an expert AI research assistant using a Knowledge Graph.</span>
+<span style="color:#98c379;">Answer the question using ONLY the connected relationship paths provided below.</span>
+
+<span style="color:#98c379;">Graph Relationships:</span>
+<span style="color:#98c379;">{facts_block}</span>
+
+<span style="color:#98c379;">Question: {question}</span>
+
+<span style="color:#98c379;">CRITICAL INSTRUCTIONS:</span>
+<span style="color:#98c379;">Output your response in EXACTLY two sections as shown below.</span>
+
+<span style="color:#98c379;">--- FINAL ANSWER ---</span>
+<span style="color:#98c379;">[Provide a direct, simple, 1-sentence answer.]</span>
+
+<span style="color:#98c379;">--- AI TRACING &amp; EXPLAINABILITY ---</span>
+<span style="color:#98c379;">[Explain step-by-step how the answer was derived from the graph. Use an objective, third-person perspective. Do NOT use first-person pronouns like &quot;I&quot; or &quot;my&quot;.]</span>
+<span style="color:#98c379;">&quot;&quot;&quot;</span>
+</div></div>
+<p>If no matching entity is found at all, the function stops early and lists a few known concepts instead of guessing. Otherwise it walks the graph, formats the connected facts into a clean bullet list, and hands them to the LLM with strict formatting instructions.</p>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#c678dd;">def</span> <span style="color:#61afef;">execute_graph_rag</span>(question):
     <span style="color:#98c379;">&quot;&quot;&quot;A fully generalized Graph RAG pipeline.&quot;&quot;&quot;</span>
-
-    <span style="color:#7f848e;font-style:italic;"># Step 1: Identify which known graph entity the question refers to</span>
     target_entity = <span style="color:#61afef;">find_node_in_question</span>(question, G)
-
     <span style="color:#c678dd;">if</span> <span style="color:#c678dd;">not</span> target_entity:
         <span style="color:#c678dd;">return</span> <span style="color:#98c379;">f&quot;Could not find any known concepts in your question. Known concepts: {</span><span style="color:#61afef;">list</span>(G.nodes)[:<span style="color:#d19a66;">5</span>]<span style="color:#98c379;">}...&quot;</span>
 
     <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;[System Log] Auto-detected focus concept: &#39;{</span>target_entity<span style="color:#98c379;">}&#39;&quot;</span>)
-
-    <span style="color:#7f848e;font-style:italic;"># Step 2: Retrieve connected facts (subgraph) around the detected entity</span>
     retrieved_facts = <span style="color:#61afef;">traverse_subgraph</span>(G, target_entity, radius=<span style="color:#d19a66;">2</span>)
     <span style="color:#c678dd;">if</span> <span style="color:#c678dd;">not</span> retrieved_facts:
         <span style="color:#c678dd;">return</span> <span style="color:#98c379;">f&quot;Found the concept &#39;{</span>target_entity<span style="color:#98c379;">}&#39;, but no relationships are connected to it.&quot;</span>
 
     facts_block = <span style="color:#98c379;">&quot;\n&quot;</span>.<span style="color:#61afef;">join</span>([<span style="color:#98c379;">f&quot;- {</span>f<span style="color:#98c379;">}&quot;</span> <span style="color:#c678dd;">for</span> f <span style="color:#c678dd;">in</span> retrieved_facts])
-
-    <span style="color:#7f848e;font-style:italic;"># Step 3: Build a grounded prompt so the LLM answers only from retrieved graph facts</span>
-    prompt = <span style="color:#98c379;">f&quot;&quot;&quot;</span>
-<span style="color:#98c379;">    You are an expert AI research assistant using a Knowledge Graph.</span>
-<span style="color:#98c379;">    Answer the question using ONLY the connected relationship paths provided below.</span>
-
-<span style="color:#98c379;">    Graph Relationships:</span>
-<span style="color:#98c379;">    {</span>facts_block<span style="color:#98c379;">}</span>
-
-<span style="color:#98c379;">    Question: {</span>question<span style="color:#98c379;">}</span>
-
-<span style="color:#98c379;">    CRITICAL INSTRUCTIONS:</span>
-<span style="color:#98c379;">    Output your response in EXACTLY two sections as shown below.</span>
-
-<span style="color:#98c379;">    --- FINAL ANSWER ---</span>
-<span style="color:#98c379;">    [Provide a direct, simple, 1-sentence answer.]</span>
-
-<span style="color:#98c379;">    --- AI TRACING &amp; EXPLAINABILITY ---</span>
-<span style="color:#98c379;">    [Explain step-by-step how the answer was derived from the graph. Use an objective, third-person perspective. Do NOT use first-person pronouns like &quot;I&quot; or &quot;my&quot;.]</span>
-<span style="color:#98c379;">    &quot;&quot;&quot;</span>
-
-    payload = {
-        <span style="color:#98c379;">&quot;model&quot;</span>: TEXT_MODEL,
-        <span style="color:#98c379;">&quot;messages&quot;</span>: [{<span style="color:#98c379;">&quot;role&quot;</span>: <span style="color:#98c379;">&quot;user&quot;</span>, <span style="color:#98c379;">&quot;content&quot;</span>: prompt}],
-        <span style="color:#98c379;">&quot;temperature&quot;</span>: <span style="color:#d19a66;">0.0</span>
-    }
+    prompt = QA_TEMPLATE.<span style="color:#61afef;">format</span>(facts_block=facts_block, question=question)
+    payload = {<span style="color:#98c379;">&quot;model&quot;</span>: TEXT_MODEL,
+               <span style="color:#98c379;">&quot;messages&quot;</span>: [{<span style="color:#98c379;">&quot;role&quot;</span>: <span style="color:#98c379;">&quot;user&quot;</span>, <span style="color:#98c379;">&quot;content&quot;</span>: prompt}],
+               <span style="color:#98c379;">&quot;temperature&quot;</span>: <span style="color:#d19a66;">0.0</span>}
     headers = {<span style="color:#98c379;">&quot;Authorization&quot;</span>: <span style="color:#98c379;">f&quot;Bearer {</span>OPENROUTER_API_KEY<span style="color:#98c379;">}&quot;</span>}
-
-    <span style="color:#7f848e;font-style:italic;"># Step 4: Call the LLM and return its answer</span>
     <span style="color:#c678dd;">try</span>:
         resp = requests.<span style="color:#61afef;">post</span>(OPENROUTER_URL, headers=headers, json=payload)
         resp.<span style="color:#61afef;">raise_for_status</span>()
@@ -343,7 +337,6 @@ extracted_relationships = <span style="color:#61afef;">extract_graph_elements</s
     <span style="color:#c678dd;">except</span> Exception <span style="color:#c678dd;">as</span> e:
         <span style="color:#c678dd;">return</span> <span style="color:#98c379;">f&quot;Error executing Graph RAG: {</span>e<span style="color:#98c379;">}&quot;</span>
 </div></div>
-<p>If no matching entity is found at all, the function stops early and lists a few known concepts instead of guessing. Otherwise, the connected facts are formatted into a clean bullet list and handed to the LLM along with strict formatting instructions, so the reply always separates the direct answer from the reasoning trace.</p>
 <hr/>
 <h3>Step 7 — Test the Pipeline</h3>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;">query_1 = <span style="color:#98c379;">&quot;What mechanism does the Transformer architecture rely on?&quot;</span>

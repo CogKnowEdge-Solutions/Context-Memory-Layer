@@ -1,7 +1,5 @@
 # Automated Ingestion: Building a Structured Knowledge Base (LLM Wiki + OKF)
 
-**Difficulty:** Intermediate | **Time:** ~45 min | **Requires:** Basic RAG familiarity and AWS Bedrock credentials
-
 ---
 
 # Problem Statement / Use Case Overview
@@ -215,9 +213,6 @@ import PyPDF2
 from dotenv import load_dotenv
 from langchain_aws import ChatBedrockConverse
 import requests
-
-# --- ALTERNATIVE: If using Azure OpenAI instead of AWS Bedrock, uncomment the line below ---
-# from langchain_openai import AzureChatOpenAI
 ```
 
 | Import | Purpose |
@@ -232,34 +227,22 @@ import requests
 ## Configure AWS Bedrock Credentials and the LLM
 
 ```python
-# --- Configure AWS Bedrock credentials ---
 os.environ["AWS_ACCESS_KEY_ID"]     = "YOUR_ACCESS_KEY_ID"
 os.environ["AWS_SECRET_ACCESS_KEY"] = "YOUR_SECRET_ACCESS_KEY"
 os.environ["AWS_ENDPOINT_URL"]      = "https://api.enterprisesi.co/api/v1/aws-genai/bedrock-runtime"
 os.environ["AWS_REGION"]            = "ap-south-1"
 
 print("AWS Bedrock credentials configured.")
+```
 
-# --- ALTERNATIVE: If using Azure OpenAI instead of AWS Bedrock, comment out the AWS block
-# above and uncomment the two lines below (only the API key and endpoint are needed) ---
-# os.environ["AZURE_OPENAI_API_KEY"]  = "YOUR_AZURE_OPENAI_API_KEY"
-# os.environ["AZURE_OPENAI_ENDPOINT"] = "YOUR_AZURE_OPENAI_ENDPOINT"
+If you are on Azure OpenAI instead of AWS Bedrock, set `AZURE_OPENAI_API_KEY` and `AZURE_OPENAI_ENDPOINT` the same way, then build the client with `AzureChatOpenAI(azure_deployment="gpt-5-mini", api_version="2024-12-01-preview", temperature=0.0, max_tokens=8000)` in place of the block below.
 
-# Initialize the ChatBedrockConverse model
+```python
 llm = ChatBedrockConverse(
     model="global.amazon.nova-2-lite-v1:0",
     temperature=0.0,
     max_tokens=8000
 )
-
-# --- ALTERNATIVE: If using Azure OpenAI instead of AWS Bedrock, comment out the block above
-# and uncomment the block below ---
-# llm = AzureChatOpenAI(
-#     azure_deployment="gpt-5-mini",   # your Azure deployment name for gpt-5-mini
-#     api_version="2024-12-01-preview",
-#     temperature=0.0,
-#     max_tokens=8000
-# )
 ```
 
 This one LLM connection is reused for everything later in the notebook — extracting facts, picking relevant files, and answering the question.
@@ -313,6 +296,8 @@ This is the heart of the knowledge-base-building half of the lab. It's easiest t
 - **The request** — it sends the PDF text along with those instructions to the LLM, asking it to stay factual and consistent rather than creative, with enough room in the reply to list out a large number of facts.
 - **Reading the reply** — the AI's answer is converted from plain text into a usable list of facts, `concepts`. If the reply comes back broken or incomplete, this step catches the problem instead of crashing, and just continues with an empty list.
 
+First the instructions, kept as one reusable string:
+
 ```python
 system_prompt = """
 You are a data extraction assistant. Read the text below and extract every distinct technical fact or value present in the source.
@@ -335,7 +320,11 @@ Respond in JSON only, matching this format:
 }
 Output ONLY the JSON. No extra text, no markdown formatting blocks.
 """
+```
 
+Then the request, and the reply-reading half: strip any code fence the model wrapped its JSON in, parse it, and fall back to an empty list rather than crashing if it came back malformed.
+
+```python
 print("Sending document to AWS Bedrock for extraction...")
 
 prompt = f"{system_prompt}\n\nDocument Text:\n{raw_text}"
@@ -404,7 +393,6 @@ This makes sure the `output_wiki` folder exists, and starts the master index fil
 **Part 2 — Writing the files:**
 
 ```python
-# Loop through the extracted data and create the markdown files
 for concept in concepts:
     filename = concept['filename'].replace(" ", "_").lower()
     if not filename.endswith('.md'):
@@ -412,7 +400,6 @@ for concept in concepts:
 
     file_path = os.path.join(output_dir, filename)
 
-    # Format the OKF content (Metadata Layer + Content Layer)
     okf_content = f"""type: {concept['type']}
 title: {concept['title']}
 tags: {concept['tags']}
@@ -423,13 +410,11 @@ description: {concept['description']}
 {concept['content']}
 """
 
-    # Write the individual concept file
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(okf_content)
 
     print(f"Created: {filename}")
 
-    # Safely append to the Master Index
     with open(index_path, "a", encoding="utf-8") as f:
         f.write(f"- **{filename}**: {concept['description']}\n")
 ```
@@ -465,6 +450,8 @@ flowchart LR
     class Q,P1,D,S defaultStyle
 ```
 
+Load the index built in Step 3 and ask the narrow question: which file(s) cover this topic?
+
 ```python
 index_path = "output_wiki/index.md"
 with open(index_path, "r", encoding="utf-8") as f:
@@ -488,7 +475,11 @@ Table of Contents:
 
 User Question: {user_query}
 """
+```
 
+Send it, and unwrap the JSON if the model fenced it:
+
+```python
 response_1 = llm.invoke(prompt_1)
 raw_content_1 = response_1.content.strip()
 
@@ -497,7 +488,11 @@ if raw_content_1.startswith("```"):
     if raw_content_1.startswith("json"):
         raw_content_1 = raw_content_1[4:]
     raw_content_1 = raw_content_1.strip()
+```
 
+Then read the file list off the reply. Nothing has been opened or read in full yet — these are just the names the librarian pointed at.
+
+```python
 retrieval_data = json.loads(raw_content_1)
 selected_files = retrieval_data.get("files_to_read", [])
 
@@ -506,7 +501,7 @@ for file in selected_files:
     print(f" - {file}")
 ```
 
-The index built in Step 3 is loaded, along with the question. The AI is given one narrow job — act like a librarian, look at the table of contents, and point out which specific file(s) actually cover the topic being asked about. It replies with a short, clean list of just the filenames it thinks are relevant — nothing has been opened or read in full yet.
+The AI's one narrow job was to act like a librarian, look at the table of contents, and point out which specific file(s) actually cover the topic being asked about. It replies with a short, clean list of just the filenames it thinks are relevant.
 
 ---
 
@@ -524,12 +519,12 @@ flowchart LR
     class S,L,P2,R defaultStyle
 ```
 
+Open only the files chosen in Step 5, labeling each one so the reply can cite it:
+
 ```python
-# Load only the selected files and get the answer
 output_dir = "output_wiki"
 loaded_context = ""
 
-# Load only the files the LLM asked for
 for filename in selected_files:
     file_path = os.path.join(output_dir, filename)
     if os.path.exists(file_path):
@@ -537,7 +532,11 @@ for filename in selected_files:
             loaded_context += f"--- START OF {filename} ---\n{f.read()}\n--- END OF {filename} ---\n\n"
     else:
         print(f"Warning: {filename} not found on disk.")
+```
 
+This time the instruction changes: don't just give an answer, show the reasoning behind it too.
+
+```python
 qa_system_prompt = """
 You are an explainable AI system answering user questions using ONLY the provided text from the markdown files.
 
@@ -558,7 +557,11 @@ Provided Context:
 
 User Question: {user_query}
 """
+```
 
+Send it and unwrap the reply:
+
+```python
 response_2 = llm.invoke(prompt_2)
 raw_content_2 = response_2.content.strip()
 
@@ -571,7 +574,7 @@ if raw_content_2.startswith("```"):
 print("Done")
 ```
 
-Only the files chosen in Step 5 are opened, and their full content is collected together, clearly labeled by filename. That content is sent to the AI along with the original question, but with a different instruction this time: don't just give an answer, show the reasoning behind it too. The AI is asked to return three things together — the reasoning it followed, the exact files it relied on, and the final answer — which is what makes the result explainable instead of just a plain, unverifiable reply.
+The AI returns three things together — the reasoning it followed, the exact files it relied on, and the final answer — which is what makes the result explainable instead of just a plain, unverifiable reply.
 
 ---
 

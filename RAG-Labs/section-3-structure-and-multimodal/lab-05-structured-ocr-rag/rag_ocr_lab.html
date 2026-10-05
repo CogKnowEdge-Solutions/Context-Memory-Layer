@@ -42,7 +42,6 @@ pre code{background:none;padding:0;font-family:'SFMono-Regular',Consolas,'Libera
 </p>
 
 <h1>Structured OCR + RAG Chatbot: Chatting with Scanned Invoices</h1>
-<p><strong>Difficulty:</strong> Intermediate | <strong>Time:</strong> ~40 min | <strong>Requires:</strong> Basic RAG familiarity</p>
 <hr/>
 <h2>Problem Statement / Use Case Overview</h2>
 <p>An accounts-payable clerk has three scanned documents: an invoice, a receipt, and a purchase order. Someone asks, "what was the invoice number and total on the Contoso invoice?" To answer that at all, the text has to be pulled out of the images first — and that is where a basic OCR setup falls apart. It reads every text box on the page but throws away the layout, so the invoice's neat rows and columns become a jumbled bag of words. Once <code>Invoice Number</code> and <code>34278587</code> are no longer neighbours, an LLM reading the output can no longer tell which number belongs to which field, and it starts guessing.</p>
@@ -107,13 +106,13 @@ Total charge: $56,651.49 [Source: simple-invoice.png]
 <p><strong>print("\n--- EXPLAINABILITY ---")</strong></p>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">output</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;">--- EXPLAINABILITY ---
 
-Document: "simple-invoice.png"
+Document: &quot;simple-invoice.png&quot;
 similarity: 0.643 | USED in answer
 Why: The document lists the invoice number as 34278587.  
 It shows the total charge amount as $56,651.49 under the Charges column.  
 These fields directly answer the question about the invoice number and total charge.
 
-Document: "contoso-receipt.png"
+Document: &quot;contoso-receipt.png&quot;
 similarity: 0.443 | retrieved but NOT used
 Why: - The receipt shows the total charge as **$1203.39** under the
 </div></div>
@@ -154,59 +153,45 @@ The Surface Pro receipt shows two items purchased: a Surface Pro 6 (256 GB, 
 <h2>Step-wise Instructions — Development</h2>
 <hr/>
 <h3>Setup — Import Libraries</h3>
-<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#c678dd;">import</span> os
-
-<span style="color:#7f848e;font-style:italic;"># For downloading the sample invoices and doing vector math</span>
-<span style="color:#c678dd;">import</span> requests
-<span style="color:#c678dd;">import</span> numpy <span style="color:#c678dd;">as</span> np
-
-<span style="color:#7f848e;font-style:italic;"># RapidOCR -- our OCR engine (runs on CPU via onnxruntime)</span>
-<span style="color:#c678dd;">from</span> rapidocr <span style="color:#c678dd;">import</span> RapidOCR
-
-<span style="color:#7f848e;font-style:italic;"># Local embedding model -- turns text into vectors, no API key needed</span>
-<span style="color:#c678dd;">from</span> sentence_transformers <span style="color:#c678dd;">import</span> SentenceTransformer
-
-<span style="color:#7f848e;font-style:italic;"># The LLM, pointed at OpenRouter</span>
-<span style="color:#c678dd;">from</span> langchain_openai <span style="color:#c678dd;">import</span> ChatOpenAI
-
-<span style="color:#7f848e;font-style:italic;"># Reads OPENROUTER_API_KEY from .env</span>
-<span style="color:#c678dd;">from</span> dotenv <span style="color:#c678dd;">import</span> load_dotenv
-</div></div>
-<h3>Setup — Silence Noisy Logs</h3>
-<p>OCR engines and model downloaders log every model they load. None of that is interesting here, and it buries the output you actually want to read, so it gets turned off.</p>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#c678dd;">import</span> logging
 <span style="color:#c678dd;">import</span> os
 
-<span style="color:#7f848e;font-style:italic;"># Hide the download progress bar and rate-limit hints -- they appear only on a</span>
-<span style="color:#7f848e;font-style:italic;"># cold model cache, which would make the output differ between first and later runs.</span>
-os.environ[<span style="color:#98c379;">"HF_HUB_DISABLE_PROGRESS_BARS"</span>] = <span style="color:#98c379;">"1"</span>
-logging.<span style="color:#61afef;">getLogger</span>(<span style="color:#98c379;">"sentence_transformers"</span>).<span style="color:#61afef;">setLevel</span>(logging.ERROR)
-logging.<span style="color:#61afef;">getLogger</span>(<span style="color:#98c379;">"huggingface_hub"</span>).<span style="color:#61afef;">setLevel</span>(logging.ERROR)
-logging.<span style="color:#61afef;">getLogger</span>(<span style="color:#98c379;">"httpx"</span>).<span style="color:#61afef;">setLevel</span>(logging.ERROR)
+<span style="color:#c678dd;">import</span> numpy <span style="color:#c678dd;">as</span> np
+<span style="color:#c678dd;">import</span> requests
+<span style="color:#c678dd;">from</span> dotenv <span style="color:#c678dd;">import</span> load_dotenv
+<span style="color:#c678dd;">from</span> langchain_openai <span style="color:#c678dd;">import</span> ChatOpenAI
+<span style="color:#c678dd;">from</span> rapidocr <span style="color:#c678dd;">import</span> RapidOCR
+<span style="color:#c678dd;">from</span> sentence_transformers <span style="color:#c678dd;">import</span> SentenceTransformer
 </div></div>
-<p>RapidOCR needs its own approach, handled in Step 2 — it re-sets its own log level every time the engine is created, so changing the logging config beforehand has no effect.</p>
-<p>The progress bar is hidden deliberately. It only appears when the embedding model is downloaded for the first time, which means the same notebook prints different output on a fresh machine versus a second run — and an output section that changes between runs cannot be checked against anything.</p>
+<h3>Setup — Silence Noisy Logs</h3>
+<p>OCR engines and model downloaders log every model they load, which buries the output you actually want to read.</p>
+<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;">os.environ[<span style="color:#98c379;">&quot;HF_HUB_DISABLE_PROGRESS_BARS&quot;</span>] = <span style="color:#98c379;">&quot;1&quot;</span>
+
+<span style="color:#c678dd;">for</span> noisy <span style="color:#c678dd;">in</span> (<span style="color:#98c379;">&quot;sentence_transformers&quot;</span>, <span style="color:#98c379;">&quot;huggingface_hub&quot;</span>, <span style="color:#98c379;">&quot;httpx&quot;</span>):
+    logging.<span style="color:#61afef;">getLogger</span>(noisy).<span style="color:#61afef;">setLevel</span>(logging.ERROR)
+</div></div>
+<p>Two details here are deliberate. The progress bar is hidden because it only appears when the embedding model is downloaded for the first time — the same notebook would print different output on a fresh machine versus a second run, and an output section that changes between runs cannot be checked against anything. RapidOCR is not in that list because it re-sets its own log level every time the engine is created, so changing the config beforehand has no effect; Step 2 turns it off at the source instead.</p>
 <h3>Setup — Load API Key &amp; Configure the LLM</h3>
 <p>This cell loads the key and sets up the one LLM the lab needs. The embedding model is deliberately <em>not</em> configured here — it is loaded in Step 4, because it is the first cell that actually needs it.</p>
-<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#61afef;">load_dotenv</span>(<span style="color:#98c379;">".env"</span>)
+<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#61afef;">load_dotenv</span>(<span style="color:#98c379;">&quot;.env&quot;</span>)
 
-OPENROUTER_API_KEY = os.<span style="color:#61afef;">getenv</span>(<span style="color:#98c379;">"OPENROUTER_API_KEY"</span>)
+OPENROUTER_API_KEY = os.<span style="color:#61afef;">getenv</span>(<span style="color:#98c379;">&quot;OPENROUTER_API_KEY&quot;</span>)
 
 <span style="color:#c678dd;">if</span> <span style="color:#c678dd;">not</span> OPENROUTER_API_KEY:
-    OPENROUTER_API_KEY = <span style="color:#61afef;">input</span>(<span style="color:#98c379;">"Enter your OpenRouter API key (get one at https://openrouter.ai): "</span>).<span style="color:#61afef;">strip</span>()
+    OPENROUTER_API_KEY = <span style="color:#61afef;">input</span>(<span style="color:#98c379;">&quot;Enter your OpenRouter API key (get one at https://openrouter.ai): &quot;</span>).<span style="color:#61afef;">strip</span>()
 
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">"Key loaded."</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;Key loaded.&quot;</span>)
 
 <span style="color:#7f848e;font-style:italic;"># A free tier model, so running this lab costs nothing</span>
 llm = <span style="color:#61afef;">ChatOpenAI</span>(
-    model=<span style="color:#98c379;">"nvidia/nemotron-3-super-120b-a12b:free"</span>,
+    model=<span style="color:#98c379;">&quot;nvidia/nemotron-3-super-120b-a12b:free&quot;</span>,
     api_key=OPENROUTER_API_KEY,
-    base_url=<span style="color:#98c379;">"https://openrouter.ai/api/v1"</span>,
+    base_url=<span style="color:#98c379;">&quot;https://openrouter.ai/api/v1&quot;</span>,
     temperature=<span style="color:#d19a66;">0</span>,
     max_tokens=<span style="color:#d19a66;">400</span>,
 )
 
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">"LLM ready."</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;LLM ready.&quot;</span>)
 </div></div>
 <ul><li>The key is loaded from <code>.env</code>, with a fallback that asks for it directly if the file is missing — so the notebook doesn't just crash.</li><li><code>temperature=0</code> asks for the most predictable answer possible. For a lab where you are checking exact figures, you want the model to follow the document rather than be creative.</li><li><code>base_url</code> is what points OpenAI's client at OpenRouter instead of OpenAI itself. Same client, different server.</li></ul>
 <hr/>
@@ -214,35 +199,35 @@ llm = <span style="color:#61afef;">ChatOpenAI</span>(
 <p>Three sample documents (an invoice, a receipt, and a purchase order) are downloaded directly from GitHub and saved locally, so there's nothing to upload by hand.</p>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#7f848e;font-style:italic;"># Direct links to freely available sample documents on GitHub</span>
 INVOICE_URLS = {
-    <span style="color:#98c379;">"simple-invoice.png"</span>: <span style="color:#98c379;">"https://raw.githubusercontent.com/Azure-Samples/cognitive-services-REST-api-samples/master/curl/form-recognizer/simple-invoice.png"</span>,
-    <span style="color:#98c379;">"contoso-receipt.png"</span>: <span style="color:#98c379;">"https://raw.githubusercontent.com/Azure/azure-sdk-for-python/master/sdk/formrecognizer/azure-ai-formrecognizer/tests/sample_forms/receipt/contoso-receipt.png"</span>,
-    <span style="color:#98c379;">"purchase-order-1.jpg"</span>: <span style="color:#98c379;">"https://raw.githubusercontent.com/Azure/azure-sdk-for-python/master/sdk/formrecognizer/azure-ai-formrecognizer/tests/sample_forms/forms/Form_1.jpg"</span>,
+    <span style="color:#98c379;">&quot;simple-invoice.png&quot;</span>: <span style="color:#98c379;">&quot;https://raw.githubusercontent.com/Azure-Samples/cognitive-services-REST-api-samples/master/curl/form-recognizer/simple-invoice.png&quot;</span>,
+    <span style="color:#98c379;">&quot;contoso-receipt.png&quot;</span>: <span style="color:#98c379;">&quot;https://raw.githubusercontent.com/Azure/azure-sdk-for-python/master/sdk/formrecognizer/azure-ai-formrecognizer/tests/sample_forms/receipt/contoso-receipt.png&quot;</span>,
+    <span style="color:#98c379;">&quot;purchase-order-1.jpg&quot;</span>: <span style="color:#98c379;">&quot;https://raw.githubusercontent.com/Azure/azure-sdk-for-python/master/sdk/formrecognizer/azure-ai-formrecognizer/tests/sample_forms/forms/Form_1.jpg&quot;</span>,
 }
 
-os.<span style="color:#61afef;">makedirs</span>(<span style="color:#98c379;">"invoices"</span>, exist_ok=<span style="color:#c678dd;">True</span>)
+os.<span style="color:#61afef;">makedirs</span>(<span style="color:#98c379;">&quot;invoices&quot;</span>, exist_ok=<span style="color:#c678dd;">True</span>)
 invoice_paths = {}
 
 <span style="color:#c678dd;">for</span> filename, url <span style="color:#c678dd;">in</span> INVOICE_URLS.<span style="color:#61afef;">items</span>():
-    path = os.path.<span style="color:#61afef;">join</span>(<span style="color:#98c379;">"invoices"</span>, filename)
+    path = os.path.<span style="color:#61afef;">join</span>(<span style="color:#98c379;">&quot;invoices&quot;</span>, filename)
     response = requests.<span style="color:#61afef;">get</span>(url)
     response.<span style="color:#61afef;">raise_for_status</span>()
-    <span style="color:#c678dd;">with</span> <span style="color:#61afef;">open</span>(path, <span style="color:#98c379;">"wb"</span>) <span style="color:#c678dd;">as</span> f:
+    <span style="color:#c678dd;">with</span> <span style="color:#61afef;">open</span>(path, <span style="color:#98c379;">&quot;wb&quot;</span>) <span style="color:#c678dd;">as</span> f:
         f.<span style="color:#61afef;">write</span>(response.content)
     invoice_paths[filename] = path
-    <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f"Downloaded {</span>filename<span style="color:#98c379;">} ({</span><span style="color:#61afef;">len</span>(response.content)/<span style="color:#d19a66;">1024</span><span style="color:#98c379;">:.1f} KB)"</span>)
+    <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;Downloaded {</span>filename<span style="color:#98c379;">} ({</span><span style="color:#61afef;">len</span>(response.content)/<span style="color:#d19a66;">1024</span><span style="color:#98c379;">:.1f} KB)&quot;</span>)
 </div></div>
 <hr/>
 <h3>Step 2 — Run OCR on Each Document</h3>
 <p>RapidOCR detects every text box on the page, then reads the text inside each one. It runs entirely on CPU and needs no GPU, so this step works the same on a laptop as it would on a server.</p>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#7f848e;font-style:italic;"># Initialize the OCR engine once -- this loads the detection, classification, and recognition models</span>
-<span style="color:#7f848e;font-style:italic;"># The log_level parameter turns off the "model loaded" messages it prints on startup</span>
-engine = <span style="color:#61afef;">RapidOCR</span>(params={<span style="color:#98c379;">"Global.log_level"</span>: <span style="color:#98c379;">"error"</span>})
+<span style="color:#7f848e;font-style:italic;"># The log_level parameter turns off the &quot;model loaded&quot; messages it prints on startup</span>
+engine = <span style="color:#61afef;">RapidOCR</span>(params={<span style="color:#98c379;">&quot;Global.log_level&quot;</span>: <span style="color:#98c379;">&quot;error&quot;</span>})
 
 ocr_results = {}
 <span style="color:#c678dd;">for</span> filename, path <span style="color:#c678dd;">in</span> invoice_paths.<span style="color:#61afef;">items</span>():
     result = <span style="color:#61afef;">engine</span>(path)
     ocr_results[filename] = result
-    <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f"{</span>filename<span style="color:#98c379;">}: found {</span><span style="color:#61afef;">len</span>(result.txts)<span style="color:#98c379;">} text boxes in {</span>result.elapse<span style="color:#98c379;">:.2f}s"</span>)
+    <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;{</span>filename<span style="color:#98c379;">}: found {</span><span style="color:#61afef;">len</span>(result.txts)<span style="color:#98c379;">} text boxes in {</span>result.elapse<span style="color:#98c379;">:.2f}s&quot;</span>)
 </div></div>
 <ul><li>The engine is created <strong>once</strong> and reused for all three documents. Creating a fresh <code>RapidOCR()</code> per image would reload the models each time.</li><li><code>params</code> overrides defaults from RapidOCR's own config file. <code>log_level</code> is one of them, and <code>&quot;error&quot;</code> leaves only real errors visible.</li><li><code>result.elapse</code> is the time OCR actually took, per document — useful for spotting which pages are expensive.</li></ul>
 <hr/>
@@ -254,7 +239,7 @@ document_texts = {}
     document_texts[filename] = result.<span style="color:#61afef;">to_markdown</span>()
 
 <span style="color:#7f848e;font-style:italic;"># Peek at one example to see the structure preserved</span>
-<span style="color:#61afef;">print</span>(document_texts[<span style="color:#98c379;">"simple-invoice.png"</span>])
+<span style="color:#61afef;">print</span>(document_texts[<span style="color:#98c379;">&quot;simple-invoice.png&quot;</span>])
 </div></div>
 <p>This is the difference between "structured" and plain OCR. The flat list gives you a single stream of tokens in whatever order the engine found them — every label, every date, every amount, indistinguishable. The layout-aware version instead reproduces the table: <code>Invoice Number</code> and <code>34278587</code> land in the <strong>same column</strong> on their own rows, so you can tell which value belongs to which header.</p>
 <p>Worth being precise about what this does and does not do. The structured output still separates the header row from the value row, so a naive test like "is the label and the value on the same line?" comes out <strong>False</strong> here — and would come out <code>True</code> for the flat text, purely because flattening collapses everything onto one line. That test measures nothing. The property that actually matters is <em>column alignment</em>, which only the structured version has.</p>
@@ -262,10 +247,10 @@ document_texts = {}
 <h3>Step 4 — Embed Each Document (Build the Knowledge Base)</h3>
 <p>Each document is short, so the whole thing is treated as a single retrieval unit. For longer documents you'd split the text into smaller overlapping chunks first, but with invoice-length text, one chunk per document keeps things simple without losing accuracy.</p>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#7f848e;font-style:italic;"># Load the embedding model once. It runs on CPU and needs no API key.</span>
-embedder = <span style="color:#61afef;">SentenceTransformer</span>(<span style="color:#98c379;">"all-MiniLM-L6-v2"</span>)
+embedder = <span style="color:#61afef;">SentenceTransformer</span>(<span style="color:#98c379;">&quot;all-MiniLM-L6-v2&quot;</span>)
 
 <span style="color:#c678dd;">def</span> <span style="color:#61afef;">embed_text</span>(text):
-    <span style="color:#98c379;">"""Get an embedding vector for a piece of text."""</span>
+    <span style="color:#98c379;">&quot;&quot;&quot;Get an embedding vector for a piece of text.&quot;&quot;&quot;</span>
     <span style="color:#7f848e;font-style:italic;"># encode() takes a list and returns a 2D numpy array; take the first row.</span>
     <span style="color:#c678dd;">return</span> embedder.<span style="color:#61afef;">encode</span>([text])[<span style="color:#d19a66;">0</span>]
 
@@ -273,13 +258,13 @@ embedder = <span style="color:#61afef;">SentenceTransformer</span>(<span style="
 knowledge_base = []
 <span style="color:#c678dd;">for</span> filename, text <span style="color:#c678dd;">in</span> document_texts.<span style="color:#61afef;">items</span>():
     knowledge_base.<span style="color:#61afef;">append</span>({
-        <span style="color:#98c379;">"source"</span>: filename,
-        <span style="color:#98c379;">"text"</span>: text,
-        <span style="color:#98c379;">"embedding"</span>: <span style="color:#61afef;">embed_text</span>(text),
+        <span style="color:#98c379;">&quot;source&quot;</span>: filename,
+        <span style="color:#98c379;">&quot;text&quot;</span>: text,
+        <span style="color:#98c379;">&quot;embedding&quot;</span>: <span style="color:#61afef;">embed_text</span>(text),
     })
 
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f"Knowledge base built with {</span><span style="color:#61afef;">len</span>(knowledge_base)<span style="color:#98c379;">} documents."</span>)
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f"Each embedding has {</span><span style="color:#61afef;">len</span>(knowledge_base[<span style="color:#d19a66;">0</span>][<span style="color:#98c379;">'embedding'</span>])<span style="color:#98c379;">} dimensions."</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;Knowledge base built with {</span><span style="color:#61afef;">len</span>(knowledge_base)<span style="color:#98c379;">} documents.&quot;</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;Each embedding has {</span><span style="color:#61afef;">len</span>(knowledge_base[<span style="color:#d19a66;">0</span>][<span style="color:#98c379;">&#39;embedding&#39;</span>])<span style="color:#98c379;">} dimensions.&quot;</span>)
 </div></div>
 <ul><li><code>SentenceTransformer</code> is loaded once and reused. Loading it per document would re-read the model weights each time, which is slow and pointless.</li><li><code>encode()</code> expects a list of strings even for one string, and returns a 2D array — hence the <code>[0]</code> to pull out a single 384-dimension vector.</li></ul>
 <hr/>
@@ -290,15 +275,15 @@ knowledge_base = []
     <span style="color:#c678dd;">return</span> np.<span style="color:#61afef;">dot</span>(a, b) / (np.linalg.<span style="color:#61afef;">norm</span>(a) * np.linalg.<span style="color:#61afef;">norm</span>(b))
 
 <span style="color:#c678dd;">def</span> <span style="color:#61afef;">retrieve</span>(query, top_k=<span style="color:#d19a66;">2</span>):
-    <span style="color:#98c379;">"""Return the top_k most relevant documents for the query, most relevant first."""</span>
+    <span style="color:#98c379;">&quot;&quot;&quot;Return the top_k most relevant documents for the query, most relevant first.&quot;&quot;&quot;</span>
     query_embedding = <span style="color:#61afef;">embed_text</span>(query)
 
     scored = []
     <span style="color:#c678dd;">for</span> doc <span style="color:#c678dd;">in</span> knowledge_base:
-        score = <span style="color:#61afef;">cosine_similarity</span>(query_embedding, doc[<span style="color:#98c379;">"embedding"</span>])
-        scored.<span style="color:#61afef;">append</span>({**doc, <span style="color:#98c379;">"score"</span>: <span style="color:#61afef;">float</span>(score)})
+        score = <span style="color:#61afef;">cosine_similarity</span>(query_embedding, doc[<span style="color:#98c379;">&quot;embedding&quot;</span>])
+        scored.<span style="color:#61afef;">append</span>({**doc, <span style="color:#98c379;">&quot;score&quot;</span>: <span style="color:#61afef;">float</span>(score)})
 
-    scored.<span style="color:#61afef;">sort</span>(key=<span style="color:#c678dd;">lambda</span> d: d[<span style="color:#98c379;">"score"</span>], reverse=<span style="color:#c678dd;">True</span>)
+    scored.<span style="color:#61afef;">sort</span>(key=<span style="color:#c678dd;">lambda</span> d: d[<span style="color:#98c379;">&quot;score&quot;</span>], reverse=<span style="color:#c678dd;">True</span>)
     <span style="color:#c678dd;">return</span> scored[:top_k]
 </div></div>
 <p><strong>What's happening here, step by step:</strong></p>
@@ -310,19 +295,19 @@ knowledge_base = []
     retrieved_docs = <span style="color:#61afef;">retrieve</span>(query, top_k=top_k)
 
     <span style="color:#7f848e;font-style:italic;"># Label each document so the LLM can cite exactly which one it used</span>
-    labeled_context = <span style="color:#98c379;">"\n\n"</span>.<span style="color:#61afef;">join</span>(
-        <span style="color:#98c379;">f"[Source: {</span>doc[<span style="color:#98c379;">'source'</span>]<span style="color:#98c379;">}]\n{</span>doc[<span style="color:#98c379;">'text'</span>]<span style="color:#98c379;">}"</span> <span style="color:#c678dd;">for</span> doc <span style="color:#c678dd;">in</span> retrieved_docs
+    labeled_context = <span style="color:#98c379;">&quot;\n\n&quot;</span>.<span style="color:#61afef;">join</span>(
+        <span style="color:#98c379;">f&quot;[Source: {</span>doc[<span style="color:#98c379;">&#39;source&#39;</span>]<span style="color:#98c379;">}]\n{</span>doc[<span style="color:#98c379;">&#39;text&#39;</span>]<span style="color:#98c379;">}&quot;</span> <span style="color:#c678dd;">for</span> doc <span style="color:#c678dd;">in</span> retrieved_docs
     )
 
-    prompt = <span style="color:#98c379;">f"""You are an assistant that answers questions about invoices/receipts using ONLY the context below.</span>
+    prompt = <span style="color:#98c379;">f&quot;&quot;&quot;You are an assistant that answers questions about invoices/receipts using ONLY the context below.</span>
 <span style="color:#98c379;">Every fact you state must be tagged with its source, like [Source: filename].</span>
-<span style="color:#98c379;">If the answer isn't in the context, say "Not found in the provided documents."</span>
+<span style="color:#98c379;">If the answer isn&#39;t in the context, say &quot;Not found in the provided documents.&quot;</span>
 
 <span style="color:#98c379;">Context:</span>
 <span style="color:#98c379;">{</span>labeled_context<span style="color:#98c379;">}</span>
 
 <span style="color:#98c379;">Question: {</span>query<span style="color:#98c379;">}</span>
-<span style="color:#98c379;">Answer:"""</span>
+<span style="color:#98c379;">Answer:&quot;&quot;&quot;</span>
 
     response = llm.<span style="color:#61afef;">invoke</span>(prompt)
     <span style="color:#c678dd;">return</span> response.content, retrieved_docs
@@ -330,15 +315,15 @@ knowledge_base = []
 <ul><li><code>.invoke()</code> is LangChain's single call method — it sends the prompt and returns a response object.</li><li><code>response.content</code> is the text. The full response object also carries token counts and metadata, which you do not need here.</li></ul>
 <hr/>
 <h3>Step 7 — Ask a Question</h3>
-<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;">query = <span style="color:#98c379;">"What is the invoice number and total charge on the Contoso invoice?"</span>
+<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;">query = <span style="color:#98c379;">&quot;What is the invoice number and total charge on the Contoso invoice?&quot;</span>
 
 answer, retrieved_docs = <span style="color:#61afef;">rag_answer</span>(query)
 
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">"--- DOCUMENTS RETRIEVED ---"</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;--- DOCUMENTS RETRIEVED ---&quot;</span>)
 <span style="color:#c678dd;">for</span> doc <span style="color:#c678dd;">in</span> retrieved_docs:
-    <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f"{</span>doc[<span style="color:#98c379;">'source'</span>]<span style="color:#98c379;">}  (similarity: {</span>doc[<span style="color:#98c379;">'score'</span>]<span style="color:#98c379;">:.3f})"</span>)
+    <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;{</span>doc[<span style="color:#98c379;">&#39;source&#39;</span>]<span style="color:#98c379;">}  (similarity: {</span>doc[<span style="color:#98c379;">&#39;score&#39;</span>]<span style="color:#98c379;">:.3f})&quot;</span>)
 
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">"\n--- ANSWER ---"</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;\n--- ANSWER ---&quot;</span>)
 <span style="color:#61afef;">print</span>(answer)
 </div></div>
 <p>A good test question, because the answer lives entirely inside one document (<code>simple-invoice.png</code>) — a clean, single-document lookup that also shows retrieval correctly ignoring the receipt and purchase order.</p>
@@ -346,45 +331,45 @@ answer, retrieved_docs = <span style="color:#61afef;">rag_answer</span>(query)
 <h3>Step 8 — See Why Each Document Was Used</h3>
 <p>For every document the lab checked, this prints its similarity score, whether it was actually cited in the answer, and — asking the LLM directly — why it mattered.</p>
 <p>Unlike a rough guess, the "was it used" check here is exact: it looks for the citation tag itself (e.g. <code>[Source: simple-invoice.png]</code>) inside the final answer, so it only counts a document as used if the LLM actually cited it.</p>
-<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#61afef;">print</span>(<span style="color:#98c379;">"\n--- EXPLAINABILITY ---"</span>)
+<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;\n--- EXPLAINABILITY ---&quot;</span>)
 <span style="color:#c678dd;">for</span> doc <span style="color:#c678dd;">in</span> retrieved_docs:
-    <span style="color:#7f848e;font-style:italic;"># Check if the citation tag is actually present in the LLM's answer</span>
-    was_used = <span style="color:#98c379;">f"[Source: {</span>doc[<span style="color:#98c379;">'source'</span>]<span style="color:#98c379;">}]"</span> <span style="color:#c678dd;">in</span> answer
+    <span style="color:#7f848e;font-style:italic;"># Check if the citation tag is actually present in the LLM&#39;s answer</span>
+    was_used = <span style="color:#98c379;">f&quot;[Source: {</span>doc[<span style="color:#98c379;">&#39;source&#39;</span>]<span style="color:#98c379;">}]&quot;</span> <span style="color:#c678dd;">in</span> answer
 
-    status = <span style="color:#98c379;">"USED in answer"</span> <span style="color:#c678dd;">if</span> was_used <span style="color:#c678dd;">else</span> <span style="color:#98c379;">"retrieved but NOT used"</span>
+    status = <span style="color:#98c379;">&quot;USED in answer&quot;</span> <span style="color:#c678dd;">if</span> was_used <span style="color:#c678dd;">else</span> <span style="color:#98c379;">&quot;retrieved but NOT used&quot;</span>
 
-    <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f"\nDocument: \"{</span>doc[<span style="color:#98c379;">'source'</span>]<span style="color:#98c379;">}\""</span>)
-    <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f"similarity: {</span>doc[<span style="color:#98c379;">'score'</span>]<span style="color:#98c379;">:.3f} | {</span>status<span style="color:#98c379;">}"</span>)
+    <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;\nDocument: \&quot;{</span>doc[<span style="color:#98c379;">&#39;source&#39;</span>]<span style="color:#98c379;">}\&quot;&quot;</span>)
+    <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;similarity: {</span>doc[<span style="color:#98c379;">&#39;score&#39;</span>]<span style="color:#98c379;">:.3f} | {</span>status<span style="color:#98c379;">}&quot;</span>)
 
     <span style="color:#7f848e;font-style:italic;"># Ask the LLM why this document is relevant, using the text that was retrieved</span>
-    explain_prompt = <span style="color:#98c379;">f"""</span>
+    explain_prompt = <span style="color:#98c379;">f&quot;&quot;&quot;</span>
 <span style="color:#98c379;">In 3-4 short lines, explain why the document below is relevant to the question.</span>
 <span style="color:#98c379;">Be specific -- mention the actual numbers or fields that connect to the question.</span>
 <span style="color:#98c379;">Do not repeat the question. Do not add extra commentary.</span>
 
 <span style="color:#98c379;">Question: {</span>query<span style="color:#98c379;">}</span>
 
-<span style="color:#98c379;">Document source: {</span>doc[<span style="color:#98c379;">'source'</span>]<span style="color:#98c379;">}</span>
-<span style="color:#98c379;">Document content: {</span>doc[<span style="color:#98c379;">'text'</span>]<span style="color:#98c379;">}</span>
-<span style="color:#98c379;">"""</span>
+<span style="color:#98c379;">Document source: {</span>doc[<span style="color:#98c379;">&#39;source&#39;</span>]<span style="color:#98c379;">}</span>
+<span style="color:#98c379;">Document content: {</span>doc[<span style="color:#98c379;">&#39;text&#39;</span>]<span style="color:#98c379;">}</span>
+<span style="color:#98c379;">&quot;&quot;&quot;</span>
     explanation_response = llm.<span style="color:#61afef;">invoke</span>(explain_prompt)
-    <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f"Why: {</span>explanation_response.content.<span style="color:#61afef;">strip</span>()<span style="color:#98c379;">}"</span>)
+    <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;Why: {</span>explanation_response.content.<span style="color:#61afef;">strip</span>()<span style="color:#98c379;">}&quot;</span>)
 </div></div>
 <p>A retrieved document is not necessarily a <em>used</em> one. Step 7 asks for the top 2 by similarity, so if only one document is relevant, the other will be retrieved and then ignored. Step 8 is what separates the two cases.</p>
 <hr/>
 <h3>Step 9 — Ask More Questions</h3>
 <p><code>rag_answer</code> is a plain function, so asking another question takes one line. Everything above it — OCR, the knowledge base, the embedding model — is already built. This step asks a question that should favour a <em>different</em> document, and retrieves all 3 so you can watch the ranking actually move.</p>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#7f848e;font-style:italic;"># A follow-up that should pull in a different document</span>
-follow_up = <span style="color:#98c379;">"Which items were purchased on the Surface Pro receipt?"</span>
+follow_up = <span style="color:#98c379;">&quot;Which items were purchased on the Surface Pro receipt?&quot;</span>
 
-<span style="color:#7f848e;font-style:italic;"># top_k=3 so every document's score is visible, not just the winners</span>
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">"--- ALL DOCUMENTS, RANKED ---"</span>)
+<span style="color:#7f848e;font-style:italic;"># top_k=3 so every document&#39;s score is visible, not just the winners</span>
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;--- ALL DOCUMENTS, RANKED ---&quot;</span>)
 <span style="color:#c678dd;">for</span> doc <span style="color:#c678dd;">in</span> <span style="color:#61afef;">retrieve</span>(follow_up, top_k=<span style="color:#d19a66;">3</span>):
-    <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f"{</span>doc[<span style="color:#98c379;">'score'</span>]<span style="color:#98c379;">:.3f}  {</span>doc[<span style="color:#98c379;">'source'</span>]<span style="color:#98c379;">}"</span>)
+    <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;{</span>doc[<span style="color:#98c379;">&#39;score&#39;</span>]<span style="color:#98c379;">:.3f}  {</span>doc[<span style="color:#98c379;">&#39;source&#39;</span>]<span style="color:#98c379;">}&quot;</span>)
 
 follow_up_answer, follow_up_docs = <span style="color:#61afef;">rag_answer</span>(follow_up)
 
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">"\n--- ANSWER ---"</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;\n--- ANSWER ---&quot;</span>)
 <span style="color:#61afef;">print</span>(follow_up_answer)
 </div></div>
 <p>Now run the ranking part with <code>query</code> from Step 7 as well, and compare the two questions column by column.</p>

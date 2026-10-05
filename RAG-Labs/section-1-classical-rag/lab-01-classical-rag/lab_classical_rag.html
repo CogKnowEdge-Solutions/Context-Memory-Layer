@@ -42,7 +42,6 @@ pre code{background:none;padding:0;font-family:'SFMono-Regular',Consolas,'Libera
 </p>
 
 <h1>Classical RAG: The Canonical Pipeline</h1>
-<p><strong>Difficulty:</strong> Beginner | <strong>Time:</strong> ~40 min | <strong>Requires:</strong> None — this is the first lab</p>
 <hr/>
 <h2>Problem Statement / Use Case Overview</h2>
 <h3>The problem</h3>
@@ -95,7 +94,7 @@ pre code{background:none;padding:0;font-family:'SFMono-Regular',Consolas,'Libera
 <hr/>
 <h2>Output</h2>
 <p>Everything below is <strong>real output</strong> from running this notebook end to end.</p>
-<p>The setup cell prints what it loaded:</p>
+<p>The setup cells print what they loaded as each piece comes up:</p>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">output</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;">API key loaded.
 LLM ready: nvidia/nemotron-3-ultra-550b-a55b:free
 Embedding model ready: 384 numbers per chunk
@@ -158,9 +157,9 @@ TOP_K=5: 5 chunks, 1,604 context chars, best match 0.771
 </div></div>
 <p>Then <code>CHUNK_SIZE</code>, which controls how finely the document is cut — note that changing it <strong>rebuilds the whole index</strong>, so it can change which section wins:</p>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">output</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;">--- Changing CHUNK_SIZE (how finely we cut the document) ---
-CHUNK_SIZE=300: 18 chunks, best match 0.814 -&gt; "3. Reintroducing Tidal Flow Once barriers are addressed,..."
-CHUNK_SIZE=400: 13 chunks, best match 0.771 -&gt; "3. Reintroducing Tidal Flow Once barriers are addressed,..."
-CHUNK_SIZE=800:  6 chunks, best match 0.687 -&gt; "3. Reintroducing Tidal Flow Once barriers are addressed,..."
+CHUNK_SIZE=300: 18 chunks, best match 0.814 -&gt; &quot;3. Reintroducing Tidal Flow Once barriers are addressed,...&quot;
+CHUNK_SIZE=400: 13 chunks, best match 0.771 -&gt; &quot;3. Reintroducing Tidal Flow Once barriers are addressed,...&quot;
+CHUNK_SIZE=800:  6 chunks, best match 0.687 -&gt; &quot;3. Reintroducing Tidal Flow Once barriers are addressed,...&quot;
 </div></div>
 <p>The best match score moves (0.814 → 0.687) while the winning section stays the same. That is the trade-off in one table: small chunks sharpen the score, large chunks preserve context, and the right choice depends on your document and your questions.</p>
 <p><strong>Step 7</strong> asks the document something it simply cannot answer, and the score collapses:</p>
@@ -208,126 +207,90 @@ on-topic best match:  0.771
 </div></div>
 <p>The notebook reads that file automatically and falls back to prompting you if the file is missing — so a missing <code>.env</code> will not crash the run.</p>
 <hr/>
-<h2>Step-wise Development Instructions — Development</h2>
+<h2>Step-wise Instructions — Development</h2>
 <hr/>
 <h3>Setup — Silence the Noisy Libraries</h3>
 <p>These libraries print progress bars and warnings that bury the actual output. This cell touches nothing in the pipeline; it just quiets things down so you can see your results.</p>
 <p>**This cell runs <em>before</em> the imports on purpose.** Two things happen at import time that we want already silenced: LangChain's own <em>"this package is being deprecated"</em> notice, and the download progress bar for the embedding model. Silence first, then import — otherwise the noise is already on screen.</p>
-<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#7f848e;font-style:italic;"># os lets us read and set environment variables.</span>
+<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#c678dd;">import</span> logging
 <span style="color:#c678dd;">import</span> os
-
-<span style="color:#7f848e;font-style:italic;"># Tell HuggingFace not to draw download progress bars. Without this you get a</span>
-<span style="color:#7f848e;font-style:italic;"># noisy "Loading weights: 0%|..." bar in the middle of your results.</span>
-os.environ[<span style="color:#98c379;">"HF_HUB_DISABLE_PROGRESS_BARS"</span>] = <span style="color:#98c379;">"1"</span>
-
-<span style="color:#7f848e;font-style:italic;"># Warnings are mostly about model internals we never touch in this lab.</span>
 <span style="color:#c678dd;">import</span> warnings
-<span style="color:#c678dd;">import</span> logging
 
-warnings.<span style="color:#61afef;">filterwarnings</span>(<span style="color:#98c379;">"ignore"</span>)
+os.environ[<span style="color:#98c379;">&quot;HF_HUB_DISABLE_PROGRESS_BARS&quot;</span>] = <span style="color:#98c379;">&quot;1&quot;</span>
+warnings.<span style="color:#61afef;">filterwarnings</span>(<span style="color:#98c379;">&quot;ignore&quot;</span>)
 
-<span style="color:#7f848e;font-style:italic;"># These libraries log every model download and every HTTP call at "info"</span>
-<span style="color:#7f848e;font-style:italic;"># level, which drowns out our own print statements.</span>
-logging.<span style="color:#61afef;">getLogger</span>(<span style="color:#98c379;">"transformers"</span>).<span style="color:#61afef;">setLevel</span>(logging.ERROR)
-logging.<span style="color:#61afef;">getLogger</span>(<span style="color:#98c379;">"sentence_transformers"</span>).<span style="color:#61afef;">setLevel</span>(logging.ERROR)
-logging.<span style="color:#61afef;">getLogger</span>(<span style="color:#98c379;">"huggingface_hub"</span>).<span style="color:#61afef;">setLevel</span>(logging.ERROR)
-logging.<span style="color:#61afef;">getLogger</span>(<span style="color:#98c379;">"httpx"</span>).<span style="color:#61afef;">setLevel</span>(logging.ERROR)
+<span style="color:#c678dd;">for</span> noisy <span style="color:#c678dd;">in</span> (<span style="color:#98c379;">&quot;transformers&quot;</span>, <span style="color:#98c379;">&quot;sentence_transformers&quot;</span>, <span style="color:#98c379;">&quot;huggingface_hub&quot;</span>, <span style="color:#98c379;">&quot;httpx&quot;</span>):
+    logging.<span style="color:#61afef;">getLogger</span>(noisy).<span style="color:#61afef;">setLevel</span>(logging.ERROR)
 </div></div>
 <blockquote><strong>Two lines you may still see, both harmless.</strong> - On the very first run, HuggingFace suggests setting an <code>HF_TOKEN</code> for faster downloads. Ignore it — downloading anonymously works fine, and it appears once. - <code>langchain-community</code> is officially deprecated upstream, but it still works, and every lab in this module uses it. We silence its notice rather than rewriting the module.</blockquote>
 <h3>Setup — Import the Tools</h3>
 <p>LangChain splits its helpers into small packages, one per job. The imports below are grouped by that job so you can see where everything comes from.</p>
-<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#7f848e;font-style:italic;"># --- 1. READING THE DOCUMENT -----------------------------------------</span>
-<span style="color:#7f848e;font-style:italic;"># pathlib is part of Python itself, so there is nothing to install here.</span>
-<span style="color:#7f848e;font-style:italic;"># Path.read_text() is the whole "loader" for a plain-text file.</span>
-<span style="color:#c678dd;">from</span> pathlib <span style="color:#c678dd;">import</span> Path
-<span style="color:#7f848e;font-style:italic;"># Document is the atom every RAG system passes around. A text loader would</span>
-<span style="color:#7f848e;font-style:italic;"># have built these for us; here we build them ourselves, which is worth</span>
-<span style="color:#7f848e;font-style:italic;"># seeing once so you know what is inside.</span>
+<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#c678dd;">from</span> pathlib <span style="color:#c678dd;">import</span> Path
+
 <span style="color:#c678dd;">from</span> langchain_core.documents <span style="color:#c678dd;">import</span> Document
-
-<span style="color:#7f848e;font-style:italic;"># --- 2. CUTTING THE TEXT INTO CHUNKS ----------------------------------</span>
-<span style="color:#7f848e;font-style:italic;"># RecursiveCharacterTextSplitter cuts long text into small, tidy pieces.</span>
-<span style="color:#c678dd;">from</span> langchain_text_splitters <span style="color:#c678dd;">import</span> RecursiveCharacterTextSplitter
-
-<span style="color:#7f848e;font-style:italic;"># --- 3. TURNING TEXT INTO NUMBERS, AND SEARCHING THOSE NUMBERS -------</span>
-<span style="color:#7f848e;font-style:italic;"># HuggingFaceEmbeddings runs the all-MiniLM-L6-v2 model on your own machine.</span>
-<span style="color:#c678dd;">from</span> langchain_huggingface <span style="color:#c678dd;">import</span> HuggingFaceEmbeddings
-<span style="color:#7f848e;font-style:italic;"># FAISS is the vector index: the searchable store of embeddings.</span>
-<span style="color:#c678dd;">from</span> langchain_community.vectorstores <span style="color:#c678dd;">import</span> FAISS
-<span style="color:#7f848e;font-style:italic;"># DistanceStrategy lets us choose HOW similarity is measured. We use</span>
-<span style="color:#7f848e;font-style:italic;"># MAX_INNER_PRODUCT — see the warning in Step 3, it matters more than it looks.</span>
-<span style="color:#c678dd;">from</span> langchain_community.vectorstores.utils <span style="color:#c678dd;">import</span> DistanceStrategy
-
-<span style="color:#7f848e;font-style:italic;"># --- 4. CALLING THE LLM AND BUILDING THE PROMPT -----------------------</span>
-<span style="color:#7f848e;font-style:italic;"># ChatOpenAI talks to any OpenAI-compatible API, which includes OpenRouter.</span>
-<span style="color:#c678dd;">from</span> langchain_openai <span style="color:#c678dd;">import</span> ChatOpenAI
-<span style="color:#7f848e;font-style:italic;"># ChatPromptTemplate builds the instruction with holes ({context}, {question})</span>
-<span style="color:#7f848e;font-style:italic;"># that we fill in later.</span>
-<span style="color:#c678dd;">from</span> langchain_core.prompts <span style="color:#c678dd;">import</span> ChatPromptTemplate
-<span style="color:#7f848e;font-style:italic;"># StrOutputParser turns the model's reply object into a plain Python string.</span>
 <span style="color:#c678dd;">from</span> langchain_core.output_parsers <span style="color:#c678dd;">import</span> StrOutputParser
-
-<span style="color:#7f848e;font-style:italic;"># --- 5. KEEPING THE API KEY OUT OF THE CODE ---------------------------</span>
-<span style="color:#7f848e;font-style:italic;"># load_dotenv reads our API key out of the .env file.</span>
+<span style="color:#c678dd;">from</span> langchain_core.prompts <span style="color:#c678dd;">import</span> ChatPromptTemplate
+<span style="color:#c678dd;">from</span> langchain_community.vectorstores <span style="color:#c678dd;">import</span> FAISS
+<span style="color:#c678dd;">from</span> langchain_community.vectorstores.utils <span style="color:#c678dd;">import</span> DistanceStrategy
+<span style="color:#c678dd;">from</span> langchain_huggingface <span style="color:#c678dd;">import</span> HuggingFaceEmbeddings
+<span style="color:#c678dd;">from</span> langchain_openai <span style="color:#c678dd;">import</span> ChatOpenAI
+<span style="color:#c678dd;">from</span> langchain_text_splitters <span style="color:#c678dd;">import</span> RecursiveCharacterTextSplitter
 <span style="color:#c678dd;">from</span> dotenv <span style="color:#c678dd;">import</span> load_dotenv
 </div></div>
-<ul><li>Every LangChain import is <code>from &lt;package&gt; import &lt;thing&gt;</code>, where the package name tells you the job: <code>document_loaders</code> reads files, <code>text_splitters</code> cuts text, <code>vectorstores</code> stores and searches vectors, <code>prompts</code> builds prompts.</li><li>Nothing here does any work yet. This cell only makes the tools available.</li></ul>
+<ul><li>The LangChain package names state the job: <code>document_loaders</code> reads files, <code>text_splitters</code> cuts text, <code>vectorstores</code> stores and searches vectors, <code>prompts</code> builds prompts.</li><li><code>pathlib</code> and <code>dotenv</code> ship with Python and its usual companions, so they are not in the <code>!pip install</code> list.</li><li>Nothing here does any work yet. This cell only makes the tools available.</li></ul>
 <h3>Setup — Load the API Key and Build the Two Models</h3>
 <p>This cell authenticates the LLM and loads the embedding model once, so every later step reuses the same objects instead of reloading them.</p>
-<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#7f848e;font-style:italic;"># Read OPENROUTER_API_KEY from the .env file sitting next to this notebook.</span>
-<span style="color:#61afef;">load_dotenv</span>(<span style="color:#98c379;">".env"</span>)
-OPENROUTER_API_KEY = os.<span style="color:#61afef;">getenv</span>(<span style="color:#98c379;">"OPENROUTER_API_KEY"</span>)
+<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#61afef;">load_dotenv</span>(<span style="color:#98c379;">&quot;.env&quot;</span>)
+OPENROUTER_API_KEY = os.<span style="color:#61afef;">getenv</span>(<span style="color:#98c379;">&quot;OPENROUTER_API_KEY&quot;</span>)
 
-<span style="color:#7f848e;font-style:italic;"># If there is no .env file, ask for the key instead of crashing.</span>
 <span style="color:#c678dd;">if</span> <span style="color:#c678dd;">not</span> OPENROUTER_API_KEY:
-    OPENROUTER_API_KEY = <span style="color:#61afef;">input</span>(<span style="color:#98c379;">"Paste your OpenRouter API key: "</span>).<span style="color:#61afef;">strip</span>()
+    OPENROUTER_API_KEY = <span style="color:#61afef;">input</span>(<span style="color:#98c379;">&quot;Paste your OpenRouter API key: &quot;</span>).<span style="color:#61afef;">strip</span>()
 
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">"API key loaded."</span>)
-
-<span style="color:#7f848e;font-style:italic;"># THE LLM — this is the "brain" that writes the final answer in Step 5.</span>
-<span style="color:#7f848e;font-style:italic;"># It runs on someone else's computer, so it needs the key.</span>
-llm = <span style="color:#61afef;">ChatOpenAI</span>(
-    model=<span style="color:#98c379;">"nvidia/nemotron-3-ultra-550b-a55b:free"</span>,  <span style="color:#7f848e;font-style:italic;"># a free model on OpenRouter</span>
-    base_url=<span style="color:#98c379;">"https://openrouter.ai/api/v1"</span>,         <span style="color:#7f848e;font-style:italic;"># OpenRouter's OpenAI-compatible door</span>
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;API key loaded.&quot;</span>)
+</div></div>
+<p><strong>There are two models in this lab, and they do completely different jobs.</strong> The embedding model (local, free) converts text to numbers so the computer can <em>compare</em> it. The LLM (remote, needs a key) <em>writes prose</em>. Steps 1–4 and 6–7 never touch the LLM, so if your key is wrong you will still get real retrieval results — a useful thing to know when something breaks.</p>
+<p>Now build the LLM. <code>base_url</code> is what sends the request to OpenRouter rather than OpenAI — same client, different server.</p>
+<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;">llm = <span style="color:#61afef;">ChatOpenAI</span>(
+    model=<span style="color:#98c379;">&quot;nvidia/nemotron-3-ultra-550b-a55b:free&quot;</span>,  <span style="color:#7f848e;font-style:italic;"># a free model on OpenRouter</span>
+    base_url=<span style="color:#98c379;">&quot;https://openrouter.ai/api/v1&quot;</span>,
     api_key=OPENROUTER_API_KEY,
     temperature=<span style="color:#d19a66;">0</span>,  <span style="color:#7f848e;font-style:italic;"># 0 = as repeatable as the model allows</span>
 )
 
-<span style="color:#7f848e;font-style:italic;"># THE EMBEDDING MODEL — this is the "translator" that turns text into numbers.</span>
-<span style="color:#7f848e;font-style:italic;"># It runs on YOUR computer, so it costs nothing and needs no key. The first</span>
-<span style="color:#7f848e;font-style:italic;"># run downloads ~90 MB and then remembers it.</span>
-embedding_model = <span style="color:#61afef;">HuggingFaceEmbeddings</span>(
-    model_name=<span style="color:#98c379;">"all-MiniLM-L6-v2"</span>,              <span style="color:#7f848e;font-style:italic;"># small, fast, good enough for this lab</span>
-    encode_kwargs={<span style="color:#98c379;">"normalize_embeddings"</span>: <span style="color:#c678dd;">True</span>},  <span style="color:#7f848e;font-style:italic;"># ask for unit-length vectors</span>
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;LLM ready:&quot;</span>, llm.model_name)
+</div></div>
+<p>Then the embedding model. It runs on your own machine, so it costs nothing and needs no key; the first run downloads ~90 MB and then remembers it.</p>
+<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;">embedding_model = <span style="color:#61afef;">HuggingFaceEmbeddings</span>(
+    model_name=<span style="color:#98c379;">&quot;all-MiniLM-L6-v2&quot;</span>,
+    encode_kwargs={<span style="color:#98c379;">&quot;normalize_embeddings&quot;</span>: <span style="color:#c678dd;">True</span>},
 )
 
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">"LLM ready:"</span>, llm.model_name)
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">"Embedding model ready: 384 numbers per chunk"</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;Embedding model ready: 384 numbers per chunk&quot;</span>)
 </div></div>
-<ul><li><strong>There are two models in this lab, and they do completely different jobs.</strong> The embedding model (local, free) converts text to numbers so the computer can <em>compare</em> it. The LLM (remote, needs a key) <em>writes prose</em>. Steps 1–4 and 6–7 never touch the LLM, so if your key is wrong you will still get real retrieval results — a useful thing to know when something breaks.</li><li><code>normalize_embeddings=True</code> asks the model for <strong>unit-length</strong> vectors. This model already returns them, so the setting is belt-and-braces rather than a rescue — but stating it means the next stage does not depend on a default you did not choose.</li><li><code>temperature=0</code> makes the answer repeatable, so re-running gives you a near-identical answer.</li><li>Both objects are created <strong>once</strong> here. Reloading an embedding model takes seconds, and a later step would silently get a <em>different</em> model than the index was built with.</li></ul>
+<ul><li><code>normalize_embeddings=True</code> asks the model for <strong>unit-length</strong> vectors. This model already returns them, so the setting is belt-and-braces rather than a rescue — but stating it means the next stage does not depend on a default you did not choose.</li><li><code>temperature=0</code> makes the answer repeatable, so re-running gives you a near-identical answer.</li><li>Both objects are created <strong>once</strong> here. Reloading an embedding model takes seconds, and a later step would silently get a <em>different</em> model than the index was built with.</li></ul>
 <hr/>
 <h3>Step 1 — Load the Document</h3>
 <p>This step turns the file into <code>Document</code> objects the rest of the pipeline can cut up.</p>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#7f848e;font-style:italic;"># The path is relative, so Jupyter must be running from inside this lab folder.</span>
-DOC_PATH = <span style="color:#98c379;">"data/sample_text_document.txt"</span>
+DOC_PATH = <span style="color:#98c379;">&quot;data/sample_text_document.txt&quot;</span>
 
 <span style="color:#7f848e;font-style:italic;"># read_text() reads the whole file and hands back one long Python string.</span>
-raw_text = <span style="color:#61afef;">Path</span>(DOC_PATH).<span style="color:#61afef;">read_text</span>(encoding=<span style="color:#98c379;">"utf-8"</span>)
+raw_text = <span style="color:#61afef;">Path</span>(DOC_PATH).<span style="color:#61afef;">read_text</span>(encoding=<span style="color:#98c379;">&quot;utf-8&quot;</span>)
 
-<span style="color:#7f848e;font-style:italic;"># "\f" is the form-feed character -- the traditional ASCII page break in</span>
+<span style="color:#7f848e;font-style:italic;"># &quot;\f&quot; is the form-feed character -- the traditional ASCII page break in</span>
 <span style="color:#7f848e;font-style:italic;"># plain text. Splitting on it gives us one piece per page.</span>
-page_texts = [text.<span style="color:#61afef;">strip</span>() <span style="color:#c678dd;">for</span> text <span style="color:#c678dd;">in</span> raw_text.<span style="color:#61afef;">split</span>(<span style="color:#98c379;">"\f"</span>) <span style="color:#c678dd;">if</span> text.<span style="color:#61afef;">strip</span>()]
+page_texts = [text.<span style="color:#61afef;">strip</span>() <span style="color:#c678dd;">for</span> text <span style="color:#c678dd;">in</span> raw_text.<span style="color:#61afef;">split</span>(<span style="color:#98c379;">&quot;\f&quot;</span>) <span style="color:#c678dd;">if</span> text.<span style="color:#61afef;">strip</span>()]
 
 <span style="color:#7f848e;font-style:italic;"># Wrap each page in a Document: the text, plus a metadata dict recording</span>
 <span style="color:#7f848e;font-style:italic;"># where it came from. This metadata survives chunking, which is the point.</span>
 pages = [
-    <span style="color:#61afef;">Document</span>(page_content=text, metadata={<span style="color:#98c379;">"source"</span>: DOC_PATH, <span style="color:#98c379;">"page"</span>: number})
+    <span style="color:#61afef;">Document</span>(page_content=text, metadata={<span style="color:#98c379;">&quot;source&quot;</span>: DOC_PATH, <span style="color:#98c379;">&quot;page&quot;</span>: number})
     <span style="color:#c678dd;">for</span> number, text <span style="color:#c678dd;">in</span> <span style="color:#61afef;">enumerate</span>(page_texts)
 ]
 
 total_characters = <span style="color:#61afef;">sum</span>(<span style="color:#61afef;">len</span>(page.page_content) <span style="color:#c678dd;">for</span> page <span style="color:#c678dd;">in</span> pages)
 
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f"Loaded {</span><span style="color:#61afef;">len</span>(pages)<span style="color:#98c379;">} page(s), {</span>total_characters<span style="color:#98c379;">:,} characters."</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;Loaded {</span><span style="color:#61afef;">len</span>(pages)<span style="color:#98c379;">} page(s), {</span>total_characters<span style="color:#98c379;">:,} characters.&quot;</span>)
 </div></div>
 <ul><li>A LangChain <strong><code>Document</code></strong> is the atom of every RAG system: some text plus a metadata dictionary. Everything downstream — chunking, embedding, retrieval — operates on <code>Document</code> objects, never on bare strings. <code>PyPDFLoader</code>, <code>CSVLoader</code> and the rest are just conveniences that build these two fields for you.</li><li><strong><code>&quot;\f&quot;</code> means the form-feed character</strong>, not a backslash and an f. Writing <code>split(&quot;\\f&quot;)</code> would split on the two literal characters instead and give you one single page back — a quiet bug worth knowing.</li><li><strong>Why strip each page?</strong> The raw string is 4,064 characters while the document is really 4,062 — the two extras are the form-feed character itself and the trailing newline at end of file. <code>.strip()</code> on each page is what makes the count honest.</li><li><code>enumerate(...)</code> numbers the pages from <code>0</code>, which is why Step 4 prints <code>page 0</code> for the first one. That is a computer habit; a human would call it page 1.</li><li>The comma in <code>{total_characters:,}</code> is a Python format trick that inserts thousands separators, so <code>4062</code> prints as <code>4,062</code>.</li><li><strong>If this cell errors with <code>FileNotFoundError</code>,</strong> your working directory is wrong. Check it with <code>import os; print(os.getcwd())</code>.</li><li><strong>What we gave up by dropping the PDF:</strong> nothing downstream. A real loader only decides how the string gets out of the file. Every stage after this one is byte-identical whether the input was a PDF, a web page, or a <code>.txt</code>.</li></ul>
 <hr/>
@@ -347,8 +310,8 @@ text_splitter = <span style="color:#61afef;">RecursiveCharacterTextSplitter</spa
 <span style="color:#7f848e;font-style:italic;"># Apply it to every page we loaded in Step 1.</span>
 chunks = text_splitter.<span style="color:#61afef;">split_documents</span>(pages)
 
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f"Created {</span><span style="color:#61afef;">len</span>(chunks)<span style="color:#98c379;">} chunks ({</span>CHUNK_SIZE<span style="color:#98c379;">} chars, {</span>CHUNK_OVERLAP<span style="color:#98c379;">} overlap)."</span>)
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">"\nFirst chunk:\n"</span> + chunks[<span style="color:#d19a66;">0</span>].page_content)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;Created {</span><span style="color:#61afef;">len</span>(chunks)<span style="color:#98c379;">} chunks ({</span>CHUNK_SIZE<span style="color:#98c379;">} chars, {</span>CHUNK_OVERLAP<span style="color:#98c379;">} overlap).&quot;</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;\nFirst chunk:\n&quot;</span> + chunks[<span style="color:#d19a66;">0</span>].page_content)
 </div></div>
 <ul><li><strong><code>split_documents</code> returns <code>Document</code> objects, not strings.</strong> That is what lets the page number survive the cut — every chunk still knows where it came from.</li><li><strong>Why "recursive"?</strong> It tries to cut at paragraph breaks first, then line breaks, then sentences, and only cuts mid-word as a last resort. That is why the first chunk above ends cleanly at a paragraph edge instead of in the middle of the word "have".</li><li><strong>Why overlap at all?</strong> So an idea that would be cut in half still appears whole in one of the two neighbouring chunks.</li><li><strong>Common misunderstanding:</strong> <code>chunk_size=400</code> counts <strong>characters</strong>, not words and not LLM tokens. 400 characters is roughly 60–70 English words.</li><li><code>chunks[0].page_content</code> is the text; the <code>.page_content</code> part is how you get at the text inside a <code>Document</code>.</li></ul>
 <hr/>
@@ -365,16 +328,16 @@ vector_store = FAISS.<span style="color:#61afef;">from_documents</span>(
     distance_strategy=DistanceStrategy.MAX_INNER_PRODUCT,
 )
 
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">"Chunks indexed:"</span>, <span style="color:#61afef;">len</span>(chunks))
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">"Numbers per vector:"</span>, vector_store.index.d)
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">"Index type:"</span>, <span style="color:#61afef;">type</span>(vector_store.index).__name__)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;Chunks indexed:&quot;</span>, <span style="color:#61afef;">len</span>(chunks))
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;Numbers per vector:&quot;</span>, vector_store.index.d)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;Index type:&quot;</span>, <span style="color:#61afef;">type</span>(vector_store.index).__name__)
 </div></div>
 <ul><li><code>vector_store.index.ntotal</code> would also work for the count; we print <code>len(chunks)</code> because it is the same number and does not require knowing FAISS internals.</li><li><code>vector_store.index.d</code> is FAISS's name for the vector width. Every vector in an index must have the same width, which is why the question in Step 4 must be embedded by the same model.</li><li><code>MAX_INNER_PRODUCT</code> builds an <strong><code>IndexFlatIP</code></strong> and returns the <strong>inner product</strong>. Since our vectors are unit length, that inner product <em>is</em> the cosine similarity: <code>1</code> identical, <code>0</code> unrelated, <code>-1</code> opposite, <strong>higher is better</strong>.</li><li><strong>Read the warning in Section 4 before changing this line.</strong> LangChain also has a strategy named <code>DistanceStrategy.COSINE</code>, and on this version it builds an <code>IndexFlatL2</code> and returns <strong>squared straight-line distance</strong> — a different number with the opposite direction. If you switch to it, your scores will drop to around <code>0.457</code> where the true cosine is <code>0.771</code>, and a high score will start meaning "worse". That is why this cell prints <code>Index type:</code> — so you can always check which index you actually got.</li></ul>
 <hr/>
 <h3>Step 4 — Retrieve the Top-k Chunks</h3>
 <p>This step embeds your question and asks FAISS which chunks are closest to it.</p>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#7f848e;font-style:italic;"># The question we want answered. Try changing it later.</span>
-QUESTION = <span style="color:#98c379;">"Why do restoration teams reintroduce tidal flow gradually instead of all at once?"</span>
+QUESTION = <span style="color:#98c379;">&quot;Why do restoration teams reintroduce tidal flow gradually instead of all at once?&quot;</span>
 
 <span style="color:#7f848e;font-style:italic;"># How many chunks to bring back. 3 is a sensible starting point.</span>
 TOP_K = <span style="color:#d19a66;">3</span>
@@ -383,26 +346,26 @@ TOP_K = <span style="color:#d19a66;">3</span>
 <span style="color:#7f848e;font-style:italic;"># (chunk, score) pairs, best first.</span>
 matches = vector_store.<span style="color:#61afef;">similarity_search_with_score</span>(QUESTION, k=TOP_K)
 
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f"QUESTION: {</span>QUESTION<span style="color:#98c379;">}\n"</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;QUESTION: {</span>QUESTION<span style="color:#98c379;">}\n&quot;</span>)
 
 <span style="color:#c678dd;">for</span> rank, (chunk, score) <span style="color:#c678dd;">in</span> <span style="color:#61afef;">enumerate</span>(matches, start=<span style="color:#d19a66;">1</span>):
     <span style="color:#7f848e;font-style:italic;"># With MAX_INNER_PRODUCT the score is already the cosine similarity:</span>
     <span style="color:#7f848e;font-style:italic;"># higher is better, 1 is identical. No conversion needed.</span>
-    <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f"--- Chunk {</span>rank<span style="color:#98c379;">} | page {</span>chunk.metadata[<span style="color:#98c379;">'page'</span>]<span style="color:#98c379;">} | match {</span>score<span style="color:#98c379;">:.3f} ---"</span>)
-    <span style="color:#61afef;">print</span>(chunk.page_content.<span style="color:#61afef;">strip</span>() + <span style="color:#98c379;">"\n"</span>)
+    <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;--- Chunk {</span>rank<span style="color:#98c379;">} | page {</span>chunk.metadata[<span style="color:#98c379;">&#39;page&#39;</span>]<span style="color:#98c379;">} | match {</span>score<span style="color:#98c379;">:.3f} ---&quot;</span>)
+    <span style="color:#61afef;">print</span>(chunk.page_content.<span style="color:#61afef;">strip</span>() + <span style="color:#98c379;">&quot;\n&quot;</span>)
 </div></div>
 <ul><li><strong><code>matches</code> is a list of <code>(chunk, score)</code> tuples</strong>, best match first. <code>enumerate(..., start=1)</code> numbers them 1, 2, 3 so the output reads like "rank 1, rank 2" rather than "index 0, index 1".</li><li><code>chunk.metadata[&#x27;page&#x27;]</code> works because the page number was attached by hand in Step 1, then travelled with the text through the splitter in Step 2, into the index in Step 3. <strong>This is the payoff of using <code>Document</code> objects instead of plain strings</strong> — you can always say where an answer came from, and the metadata is yours to choose.</li><li><code>:.3f</code> formats the number to three decimal places (<code>0.771</code>). Without it Python would print <code>0.7712710331949077</code>.</li><li>**The important thing to internalise here is what the score is <em>not</em>.** Chunk 3 scores <code>0.485</code> — positive, respectable, and it does not answer the question at all. A cosine measures how similar two texts <em>sound</em>; only reading them tells you whether they <em>answer</em> what you asked.</li><li><strong>A retriever never returns "nothing found."</strong> It always hands back <code>k</code> chunks. Chunk 3 came back because <code>k=3</code> was requested, not because the retriever thought it was useful.</li></ul>
 <hr/>
 <h3>Step 5 — Generate the Answer</h3>
 <p>This step hands the retrieved chunks to the LLM and gets a grounded answer back.</p>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#7f848e;font-style:italic;"># Glue the retrieved chunks into one block of text for the prompt.</span>
-context = <span style="color:#98c379;">"\n\n"</span>.<span style="color:#61afef;">join</span>(chunk.page_content.<span style="color:#61afef;">strip</span>() <span style="color:#c678dd;">for</span> chunk, _ <span style="color:#c678dd;">in</span> matches)
+context = <span style="color:#98c379;">&quot;\n\n&quot;</span>.<span style="color:#61afef;">join</span>(chunk.page_content.<span style="color:#61afef;">strip</span>() <span style="color:#c678dd;">for</span> chunk, _ <span style="color:#c678dd;">in</span> matches)
 
 <span style="color:#7f848e;font-style:italic;"># The prompt template. {context} and {question} are holes we fill in below.</span>
 rag_prompt = ChatPromptTemplate.<span style="color:#61afef;">from_template</span>(
-    <span style="color:#98c379;">"Answer the question using ONLY the context below. "</span>
-    <span style="color:#98c379;">"If the answer is not in the context, say you don't know.\n\n"</span>
-    <span style="color:#98c379;">"Context:\n{context}\n\nQuestion: {question}\nAnswer:"</span>
+    <span style="color:#98c379;">&quot;Answer the question using ONLY the context below. &quot;</span>
+    <span style="color:#98c379;">&quot;If the answer is not in the context, say you don&#39;t know.\n\n&quot;</span>
+    <span style="color:#98c379;">&quot;Context:\n{context}\n\nQuestion: {question}\nAnswer:&quot;</span>
 )
 
 <span style="color:#7f848e;font-style:italic;"># The pipe operator chains three things together, left to right:</span>
@@ -410,10 +373,10 @@ rag_prompt = ChatPromptTemplate.<span style="color:#61afef;">from_template</span
 rag_chain = rag_prompt | llm | <span style="color:#61afef;">StrOutputParser</span>()
 
 <span style="color:#7f848e;font-style:italic;"># Run the chain by handing it exactly the names of the holes in the template.</span>
-answer = rag_chain.<span style="color:#61afef;">invoke</span>({<span style="color:#98c379;">"context"</span>: context, <span style="color:#98c379;">"question"</span>: QUESTION})
+answer = rag_chain.<span style="color:#61afef;">invoke</span>({<span style="color:#98c379;">&quot;context&quot;</span>: context, <span style="color:#98c379;">&quot;question&quot;</span>: QUESTION})
 
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f"Question: {</span>QUESTION<span style="color:#98c379;">}"</span>)
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f"\nAnswer: {</span>answer<span style="color:#98c379;">}"</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;Question: {</span>QUESTION<span style="color:#98c379;">}&quot;</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;\nAnswer: {</span>answer<span style="color:#98c379;">}&quot;</span>)
 </div></div>
 <ul><li><strong>The <code>|</code> symbol is the important bit.</strong> It is LangChain's shorthand for "do this, then hand the result to that". Read <code>a | b | c</code> as "a, then b, then c".</li><li><strong><code>invoke</code> takes a plain dictionary.</strong> The keys must match the hole names in the template exactly — <code>{&quot;context&quot;: ..., &quot;question&quot;: ...}</code>. A typo here raises a <code>KeyError</code> naming the variable it wanted, which is a friendly failure.</li><li><strong>Why the double newline <code>\n\n</code>?</strong> It separates chunks with a blank line, which stops the model from reading two unrelated paragraphs as one continuous thought.</li><li><strong><code>StrOutputParser</code> is what makes <code>answer</code> a string.</strong> Without it you would get a full response object with metadata, token counts, and the text buried inside it.</li><li><strong>This is the only step that needs the API key.</strong> Everything else in the lab is free and offline.</li><li><strong>If the answer sounds wrong,</strong> do not retrain anything and do not rewrite the prompt — print <code>context</code> and read it. Nine times out of ten the right text was never retrieved, and no amount of prompt tweaking fixes a retrieval miss. Here the answer is nearly a verbatim lift from Chunk 1, which is exactly what "grounded" looks like.</li></ul>
 <hr/>
@@ -421,15 +384,15 @@ answer = rag_chain.<span style="color:#61afef;">invoke</span>({<span style="colo
 <p>Now that the pipeline runs, this step changes the two knobs that decide how good it is, and prints what each one buys.</p>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#7f848e;font-style:italic;"># --- Knob 1: TOP_K — how many chunks reach the LLM ---</span>
 <span style="color:#7f848e;font-style:italic;"># No LLM calls here, so this sweep is fast and free.</span>
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">"--- Changing TOP_K (how many chunks reach the LLM) ---"</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;--- Changing TOP_K (how many chunks reach the LLM) ---&quot;</span>)
 <span style="color:#c678dd;">for</span> k <span style="color:#c678dd;">in</span> (<span style="color:#d19a66;">1</span>, <span style="color:#d19a66;">3</span>, <span style="color:#d19a66;">5</span>):
     trial_matches = vector_store.<span style="color:#61afef;">similarity_search_with_score</span>(QUESTION, k=k)
     context_characters = <span style="color:#61afef;">sum</span>(<span style="color:#61afef;">len</span>(chunk.page_content) <span style="color:#c678dd;">for</span> chunk, _ <span style="color:#c678dd;">in</span> trial_matches)
-    <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f"TOP_K={</span>k<span style="color:#98c379;">}: {</span>k<span style="color:#98c379;">} chunks, {</span>context_characters<span style="color:#98c379;">:,} context chars, best match {</span>trial_matches[<span style="color:#d19a66;">0</span>][<span style="color:#d19a66;">1</span>]<span style="color:#98c379;">:.3f}"</span>)
+    <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;TOP_K={</span>k<span style="color:#98c379;">}: {</span>k<span style="color:#98c379;">} chunks, {</span>context_characters<span style="color:#98c379;">:,} context chars, best match {</span>trial_matches[<span style="color:#d19a66;">0</span>][<span style="color:#d19a66;">1</span>]<span style="color:#98c379;">:.3f}&quot;</span>)
 
 <span style="color:#7f848e;font-style:italic;"># --- Knob 2: CHUNK_SIZE — how finely we cut the document ---</span>
 <span style="color:#61afef;">print</span>()
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">"--- Changing CHUNK_SIZE (how finely we cut the document) ---"</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;--- Changing CHUNK_SIZE (how finely we cut the document) ---&quot;</span>)
 <span style="color:#c678dd;">for</span> size <span style="color:#c678dd;">in</span> (<span style="color:#d19a66;">300</span>, <span style="color:#d19a66;">400</span>, <span style="color:#d19a66;">800</span>):
     <span style="color:#7f848e;font-style:italic;"># A different chunk size means different chunks, which means we must</span>
     <span style="color:#7f848e;font-style:italic;"># rebuild the whole index before searching it again.</span>
@@ -442,21 +405,21 @@ answer = rag_chain.<span style="color:#61afef;">invoke</span>({<span style="colo
     )
     best_chunk, best_score = trial_store.<span style="color:#61afef;">similarity_search_with_score</span>(QUESTION, k=<span style="color:#d19a66;">1</span>)[<span style="color:#d19a66;">0</span>]
     <span style="color:#7f848e;font-style:italic;"># Show the first few words of whatever won, so we can see *which* section it was.</span>
-    opening_words = <span style="color:#98c379;">" "</span>.<span style="color:#61afef;">join</span>(best_chunk.page_content.<span style="color:#61afef;">split</span>()[:<span style="color:#d19a66;">8</span>])
-    <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f"CHUNK_SIZE={</span>size<span style="color:#98c379;">}: {</span><span style="color:#61afef;">len</span>(trial_chunks)<span style="color:#98c379;">:&gt;2} chunks, best match {</span>best_score<span style="color:#98c379;">:.3f} -&gt; \"{</span>opening_words<span style="color:#98c379;">}...\""</span>)
+    opening_words = <span style="color:#98c379;">&quot; &quot;</span>.<span style="color:#61afef;">join</span>(best_chunk.page_content.<span style="color:#61afef;">split</span>()[:<span style="color:#d19a66;">8</span>])
+    <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;CHUNK_SIZE={</span>size<span style="color:#98c379;">}: {</span><span style="color:#61afef;">len</span>(trial_chunks)<span style="color:#98c379;">:&gt;2} chunks, best match {</span>best_score<span style="color:#98c379;">:.3f} -&gt; \&quot;{</span>opening_words<span style="color:#98c379;">}...\&quot;&quot;</span>)
 </div></div>
 <ul><li><strong>Raising <code>TOP_K</code> raises recall, not accuracy.</strong> More chunks means the answer is more likely to be somewhere in the context, but also means more irrelevant text competing for the model's attention — and more tokens you pay for. Notice the best match stays <code>0.771</code> in every row: asking for more chunks cannot improve your single best chunk, because it was already found at <code>k=1</code>.</li><li><strong>Changing <code>CHUNK_SIZE</code> rebuilds the index.</strong> That is why this loop re-splits <em>and</em> re-builds instead of just searching again. It is also why chunk size is a more dangerous setting than <code>TOP_K</code>: it changes what the index contains, not just how much of it you read.</li><li><code>{len(trial_chunks):&gt;2}</code> right-aligns the count in a 2-wide column so the three rows line up.</li><li><code>&quot; &quot;.join(...split()[:8])</code> collapses all the newlines and spaces, then takes the first 8 words — a tidy one-line preview of the winning chunk.</li><li><strong>The winning section is the same in all three rows, but the score is not.</strong> A higher score at <code>size=300</code> does not automatically mean a better answer — it can just mean a shorter chunk that happens to sit closer to the question's wording. Score and usefulness are two different things.</li><li><strong>There is no universally correct pair.</strong> The right values depend on your document and the questions asked of it. Tuning them is the honest, unglamorous work that separates a RAG demo from a RAG system, and it is what the next labs attack with smarter chunking, hybrid search, and reranking.</li></ul>
 <hr/>
 <h3>Step 7 — Ask a Question the Document Cannot Answer</h3>
 <p>Step 4 gave us three chunks that all looked fine. This step finds out what "not fine" actually looks like, by asking about something this document has no opinion on.</p>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#7f848e;font-style:italic;"># A question with no possible answer in a wetland-restoration guide.</span>
-OFF_TOPIC_QUESTION = <span style="color:#98c379;">"Who won the 1998 FIFA World Cup?"</span>
+OFF_TOPIC_QUESTION = <span style="color:#98c379;">&quot;Who won the 1998 FIFA World Cup?&quot;</span>
 
 off_topic_matches = vector_store.<span style="color:#61afef;">similarity_search_with_score</span>(OFF_TOPIC_QUESTION, k=<span style="color:#d19a66;">1</span>)
 off_topic_score = off_topic_matches[<span style="color:#d19a66;">0</span>][<span style="color:#d19a66;">1</span>]
 
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f"off-topic best match: {</span>off_topic_score<span style="color:#98c379;">:.3f}"</span>)
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f"on-topic best match:  {</span>matches[<span style="color:#d19a66;">0</span>][<span style="color:#d19a66;">1</span>]<span style="color:#98c379;">:.3f}"</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;off-topic best match: {</span>off_topic_score<span style="color:#98c379;">:.3f}&quot;</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;on-topic best match:  {</span>matches[<span style="color:#d19a66;">0</span>][<span style="color:#d19a66;">1</span>]<span style="color:#98c379;">:.3f}&quot;</span>)
 </div></div>
 <ul><li><strong>The retriever still returned a chunk.</strong> It always does — that is the behaviour from Step 4, now aimed at a question the document cannot possibly answer.</li><li><strong>Look at the score: <code>0.021</code>, against <code>0.771</code> for the real question.</strong> Nothing in Step 4's output told you which chunks were useful, because all of them scored above 0.48. This is the number that gives you a floor.</li><li><strong>This is how you build a "I don't know" gate in a real system.</strong> Pick a threshold — anywhere well below the scores you saw in Step 4, and well above <code>0.021</code> — and when the best match falls under it, stop retrieving and make the model say it does not know. Without that gate, a system that has never seen a document will still confidently retrieve its least-unrelated paragraph and answer from it.</li><li><strong>You can run this against the off-topic question for free.</strong> No LLM call is involved, which is the point: measuring retrieval quality should not cost you anything.</li></ul>
 <hr/>

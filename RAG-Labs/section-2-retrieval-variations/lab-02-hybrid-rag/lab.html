@@ -42,7 +42,6 @@ pre code{background:none;padding:0;font-family:'SFMono-Regular',Consolas,'Libera
 </p>
 
 <h1>Hybrid RAG (Dense + Sparse) with Semantic Chunking</h1>
-<p><strong>Difficulty:</strong> Intermediate | <strong>Time:</strong> ~40 min | <strong>Requires:</strong> Basic RAG and embedding familiarity</p>
 <hr/>
 <h2>Problem Statement / Use Case Overview</h2>
 <p>A coastal-restoration team keeps its field notes in a PDF. Someone asks why the crews let the tide back in slowly instead of opening the breach all at once. Standard RAG turns that question into a vector, compares it to every chunk, and hands the nearest few to the LLM — but vector search has one reliable weakness: if the answer lives in an exact term, a code snippet, a species name, or a measurement, and the sentence around it doesn't read as <em>semantically</em> close to the question, it never surfaces. Keyword search has the mirror-image weakness: it nails "Section 4.2" and is blind to the fact that "they open the breach in stages" answers a question about "phased reintroduction."</p>
@@ -363,69 +362,57 @@ species time to c...
 <h2>Step-wise Instructions — Development</h2>
 <hr/>
 <h3>Setup — Import Libraries</h3>
-<p>This cell loads every tool the pipeline needs, grouped by role: the core pieces for building an index and querying it, the two retrievers that make up the "hybrid" part along with the tool that fuses them, and the LLM and embedding integrations that do the reading and understanding.</p>
+<p>This cell loads every tool the pipeline needs: the core pieces for building an index and querying it, the two retrievers that make up the "hybrid" part along with the tool that fuses them, and the LLM integration.</p>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#c678dd;">import</span> os
-<span style="color:#c678dd;">from</span> dotenv <span style="color:#c678dd;">import</span> load_dotenv
 
-<span style="color:#7f848e;font-style:italic;"># Core LlamaIndex components</span>
+<span style="color:#c678dd;">from</span> dotenv <span style="color:#c678dd;">import</span> load_dotenv
 <span style="color:#c678dd;">from</span> llama_index.core <span style="color:#c678dd;">import</span> VectorStoreIndex, Settings
 <span style="color:#c678dd;">from</span> llama_index.core.node_parser <span style="color:#c678dd;">import</span> SemanticSplitterNodeParser
-<span style="color:#c678dd;">from</span> llama_index.readers.file <span style="color:#c678dd;">import</span> PDFReader
 <span style="color:#c678dd;">from</span> llama_index.core.query_engine <span style="color:#c678dd;">import</span> RetrieverQueryEngine
-
-<span style="color:#7f848e;font-style:italic;"># Hybrid Search Specifics</span>
-<span style="color:#c678dd;">from</span> llama_index.retrievers.bm25 <span style="color:#c678dd;">import</span> BM25Retriever
 <span style="color:#c678dd;">from</span> llama_index.core.retrievers <span style="color:#c678dd;">import</span> QueryFusionRetriever
-
-<span style="color:#7f848e;font-style:italic;"># LLM and Embedding integrations</span>
 <span style="color:#c678dd;">from</span> llama_index.llms.openrouter <span style="color:#c678dd;">import</span> OpenRouter
-<span style="color:#c678dd;">from</span> llama_index.embeddings.huggingface <span style="color:#c678dd;">import</span> HuggingFaceEmbedding
+<span style="color:#c678dd;">from</span> llama_index.readers.file <span style="color:#c678dd;">import</span> PDFReader
+<span style="color:#c678dd;">from</span> llama_index.retrievers.bm25 <span style="color:#c678dd;">import</span> BM25Retriever
 </div></div>
 <h3>Setup — Silence Noisy Logs</h3>
 <p>This cell doesn't touch the pipeline at all — it's purely there to keep the notebook's output readable.</p>
-<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#c678dd;">import</span> warnings
-<span style="color:#c678dd;">import</span> logging
+<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#c678dd;">import</span> logging
+<span style="color:#c678dd;">import</span> warnings
 
-<span style="color:#7f848e;font-style:italic;"># Silence general Python warnings</span>
-warnings.<span style="color:#61afef;">filterwarnings</span>(<span style="color:#98c379;">"ignore"</span>)
+warnings.<span style="color:#61afef;">filterwarnings</span>(<span style="color:#98c379;">&quot;ignore&quot;</span>)
 
-<span style="color:#7f848e;font-style:italic;"># Silence HuggingFace download / info logs</span>
-logging.<span style="color:#61afef;">getLogger</span>(<span style="color:#98c379;">"transformers"</span>).<span style="color:#61afef;">setLevel</span>(logging.ERROR)
-logging.<span style="color:#61afef;">getLogger</span>(<span style="color:#98c379;">"sentence_transformers"</span>).<span style="color:#61afef;">setLevel</span>(logging.ERROR)
-logging.<span style="color:#61afef;">getLogger</span>(<span style="color:#98c379;">"huggingface_hub"</span>).<span style="color:#61afef;">setLevel</span>(logging.ERROR)
-logging.<span style="color:#61afef;">getLogger</span>(<span style="color:#98c379;">"httpx"</span>).<span style="color:#61afef;">setLevel</span>(logging.ERROR)
-
-<span style="color:#7f848e;font-style:italic;"># bm25s (behind the BM25Retriever) logs a DEBUG line every time it builds its</span>
-<span style="color:#7f848e;font-style:italic;"># index. It attaches its own handler at import time, so stopping propagation is</span>
-<span style="color:#7f848e;font-style:italic;"># what actually silences it -- setLevel alone leaves the line in place.</span>
-bm25_logger = logging.<span style="color:#61afef;">getLogger</span>(<span style="color:#98c379;">"bm25s"</span>)
+<span style="color:#c678dd;">for</span> noisy <span style="color:#c678dd;">in</span> (<span style="color:#98c379;">&quot;transformers&quot;</span>, <span style="color:#98c379;">&quot;sentence_transformers&quot;</span>, <span style="color:#98c379;">&quot;huggingface_hub&quot;</span>, <span style="color:#98c379;">&quot;httpx&quot;</span>):
+    logging.<span style="color:#61afef;">getLogger</span>(noisy).<span style="color:#61afef;">setLevel</span>(logging.ERROR)
+</div></div>
+<p><code>bm25s</code>, the library behind <code>BM25Retriever</code>, needs one extra step. It logs a DEBUG line every time it builds its index, and it attaches its own handler at import time — so it has to be stopped from propagating to the root logger. Setting its level alone leaves the line on screen.</p>
+<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;">bm25_logger = logging.<span style="color:#61afef;">getLogger</span>(<span style="color:#98c379;">&quot;bm25s&quot;</span>)
 bm25_logger.<span style="color:#61afef;">setLevel</span>(logging.ERROR)
 bm25_logger.propagate = <span style="color:#c678dd;">False</span>
 </div></div>
-<p>It suppresses routine warning, info, and debug messages from the underlying libraries, so only meaningful output shows up in later cells. The <code>bm25s</code> block is the one that matters visually: without it, a stray <code>Building index from IDs objects</code> DEBUG line lands in the middle of Step 2's output, right between the code and the confirmation message.</p>
+<p>The <code>bm25s</code> block is the one that matters visually. Without it, a stray <code>Building index from IDs objects</code> DEBUG line lands in the middle of Step 2's output, right between the code and the confirmation message.</p>
 <h3>Setup — Load API Keys &amp; Configure LlamaIndex Settings</h3>
 <p>This cell gets everything authenticated and configured so every later step knows which LLM and embedding model to use, without being told again.</p>
-<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#61afef;">load_dotenv</span>(<span style="color:#98c379;">".env"</span>)
+<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#61afef;">load_dotenv</span>(<span style="color:#98c379;">&quot;.env&quot;</span>)
 
-OPENROUTER_API_KEY = os.<span style="color:#61afef;">getenv</span>(<span style="color:#98c379;">"OPENROUTER_API_KEY"</span>)
+OPENROUTER_API_KEY = os.<span style="color:#61afef;">getenv</span>(<span style="color:#98c379;">&quot;OPENROUTER_API_KEY&quot;</span>)
 
 <span style="color:#c678dd;">if</span> <span style="color:#c678dd;">not</span> OPENROUTER_API_KEY:
-    OPENROUTER_API_KEY = <span style="color:#61afef;">input</span>(<span style="color:#98c379;">"Enter your OpenRouter API key (get one at https://openrouter.ai): "</span>).<span style="color:#61afef;">strip</span>()
+    OPENROUTER_API_KEY = <span style="color:#61afef;">input</span>(<span style="color:#98c379;">&quot;Enter your OpenRouter API key (get one at https://openrouter.ai): &quot;</span>).<span style="color:#61afef;">strip</span>()
 
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">"Key loaded."</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;Key loaded.&quot;</span>)
 
 <span style="color:#7f848e;font-style:italic;"># Set up the LLM (using OpenRouter)</span>
 Settings.llm = <span style="color:#61afef;">OpenRouter</span>(
-    model=<span style="color:#98c379;">"nvidia/nemotron-3-ultra-550b-a55b:free"</span>,
+    model=<span style="color:#98c379;">&quot;nvidia/nemotron-3-ultra-550b-a55b:free&quot;</span>,
     api_key=OPENROUTER_API_KEY,
     temperature=<span style="color:#d19a66;">0</span>,
     max_tokens=<span style="color:#d19a66;">512</span>
 )
 
 <span style="color:#7f848e;font-style:italic;"># Set up the dense embedding model</span>
-Settings.embed_model = <span style="color:#61afef;">HuggingFaceEmbedding</span>(model_name=<span style="color:#98c379;">"all-MiniLM-L6-v2"</span>)
+Settings.embed_model = <span style="color:#61afef;">HuggingFaceEmbedding</span>(model_name=<span style="color:#98c379;">&quot;all-MiniLM-L6-v2&quot;</span>)
 
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">"LlamaIndex configured!"</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;LlamaIndex configured!&quot;</span>)
 </div></div>
 <ul><li>The API key is loaded first, with a fallback that simply asks for it directly if it isn't found — so the notebook doesn't just crash if the <code>.env</code> file is missing.</li><li>It then sets which LLM will generate answers and which embedding model will be used to understand meaning, for the rest of the notebook to use automatically.</li></ul>
 <hr/>
@@ -435,9 +422,9 @@ Settings.embed_model = <span style="color:#61afef;">HuggingFaceEmbedding</span>(
 reader = <span style="color:#61afef;">PDFReader</span>()
 
 <span style="color:#7f848e;font-style:italic;"># One LlamaIndex Document per PDF page</span>
-documents = reader.<span style="color:#61afef;">load_data</span>(file=<span style="color:#98c379;">"data/sample_text_document.pdf"</span>)
+documents = reader.<span style="color:#61afef;">load_data</span>(file=<span style="color:#98c379;">&quot;data/sample_text_document.pdf&quot;</span>)
 
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f"Loaded {</span><span style="color:#61afef;">len</span>(documents)<span style="color:#98c379;">} document(s)"</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;Loaded {</span><span style="color:#61afef;">len</span>(documents)<span style="color:#98c379;">} document(s)&quot;</span>)
 
 <span style="color:#7f848e;font-style:italic;"># Semantic chunking: splits based on meaning, not fixed size</span>
 splitter = <span style="color:#61afef;">SemanticSplitterNodeParser</span>(
@@ -449,7 +436,7 @@ splitter = <span style="color:#61afef;">SemanticSplitterNodeParser</span>(
 <span style="color:#7f848e;font-style:italic;"># Parse documents into nodes explicitly for hybrid search</span>
 nodes = splitter.<span style="color:#61afef;">get_nodes_from_documents</span>(documents)
 
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f"Extracted {</span><span style="color:#61afef;">len</span>(nodes)<span style="color:#98c379;">} semantic nodes from the documents."</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;Extracted {</span><span style="color:#61afef;">len</span>(nodes)<span style="color:#98c379;">} semantic nodes from the documents.&quot;</span>)
 </div></div>
 <ul><li>The PDF is loaded first, giving the notebook something to work with.</li><li>That content is then split by meaning rather than by a fixed size, so each chunk stays focused on one complete idea, as described in Section 7.</li><li><code>breakpoint_percentile_threshold=95</code> is the "how eager am I to cut" dial: at 95 the splitter cuts only on the most extreme meaning shifts, so chunks stay large. Lower it to see the document shatter into more, smaller ideas.</li><li>These chunks are what both the dense and sparse retrievers will be built from next.</li></ul>
 <hr/>
@@ -471,10 +458,10 @@ hybrid_retriever = <span style="color:#61afef;">QueryFusionRetriever</span>(
     [vector_retriever, bm25_retriever],
     similarity_top_k=<span style="color:#d19a66;">3</span>,
     num_queries=<span style="color:#d19a66;">1</span>, 
-    mode=<span style="color:#98c379;">"reciprocal_rerank"</span>, 
+    mode=<span style="color:#98c379;">&quot;reciprocal_rerank&quot;</span>, 
 )
 
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">"Hybrid retrievers (Dense + Sparse) successfully fused!"</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;Hybrid retrievers (Dense + Sparse) successfully fused!&quot;</span>)
 </div></div>
 <ul><li>The dense retriever is built first, set up to return the handful of chunks that are closest in meaning to a given question.</li><li>The sparse retriever is built next, over those same chunks, returning its own handful of best keyword matches.</li><li><code>num_queries=1</code> means the question is used as-is. Raise it and LlamaIndex generates paraphrase variants and searches with each, which improves recall but costs one extra retrieval round per variant.</li><li>The two are then combined into one fused retriever, which blends their rankings together using reciprocal rerank rather than trusting either one alone — this is the actual "hybrid" step.</li></ul>
 <hr/>
@@ -484,21 +471,21 @@ hybrid_retriever = <span style="color:#61afef;">QueryFusionRetriever</span>(
 query_engine = RetrieverQueryEngine.<span style="color:#61afef;">from_args</span>(hybrid_retriever)
 
 <span style="color:#7f848e;font-style:italic;"># Ask a question</span>
-QUERY = <span style="color:#98c379;">"Why do restoration teams reintroduce tidal flow gradually instead of all at once?"</span>
+QUERY = <span style="color:#98c379;">&quot;Why do restoration teams reintroduce tidal flow gradually instead of all at once?&quot;</span>
 response = query_engine.<span style="color:#61afef;">query</span>(QUERY)
 
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f"Query: {</span>QUERY<span style="color:#98c379;">}"</span>)
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f"\nAnswer: {</span>response<span style="color:#98c379;">}"</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;Query: {</span>QUERY<span style="color:#98c379;">}&quot;</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;\nAnswer: {</span>response<span style="color:#98c379;">}&quot;</span>)
 </div></div>
 <ul><li>The fused retriever from Step 2 is wrapped into something that can be asked a question directly, handling retrieval and answer generation together.</li><li>Asking it a question runs the whole pipeline in one call: the hybrid retriever finds the most relevant chunks, and the LLM uses them to produce the final answer.</li><li>The result carries more than just the answer text — it also keeps track of exactly which chunks were used, which is what the next step looks at.</li></ul>
 <hr/>
 <h3>Step 4 — Inspect Post-Fusion Sources</h3>
 <p>This step doesn't generate anything new — it just reveals what actually went into the answer above.</p>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#7f848e;font-style:italic;"># Show the source nodes (retrieved chunks)</span>
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">"Source nodes used (Post-Fusion):"</span>)
+<span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;Source nodes used (Post-Fusion):&quot;</span>)
 <span style="color:#c678dd;">for</span> i, node <span style="color:#c678dd;">in</span> <span style="color:#61afef;">enumerate</span>(response.source_nodes):
-    <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f"\n--- Source {</span>i + <span style="color:#d19a66;">1</span><span style="color:#98c379;">} (score: {</span>node.score<span style="color:#98c379;">:.4f}) ---"</span>)
-    <span style="color:#61afef;">print</span>(node.text[:<span style="color:#d19a66;">200</span>] + <span style="color:#98c379;">"..."</span>)
+    <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;\n--- Source {</span>i + <span style="color:#d19a66;">1</span><span style="color:#98c379;">} (score: {</span>node.score<span style="color:#98c379;">:.4f}) ---&quot;</span>)
+    <span style="color:#61afef;">print</span>(node.text[:<span style="color:#d19a66;">200</span>] + <span style="color:#98c379;">&quot;...&quot;</span>)
 </div></div>
 <ul><li>This cell prints out the exact chunks that were fused together and handed to the LLM to generate the answer in Step 3, along with how each one ranked after fusion.</li><li>Seeing that list means nothing is hidden — it's possible to check exactly which passages the final answer was based on, instead of just trusting the answer on its own.</li><li>The scores here are the <em>fused reciprocal-rerank</em> values, not raw cosine or BM25 scores. They are small numbers (roughly <code>1/60</code> per rank hit) precisely because that is how the formula works — don't expect them in the 0–1 range a cosine score would give you.</li></ul>
 <hr/>

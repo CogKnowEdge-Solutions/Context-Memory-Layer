@@ -42,7 +42,6 @@ pre code{background:none;padding:0;font-family:'SFMono-Regular',Consolas,'Libera
 </p>
 
 <h1>Hybrid RAG: Vector Search + Graph Traversal on Neo4j</h1>
-<p><strong>Difficulty:</strong> Advanced | <strong>Time:</strong> ~55 min | <strong>Requires:</strong> Graph RAG Labs 1-2, Cypher basics, and a Neo4j Aura instance with APOC</p>
 <hr/>
 <h2>Problem Statement / Use Case Overview</h2>
 <p>Pure vector search finds nodes that are <em>semantically close</em> to a question — great for figuring out roughly what a question is about, but it has no idea how that node connects to anything else. Pure graph traversal is the opposite: once you're standing on the right node, it's excellent at following relationships outward, but it has no way to figure out where to start unless the exact name is already known.</p>
@@ -136,7 +135,7 @@ Step 3: Compile all unique model/mechanism entities discussed in the text.
 <h2>Pre-requisites</h2>
 <ul><li><strong>Basic familiarity</strong> with Python (functions, loops, <code>import</code> statements).</li><li><strong>Familiarity with a Neo4j knowledge graph built with Cypher</strong> — nodes, relationships, and <code>MERGE</code>/<code>MATCH</code> queries — as covered in the earlier walkthrough.</li><li><strong>An LLM API Key</strong> — used to call the LLM for extraction and answering.</li><li><strong>A Neo4j Aura instance</strong> with the <strong>APOC plugin enabled</strong> — required for the dynamic relationship-naming step (Aura free instances have APOC available by default).</li></ul>
 <hr/>
-<h2>Getting Neo4j Credentials</h2>
+<h3>Getting Neo4j Credentials</h3>
 <p>The pipeline needs three values to connect to Neo4j: a <strong>URI</strong>, a <strong>username</strong>, and a <strong>password</strong>. Here's how to get all three from a free Neo4j Aura instance:</p>
 <ol><li>Go to <a href="https://neo4j.com/aura">neo4j.com/aura</a> and sign up, or log in if an account already exists.</li><li>From the Aura console, click <strong>Create instance</strong> and choose the <strong>free tier</strong>.</li><li>Give the instance a name and confirm creation. Aura will generate the database and show a screen with the connection details.</li><li>On that screen, <strong>download or copy the generated password immediately</strong> — Aura shows it only once. If it's missed, the password has to be reset from the instance's settings page.</li><li>Once the instance finishes provisioning (usually under a minute), open it from the console. The <strong>Connection URI</strong> is shown on the instance's overview page, and typically looks like:</li></ol>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">output</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;">   neo4j+s://xxxxxxxx.databases.neo4j.io
@@ -216,6 +215,7 @@ document_text = <span style="color:#98c379;">&quot;&quot;</span>
 <p>By the end of this step, <code>document_text</code> holds a short block of plain text pulled from the PDF, ready to be handed to the LLM for entity extraction.</p>
 <hr/>
 <h3>Step 2 — Extract Graph Structure</h3>
+<p>The extraction prompt goes up first, with the JSON shape spelled out:</p>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;Asking LLM to extract graph nodes and edges...&quot;</span>)
 
 prompt = <span style="color:#98c379;">f&quot;&quot;&quot;</span>
@@ -232,11 +232,11 @@ prompt = <span style="color:#98c379;">f&quot;&quot;&quot;</span>
 <span style="color:#98c379;">  &quot;relationships&quot;: [ {{&quot;source&quot;: &quot;Concept 1&quot;, &quot;target&quot;: &quot;Concept 2&quot;, &quot;type&quot;: &quot;RELATES_TO&quot;}} ]</span>
 <span style="color:#98c379;">}}</span>
 <span style="color:#98c379;">&quot;&quot;&quot;</span>
-
-response = llm.<span style="color:#61afef;">invoke</span>(prompt)
+</div></div>
+<p>Then the call, plus the strip of any Markdown fence the model wrapped its JSON in:</p>
+<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;">response = llm.<span style="color:#61afef;">invoke</span>(prompt)
 
 raw_output = response.content.<span style="color:#61afef;">strip</span>()
-<span style="color:#7f848e;font-style:italic;"># The AI sometimes adds ```json marks around its answer. We remove them here.</span>
 <span style="color:#c678dd;">if</span> raw_output.<span style="color:#61afef;">startswith</span>(<span style="color:#98c379;">&quot;```json&quot;</span>):
     raw_output = raw_output[<span style="color:#d19a66;">7</span>:-<span style="color:#d19a66;">3</span>].<span style="color:#61afef;">strip</span>()
 <span style="color:#c678dd;">elif</span> raw_output.<span style="color:#61afef;">startswith</span>(<span style="color:#98c379;">&quot;```&quot;</span>):
@@ -322,11 +322,8 @@ index_query = <span style="color:#98c379;">&quot;&quot;&quot;</span>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#c678dd;">def</span> <span style="color:#61afef;">execute_hybrid_retrieval</span>(driver, question, top_k=<span style="color:#d19a66;">3</span>):
     <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;User Question: &#39;{</span>question<span style="color:#98c379;">}&#39;\n&quot;</span>)
 
-    <span style="color:#7f848e;font-style:italic;"># Turn the question into a vector, using the same method used for the graph nodes</span>
     question_vector = embeddings.<span style="color:#61afef;">embed_query</span>(question)
 
-    <span style="color:#7f848e;font-style:italic;"># First find the nodes closest in meaning to the question.</span>
-    <span style="color:#7f848e;font-style:italic;"># Then look at what each of those nodes is connected to.</span>
     hybrid_query = <span style="color:#98c379;">&quot;&quot;&quot;</span>
 <span style="color:#98c379;">    CALL db.index.vector.queryNodes(&#39;concept_embeddings&#39;, $top_k, $question_vector)</span>
 <span style="color:#98c379;">    YIELD node AS seed, score</span>
@@ -341,7 +338,6 @@ index_query = <span style="color:#98c379;">&quot;&quot;&quot;</span>
         <span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;RETRIEVED HYBRID PATHS:&quot;</span>)
         <span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;-&quot;</span> * <span style="color:#d19a66;">60</span>)
         <span style="color:#c678dd;">for</span> record <span style="color:#c678dd;">in</span> result:
-            <span style="color:#7f848e;font-style:italic;"># Turn each result into one easy-to-read line of text</span>
             fact = <span style="color:#98c379;">f&quot;(Similarity: {</span>record[<span style="color:#98c379;">&#39;Semantic_Score&#39;</span>]<span style="color:#98c379;">:.2f}) {</span>record[<span style="color:#98c379;">&#39;Seed_Node&#39;</span>]<span style="color:#98c379;">} --[{</span>record[<span style="color:#98c379;">&#39;Relationship&#39;</span>]<span style="color:#98c379;">}]--&gt; {</span>record[<span style="color:#98c379;">&#39;Connected_Node&#39;</span>]<span style="color:#98c379;">}&quot;</span>
             retrieved_facts.<span style="color:#61afef;">append</span>(fact)
             <span style="color:#61afef;">print</span>(fact)
@@ -351,37 +347,37 @@ index_query = <span style="color:#98c379;">&quot;&quot;&quot;</span>
 <p>This function does two things in a row, inside one query to the database. First, it turns the question into a vector using the same method used for the graph's nodes, so both sides can be compared fairly. Then it asks the vector index for the closest matching nodes, along with a score showing how close each match is. Right after that, it looks at what each of those matching nodes is connected to, and returns the whole thing as a simple list of readable facts.</p>
 <hr/>
 <h3>Step 7 — Generate Answer using LangChain Prompt Pipelines</h3>
+<p>The answer prompt is defined first — two blank spots, one for the retrieved facts and one for the question:</p>
+<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;">ANSWER_TEMPLATE = <span style="color:#98c379;">&quot;&quot;&quot;</span>
+<span style="color:#98c379;">You are an expert AI research assistant using a Neo4j Knowledge Graph.</span>
+<span style="color:#98c379;">Answer the question using ONLY the connected relationship paths provided below.</span>
+
+<span style="color:#98c379;">Graph Relationships:</span>
+<span style="color:#98c379;">{facts_block}</span>
+
+<span style="color:#98c379;">Question: {question}</span>
+
+<span style="color:#98c379;">Output your response in EXACTLY two sections:</span>
+<span style="color:#98c379;">--- FINAL ANSWER ---</span>
+<span style="color:#98c379;">[Provide a direct, simple, 1-sentence answer.]</span>
+
+<span style="color:#98c379;">--- AI TRACING &amp; EXPLAINABILITY ---</span>
+<span style="color:#98c379;">[Explain step-by-step how the answer was derived from the Neo4j graph context.]</span>
+<span style="color:#98c379;">&quot;&quot;&quot;</span>
+</div></div>
+<p>Then the function that fills those blanks and chains the template straight to the LLM:</p>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#c678dd;">def</span> <span style="color:#61afef;">generate_hybrid_answer</span>(question, retrieved_facts):
     <span style="color:#c678dd;">if</span> <span style="color:#c678dd;">not</span> retrieved_facts:
         <span style="color:#c678dd;">return</span> <span style="color:#98c379;">&quot;No relevant context found in the database.&quot;</span>
-        
+
     facts_block = <span style="color:#98c379;">&quot;\n&quot;</span>.<span style="color:#61afef;">join</span>([<span style="color:#98c379;">f&quot;- {</span>f<span style="color:#98c379;">}&quot;</span> <span style="color:#c678dd;">for</span> f <span style="color:#c678dd;">in</span> retrieved_facts])
-    
-    template = <span style="color:#98c379;">&quot;&quot;&quot;</span>
-<span style="color:#98c379;">    You are an expert AI research assistant using a Neo4j Knowledge Graph.</span>
-<span style="color:#98c379;">    Answer the question using ONLY the connected relationship paths provided below.</span>
-
-<span style="color:#98c379;">    Graph Relationships:</span>
-<span style="color:#98c379;">    {facts_block}</span>
-
-<span style="color:#98c379;">    Question: {question}</span>
-
-<span style="color:#98c379;">    Output your response in EXACTLY two sections:</span>
-<span style="color:#98c379;">    --- FINAL ANSWER ---</span>
-<span style="color:#98c379;">    [Provide a direct, simple, 1-sentence answer.]</span>
-
-<span style="color:#98c379;">    --- AI TRACING &amp; EXPLAINABILITY ---</span>
-<span style="color:#98c379;">    [Explain step-by-step how the answer was derived from the Neo4j graph context.]</span>
-<span style="color:#98c379;">    &quot;&quot;&quot;</span>
-    
-    prompt = <span style="color:#61afef;">PromptTemplate</span>(template=template, input_variables=[<span style="color:#98c379;">&quot;facts_block&quot;</span>, <span style="color:#98c379;">&quot;question&quot;</span>])
-    <span style="color:#7f848e;font-style:italic;"># The | joins the steps together: first fill in the prompt, then send it to the AI</span>
+    prompt = <span style="color:#61afef;">PromptTemplate</span>(template=ANSWER_TEMPLATE, input_variables=[<span style="color:#98c379;">&quot;facts_block&quot;</span>, <span style="color:#98c379;">&quot;question&quot;</span>])
     chain = prompt | llm
-    
+
     response = chain.<span style="color:#61afef;">invoke</span>({<span style="color:#98c379;">&quot;facts_block&quot;</span>: facts_block, <span style="color:#98c379;">&quot;question&quot;</span>: question})
     <span style="color:#c678dd;">return</span> response.content
 </div></div>
-<p>This function builds the final prompt using a reusable template with two blank spots — one for the retrieved facts, one for the question — and then chains that template directly to the LLM, so filling in the blanks and getting an answer happens in one step. If no facts were retrieved at all, it skips calling the LLM and returns a simple message instead.</p>
+<p>If no facts were retrieved at all, it skips calling the LLM and returns a simple message instead.</p>
 <hr/>
 <h3>Step 8 — Querying</h3>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;">query = <span style="color:#98c379;">&quot;What models or mechanisms are discussed in the document?&quot;</span>

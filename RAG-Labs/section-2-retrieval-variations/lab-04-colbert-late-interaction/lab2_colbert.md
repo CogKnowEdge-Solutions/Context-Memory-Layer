@@ -1,7 +1,5 @@
 # ColBERT & Late Interaction RAG
 
-**Difficulty:** Advanced | **Time:** ~55 min | **Requires:** Lab 3 (Multi-Vector RAG) and a Qdrant Cloud cluster
-
 ---
 
 # Problem Statement / Use Case Overview
@@ -179,7 +177,7 @@ flowchart TB
 
 ---
 
-# ColBERT Overview
+## ColBERT Overview
 
 **What is ColBERT?**
 
@@ -284,7 +282,7 @@ Notice the trace says only Source 1 really answered the question. That is exactl
 
 ---
 
-# Getting Qdrant Credentials
+## Getting Qdrant Credentials
 
 1. Go to [cloud.qdrant.io](https://cloud.qdrant.io) and sign up, or log in if you already have an account.
 2. Click **Create Cluster** to set up a new cluster. A free tier is available for testing and is enough for this lab.
@@ -325,28 +323,18 @@ The cell below installs all required Python packages:
 ### Step 1 — Imports
 
 ```python
-import uuid
 import hashlib
+import uuid
+
 import requests
-from pypdf import PdfReader
-
-# Vector Store
-from qdrant_client import QdrantClient
-from qdrant_client import models
-
-# Embedding Model
 from fastembed import LateInteractionTextEmbedding
-
-# LLM & Text Processing
+from IPython.display import Markdown, display
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-
-# Core Components
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-
-# Display
-from IPython.display import Markdown, display
+from pypdf import PdfReader
+from qdrant_client import QdrantClient, models
 ```
 
 | Import | Purpose |
@@ -474,20 +462,18 @@ Chunks here are much smaller than in Lab 3 (500 characters instead of 10,000). W
 
 ### Step 6 — Generate Stable Chunk IDs
 
-```python
-import uuid
+Every chunk needs an ID so Qdrant can identify it. A random ID would change every time the notebook runs, which would create duplicate points on reruns. Instead, `stable_id` derives the ID from the chunk's own text using `uuid5`, so the same chunk text always produces the same ID — no matter how many times the notebook runs.
 
-# Deterministic ID from the chunk's own text, so the same chunk always gets the same ID across reruns
+```python
 def stable_id(text):
     """Deterministic ID derived from the chunk text, so the same chunk always gets the same ID across runs."""
-    # Use a fixed namespace (e.g., NAMESPACE_URL) to ensure stability
     return str(uuid.uuid5(uuid.NAMESPACE_URL, text))
 
-# Same reasoning as Lab 3's Step 6 fix: stable payload IDs keep Qdrant consistent if this notebook is rerun
+
 chunk_ids = [stable_id(chunk) for chunk in chunks]
 ```
 
-Every chunk needs an ID so Qdrant can identify it. A random ID would change every time the notebook runs, which would create duplicate points on reruns. Instead, `stable_id` derives the ID from the chunk's own text using `uuid5`, so the same chunk text always produces the same ID — no matter how many times the notebook runs.
+Same reasoning as Lab 3's Step 6: stable payload IDs keep Qdrant consistent if this notebook is rerun.
 
 ---
 
@@ -566,7 +552,11 @@ Respond in exactly this format:
 """
 
 qa_prompt = ChatPromptTemplate.from_template(qa_template)
+```
 
+Each retrieved hit gets a label carrying its MaxSim score, so the LLM can cite a source and the reader can see how well it matched.
+
+```python
 def format_hits(hits):
     """Label each retrieved chunk with its MaxSim score and payload text."""
     formatted = []

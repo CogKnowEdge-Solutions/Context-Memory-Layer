@@ -42,7 +42,6 @@ pre code{background:none;padding:0;font-family:'SFMono-Regular',Consolas,'Libera
 </p>
 
 <h1>Automated Document Q&amp;A: OCR + RAG on a Scanned PDF (OpenRouter)</h1>
-<p><strong>Difficulty:</strong> Intermediate | <strong>Time:</strong> ~45 min | <strong>Requires:</strong> Lab 5 (Structured OCR + RAG) and an OpenRouter API key</p>
 <hr/>
 <h2>Problem Statement / Use Case Overview</h2>
 <p>Many important documents — old scanned forms, printed transcripts, faxed reports — exist only as <strong>images of text</strong>, not as text an AI can read directly. Before any question can be answered about a scanned document, the words trapped inside the image have to be pulled out first.</p>
@@ -200,20 +199,16 @@ PDF_PATH = os.path.<span style="color:#61afef;">join</span>(<span style="color:#
 pages_to_process = pages[:TEST_PAGE_LIMIT]
 <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;Running OCR on {</span><span style="color:#61afef;">len</span>(pages_to_process)<span style="color:#98c379;">} pages...&quot;</span>)
 
-chunks = []  <span style="color:#7f848e;font-style:italic;"># We will store our text chunks here</span>
-chunk_size = <span style="color:#d19a66;">450</span>  <span style="color:#7f848e;font-style:italic;"># how far we move forward for each new chunk (see overlap note below)</span>
+chunks = []
+chunk_size = <span style="color:#d19a66;">450</span>
 
 <span style="color:#c678dd;">for</span> i, page_img <span style="color:#c678dd;">in</span> <span style="color:#61afef;">enumerate</span>(pages_to_process, start=<span style="color:#d19a66;">1</span>):
-    <span style="color:#7f848e;font-style:italic;"># Convert image to a format EasyOCR understands</span>
     page_array = np.<span style="color:#61afef;">array</span>(page_img)
-
-    <span style="color:#7f848e;font-style:italic;"># Extract text from the image</span>
     lines = ocr_reader.<span style="color:#61afef;">readtext</span>(page_array, detail=<span style="color:#d19a66;">0</span>)
     full_page_text = <span style="color:#98c379;">&quot;\n&quot;</span>.<span style="color:#61afef;">join</span>(lines)
 
-    <span style="color:#7f848e;font-style:italic;"># Split the page text into smaller chunks for our vector database.</span>
-    <span style="color:#7f848e;font-style:italic;"># Each chunk is 500 characters, but we only step forward by 450 -&gt; chunks</span>
-    <span style="color:#7f848e;font-style:italic;"># overlap by 50 characters so we don&#39;t accidentally cut a sentence in half</span>
+    <span style="color:#7f848e;font-style:italic;"># Each chunk is 500 characters, but we only step forward by 450, so</span>
+    <span style="color:#7f848e;font-style:italic;"># chunks overlap by 50 characters and we don&#39;t cut a sentence in half</span>
     <span style="color:#7f848e;font-style:italic;"># right at a chunk boundary.</span>
     <span style="color:#c678dd;">for</span> start_idx <span style="color:#c678dd;">in</span> <span style="color:#61afef;">range</span>(<span style="color:#d19a66;">0</span>, <span style="color:#61afef;">len</span>(full_page_text), chunk_size):
         piece = full_page_text[start_idx : start_idx + <span style="color:#d19a66;">500</span>].<span style="color:#61afef;">strip</span>()
@@ -221,8 +216,6 @@ chunk_size = <span style="color:#d19a66;">450</span>  <span style="color:#7f848e
             chunks.<span style="color:#61afef;">append</span>({<span style="color:#98c379;">&quot;page&quot;</span>: i, <span style="color:#98c379;">&quot;text&quot;</span>: piece})
 
     <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;Page {</span>i<span style="color:#98c379;">} transcribed! Found {</span><span style="color:#61afef;">len</span>(full_page_text)<span style="color:#98c379;">} characters.&quot;</span>)
-
-<span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;\nTotal chunks created: {</span><span style="color:#61afef;">len</span>(chunks)<span style="color:#98c379;">}&quot;</span>)
 </div></div>
 <p>By the end of this step, <code>chunks</code> holds every overlapping piece of text from the processed pages, each one tagged with the page number it came from — ready to be embedded in the next step.</p>
 <hr/>
@@ -262,43 +255,44 @@ index.<span style="color:#61afef;">add</span>(embeddings)
         <span style="color:#c678dd;">return</span> []
 </div></div>
 <p><strong><code>execute_rag_pipeline</code> — builds the prompt and gets the answer:</strong></p>
+<p>The prompt is pulled out as a template first. It fixes the response format up front: a one-line answer with a page citation, then a page-by-page account of what was used and what was ignored.</p>
+<div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;">QA_TEMPLATE = <span style="color:#98c379;">&quot;&quot;&quot;</span>
+<span style="color:#98c379;">You are an expert assistant. Answer the question using ONLY the provided context blocks.</span>
+
+<span style="color:#98c379;">Context:</span>
+<span style="color:#98c379;">{context}</span>
+
+<span style="color:#98c379;">Question: {question}</span>
+
+<span style="color:#98c379;">CRITICAL INSTRUCTIONS:</span>
+<span style="color:#98c379;">Output your response in EXACTLY two sections as shown below.</span>
+
+<span style="color:#98c379;">--- FINAL ANSWER ---</span>
+<span style="color:#98c379;">[Provide a direct, 1-sentence answer without bold text or markdown formatting. End with simple citation like (Page X).]</span>
+
+<span style="color:#98c379;">--- EXPLAINABILITY ---</span>
+<span style="color:#98c379;">[For each Context Block provided above, list Page X and state either &quot;NOT USED&quot; or &quot;USED (Extracted: &lt;1 short fact&gt;)]</span>
+<span style="color:#98c379;">&quot;&quot;&quot;</span>
+</div></div>
+<p>The function itself stays short because everything above is reusable: retrieve the <code>k</code> closest chunks, label each one by its page number, fill the template, and post it.</p>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#c678dd;">def</span> <span style="color:#61afef;">execute_rag_pipeline</span>(question):
     <span style="color:#98c379;">&quot;&quot;&quot;Runs RAG and gets both the answer and source reasoning in a single call.&quot;&quot;&quot;</span>
-    
     sources = <span style="color:#61afef;">retrieve_documents</span>(question)
     <span style="color:#c678dd;">if</span> <span style="color:#c678dd;">not</span> sources:
         <span style="color:#c678dd;">return</span> <span style="color:#98c379;">&quot;No sources found.&quot;</span>
-        
-    <span style="color:#7f848e;font-style:italic;"># Format context with page numbers clearly labeled</span>
-    context_block = <span style="color:#98c379;">&quot;\n\n&quot;</span>.<span style="color:#61afef;">join</span>([<span style="color:#98c379;">f&quot;--- Context Block (Page {</span>c[<span style="color:#98c379;">&#39;page&#39;</span>]<span style="color:#98c379;">}) ---\n{</span>c[<span style="color:#98c379;">&#39;text&#39;</span>]<span style="color:#98c379;">}&quot;</span> <span style="color:#c678dd;">for</span> c <span style="color:#c678dd;">in</span> sources])
-    
-    <span style="color:#7f848e;font-style:italic;"># This is the instruction (&quot;prompt&quot;) we send to the AI model, telling it</span>
-    <span style="color:#7f848e;font-style:italic;"># exactly how to answer and how to format its response.</span>
-    qa_prompt = <span style="color:#98c379;">f&quot;&quot;&quot;</span>
-<span style="color:#98c379;">    You are an expert assistant. Answer the question using ONLY the provided context blocks.</span>
-<span style="color:#98c379;">    </span>
-<span style="color:#98c379;">    Context:</span>
-<span style="color:#98c379;">    {</span>context_block<span style="color:#98c379;">}</span>
-<span style="color:#98c379;">    </span>
-<span style="color:#98c379;">    Question: {</span>question<span style="color:#98c379;">}</span>
-<span style="color:#98c379;">    </span>
-<span style="color:#98c379;">    CRITICAL INSTRUCTIONS:</span>
-<span style="color:#98c379;">    Output your response in EXACTLY two sections as shown below.</span>
-<span style="color:#98c379;">    </span>
-<span style="color:#98c379;">    --- FINAL ANSWER ---</span>
-<span style="color:#98c379;">    [Provide a direct, 1-sentence answer without bold text or markdown formatting. End with simple citation like (Page X).]</span>
-<span style="color:#98c379;">    </span>
-<span style="color:#98c379;">    --- EXPLAINABILITY ---</span>
-<span style="color:#98c379;">    [For each Context Block provided above, list Page X and state either &quot;NOT USED&quot; or &quot;USED (Extracted: &lt;1 short fact&gt;)&quot;]</span>
-<span style="color:#98c379;">    &quot;&quot;&quot;</span>
-    
+
+    context_block = <span style="color:#98c379;">&quot;\n\n&quot;</span>.<span style="color:#61afef;">join</span>(
+        [<span style="color:#98c379;">f&quot;--- Context Block (Page {</span>c[<span style="color:#98c379;">&#39;page&#39;</span>]<span style="color:#98c379;">}) ---\n{</span>c[<span style="color:#98c379;">&#39;text&#39;</span>]<span style="color:#98c379;">}&quot;</span> <span style="color:#c678dd;">for</span> c <span style="color:#c678dd;">in</span> sources]
+    )
+    qa_prompt = QA_TEMPLATE.<span style="color:#61afef;">format</span>(context=context_block, question=question)
+
     payload = {
         <span style="color:#98c379;">&quot;model&quot;</span>: TEXT_MODEL,
         <span style="color:#98c379;">&quot;messages&quot;</span>: [{<span style="color:#98c379;">&quot;role&quot;</span>: <span style="color:#98c379;">&quot;user&quot;</span>, <span style="color:#98c379;">&quot;content&quot;</span>: qa_prompt}],
         <span style="color:#98c379;">&quot;temperature&quot;</span>: <span style="color:#d19a66;">0.0</span>
     }
     headers = {<span style="color:#98c379;">&quot;Authorization&quot;</span>: <span style="color:#98c379;">f&quot;Bearer {</span>OPENROUTER_API_KEY<span style="color:#98c379;">}&quot;</span>}
-    
+
     <span style="color:#c678dd;">try</span>:
         resp = requests.<span style="color:#61afef;">post</span>(OPENROUTER_URL, headers=headers, json=payload)
         resp.<span style="color:#61afef;">raise_for_status</span>()

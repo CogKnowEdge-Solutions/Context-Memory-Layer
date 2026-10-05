@@ -1,7 +1,5 @@
 # Vectorless RAG: Reasoning-Based Retrieval without Embeddings
 
-**Difficulty:** Intermediate | **Time:** ~40 min | **Requires:** A PageIndex API key and LLM API credentials
-
 > **Vectorless RAG** is a retrieval-augmented generation approach that replaces embedding models and vector databases with LLM-based reasoning. Instead of encoding text into vectors and searching via cosine similarity, the LLM reads a hierarchical tree of document titles and summaries to identify relevant sections, then reads extracted text from those pages to generate answers.
 
 ---
@@ -190,16 +188,16 @@ The cell below installs all required Python packages:
 Import the standard library and third-party modules used throughout the notebook. **`os`** and **`json`** handle file paths and caching. **`time`** and **`requests`** handle polling and downloading. **`pymupdf`** extracts text from PDFs. **`PageIndexClient`** and **`utils`** are the PageIndex SDK for document tree generation. **`ChatBedrockConverse`** is the LangChain LLM client for AWS Bedrock. **`HumanMessage`** is a LangChain typed message object.
 
 ```python
-import os       # for environment variables
-import json     # for parsing LLM JSON responses
-import time     # for polling
-import requests # for downloading PDF
-import pymupdf  # for PDF text extraction
-from pageindex import PageIndexClient  # PageIndex API client
-from pageindex import utils            # PageIndex utilities
-from langchain_aws import ChatBedrockConverse  # LangChain AWS Bedrock client
-from langchain_core.messages import HumanMessage  # typed message objects
-# from langchain_openai import ChatOpenAI  # LangChain Azure OpenAI client (uncomment for Azure)
+import json
+import os
+import re
+import time
+
+import pymupdf
+import requests
+from langchain_aws import ChatBedrockConverse
+from langchain_core.messages import HumanMessage
+from pageindex import PageIndexClient, utils
 ```
 
 ## Configure AWS Bedrock Credentials
@@ -405,11 +403,8 @@ flowchart LR
 This cell sends the slim tree (titles + summaries only) to the LLM along with your question. The LLM returns a JSON with its reasoning (`thinking`) and the relevant node IDs (`node_list`). A regex fallback handles cases where the LLM wraps JSON in extra text.
 
 ```python
-# Strip full text from tree — LLM only needs titles + summaries to pick relevant nodes
 tree_slim = utils.remove_fields(tree.copy(), fields=["text"])
 
-# Ask the LLM which nodes are relevant to the question
-# We use JSON format so we can reliably extract structured data
 search_prompt = f"""
 IMPORTANT: You MUST respond with valid JSON only. No other text.
 
@@ -428,14 +423,15 @@ Respond with ONLY this JSON format:
     "node_list": ["node_id_1", "node_id_2"]
 }}
 """
+```
 
-# Try to parse JSON — handle cases where LLM adds extra text or returns invalid JSON
-import re
+Send it, then read the reply — with the regex fallback for the case where the LLM wraps the JSON in extra text:
+
+```python
 response = call_llm(search_prompt)
 try:
     result = json.loads(response)
 except json.JSONDecodeError:
-    # Fallback: try to extract JSON from the response using regex
     match = re.search(r'\{.*\}', response, re.DOTALL)
     if match:
         result = json.loads(match.group())

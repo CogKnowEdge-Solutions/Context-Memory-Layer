@@ -1,7 +1,5 @@
 # Hybrid RAG: Vector Search + Graph Traversal on Neo4j
 
-**Difficulty:** Advanced | **Time:** ~55 min | **Requires:** Graph RAG Labs 1-2, Cypher basics, and a Neo4j Aura instance with APOC
-
 ---
 
 # Problem Statement / Use Case Overview
@@ -270,7 +268,7 @@ Notice that two different seed nodes were picked up in the same query — one sc
 
 ---
 
-# Getting Neo4j Credentials
+## Getting Neo4j Credentials
 
 The pipeline needs three values to connect to Neo4j: a **URI**, a **username**, and a **password**. Here's how to get all three from a free Neo4j Aura instance:
 
@@ -404,6 +402,8 @@ By the end of this step, `document_text` holds a short block of plain text pulle
 
 ### Step 2 — Extract Graph Structure
 
+The extraction prompt goes up first, with the JSON shape spelled out:
+
 ```python
 print("Asking LLM to extract graph nodes and edges...")
 
@@ -421,11 +421,14 @@ Format exactly like this:
   "relationships": [ {{"source": "Concept 1", "target": "Concept 2", "type": "RELATES_TO"}} ]
 }}
 """
+```
 
+Then the call, plus the strip of any Markdown fence the model wrapped its JSON in:
+
+```python
 response = llm.invoke(prompt)
 
 raw_output = response.content.strip()
-# The AI sometimes adds ```json marks around its answer. We remove them here.
 if raw_output.startswith("```json"):
     raw_output = raw_output[7:-3].strip()
 elif raw_output.startswith("```"):
@@ -542,11 +545,8 @@ This step checks each node to see if it already has a vector stored on it. If it
 def execute_hybrid_retrieval(driver, question, top_k=3):
     print(f"User Question: '{question}'\n")
 
-    # Turn the question into a vector, using the same method used for the graph nodes
     question_vector = embeddings.embed_query(question)
 
-    # First find the nodes closest in meaning to the question.
-    # Then look at what each of those nodes is connected to.
     hybrid_query = """
     CALL db.index.vector.queryNodes('concept_embeddings', $top_k, $question_vector)
     YIELD node AS seed, score
@@ -561,7 +561,6 @@ def execute_hybrid_retrieval(driver, question, top_k=3):
         print("RETRIEVED HYBRID PATHS:")
         print("-" * 60)
         for record in result:
-            # Turn each result into one easy-to-read line of text
             fact = f"(Similarity: {record['Semantic_Score']:.2f}) {record['Seed_Node']} --[{record['Relationship']}]--> {record['Connected_Node']}"
             retrieved_facts.append(fact)
             print(fact)
@@ -575,39 +574,43 @@ This function does two things in a row, inside one query to the database. First,
 
 ### Step 7 — Generate Answer using LangChain Prompt Pipelines
 
+The answer prompt is defined first — two blank spots, one for the retrieved facts and one for the question:
+
+```python
+ANSWER_TEMPLATE = """
+You are an expert AI research assistant using a Neo4j Knowledge Graph.
+Answer the question using ONLY the connected relationship paths provided below.
+
+Graph Relationships:
+{facts_block}
+
+Question: {question}
+
+Output your response in EXACTLY two sections:
+--- FINAL ANSWER ---
+[Provide a direct, simple, 1-sentence answer.]
+
+--- AI TRACING & EXPLAINABILITY ---
+[Explain step-by-step how the answer was derived from the Neo4j graph context.]
+"""
+```
+
+Then the function that fills those blanks and chains the template straight to the LLM:
+
 ```python
 def generate_hybrid_answer(question, retrieved_facts):
     if not retrieved_facts:
         return "No relevant context found in the database."
-        
+
     facts_block = "\n".join([f"- {f}" for f in retrieved_facts])
-    
-    template = """
-    You are an expert AI research assistant using a Neo4j Knowledge Graph.
-    Answer the question using ONLY the connected relationship paths provided below.
-
-    Graph Relationships:
-    {facts_block}
-
-    Question: {question}
-
-    Output your response in EXACTLY two sections:
-    --- FINAL ANSWER ---
-    [Provide a direct, simple, 1-sentence answer.]
-
-    --- AI TRACING & EXPLAINABILITY ---
-    [Explain step-by-step how the answer was derived from the Neo4j graph context.]
-    """
-    
-    prompt = PromptTemplate(template=template, input_variables=["facts_block", "question"])
-    # The | joins the steps together: first fill in the prompt, then send it to the AI
+    prompt = PromptTemplate(template=ANSWER_TEMPLATE, input_variables=["facts_block", "question"])
     chain = prompt | llm
-    
+
     response = chain.invoke({"facts_block": facts_block, "question": question})
     return response.content
 ```
 
-This function builds the final prompt using a reusable template with two blank spots — one for the retrieved facts, one for the question — and then chains that template directly to the LLM, so filling in the blanks and getting an answer happens in one step. If no facts were retrieved at all, it skips calling the LLM and returns a simple message instead.
+If no facts were retrieved at all, it skips calling the LLM and returns a simple message instead.
 
 ---
 

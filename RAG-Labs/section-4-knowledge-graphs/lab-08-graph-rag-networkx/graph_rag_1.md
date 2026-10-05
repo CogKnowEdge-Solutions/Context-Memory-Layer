@@ -1,7 +1,5 @@
 # End-to-End Generalized Graph RAG
 
-**Difficulty:** Advanced | **Time:** ~50 min | **Requires:** Basic RAG and knowledge-graph familiarity
-
 ---
 
 # Problem Statement / Use Case Overview
@@ -351,25 +349,32 @@ By the end of this step, `sample_text` holds a short block of plain text from th
 
 This step asks the LLM to read the text and return a structured list of relationships, with no fixed list of entity types to look for — it works the same way regardless of what the document is about.
 
+The prompt lives at module level so the function stays readable:
+
+```python
+EXTRACT_PROMPT = """
+You are an expert knowledge graph builder. Read the text below and extract all key entities and their relationships.
+
+Text:
+{text}
+
+CRITICAL INSTRUCTIONS:
+Output ONLY a valid JSON list of objects with keys "source", "relation", and "target".
+Example format:
+[
+  {{"source": "Entity_A", "relation": "RELATES_TO", "target": "Entity_B"}},
+  {{"source": "Entity_C", "relation": "CAUSES", "target": "Entity_D"}}
+]
+Do not add any Markdown code blocks, explanations, or introductory text. Return ONLY pure JSON.
+"""
+```
+
+The function itself is then just the HTTP call and the JSON unwrapping:
+
 ```python
 def extract_graph_elements(text):
     """Uses LLM to convert raw text into structured Nodes and Edges."""
-
-    prompt = f"""
-    You are an expert knowledge graph builder. Read the text below and extract all key entities and their relationships.
-
-    Text:
-    {text}
-
-    CRITICAL INSTRUCTIONS:
-    Output ONLY a valid JSON list of objects with keys "source", "relation", and "target".
-    Example format:
-    [
-      {{"source": "Entity_A", "relation": "RELATES_TO", "target": "Entity_B"}},
-      {{"source": "Entity_C", "relation": "CAUSES", "target": "Entity_D"}}
-    ]
-    Do not add any Markdown code blocks, explanations, or introductory text. Return ONLY pure JSON.
-    """
+    prompt = EXTRACT_PROMPT.format(text=text)
 
     payload = {
         "model": TEXT_MODEL,
@@ -383,7 +388,6 @@ def extract_graph_elements(text):
         resp.raise_for_status()
         raw_json = resp.json()["choices"][0]["message"]["content"].strip()
 
-        # Clean up unexpected markdown
         if raw_json.startswith("```"):
             raw_json = raw_json.split("\n", 1)[1].rsplit("```", 1)[0].strip()
 
@@ -391,7 +395,11 @@ def extract_graph_elements(text):
     except Exception as e:
         print(f"Extraction Error: {e}")
         return []
+```
 
+Run it against the sample text and inspect what came back:
+
+```python
 extracted_relationships = extract_graph_elements(sample_text)
 print(f"Extracted {len(extracted_relationships)} relationships:\n")
 print(json.dumps(extracted_relationships, indent=2))
@@ -480,53 +488,49 @@ def traverse_subgraph(graph, start_entity, radius=2):
 
 This step ties everything together: find the entity, gather its connected facts, and ask the LLM for a direct answer plus an explainability trace, all in one function.
 
+The prompt is defined once, outside the function, so the pipeline logic stays easy to follow:
+
+```python
+QA_TEMPLATE = """
+You are an expert AI research assistant using a Knowledge Graph.
+Answer the question using ONLY the connected relationship paths provided below.
+
+Graph Relationships:
+{facts_block}
+
+Question: {question}
+
+CRITICAL INSTRUCTIONS:
+Output your response in EXACTLY two sections as shown below.
+
+--- FINAL ANSWER ---
+[Provide a direct, simple, 1-sentence answer.]
+
+--- AI TRACING & EXPLAINABILITY ---
+[Explain step-by-step how the answer was derived from the graph. Use an objective, third-person perspective. Do NOT use first-person pronouns like "I" or "my".]
+"""
+```
+
+If no matching entity is found at all, the function stops early and lists a few known concepts instead of guessing. Otherwise it walks the graph, formats the connected facts into a clean bullet list, and hands them to the LLM with strict formatting instructions.
+
 ```python
 def execute_graph_rag(question):
     """A fully generalized Graph RAG pipeline."""
-
-    # Step 1: Identify which known graph entity the question refers to
     target_entity = find_node_in_question(question, G)
-
     if not target_entity:
         return f"Could not find any known concepts in your question. Known concepts: {list(G.nodes)[:5]}..."
 
     print(f"[System Log] Auto-detected focus concept: '{target_entity}'")
-
-    # Step 2: Retrieve connected facts (subgraph) around the detected entity
     retrieved_facts = traverse_subgraph(G, target_entity, radius=2)
     if not retrieved_facts:
         return f"Found the concept '{target_entity}', but no relationships are connected to it."
 
     facts_block = "\n".join([f"- {f}" for f in retrieved_facts])
-
-    # Step 3: Build a grounded prompt so the LLM answers only from retrieved graph facts
-    prompt = f"""
-    You are an expert AI research assistant using a Knowledge Graph.
-    Answer the question using ONLY the connected relationship paths provided below.
-
-    Graph Relationships:
-    {facts_block}
-
-    Question: {question}
-
-    CRITICAL INSTRUCTIONS:
-    Output your response in EXACTLY two sections as shown below.
-
-    --- FINAL ANSWER ---
-    [Provide a direct, simple, 1-sentence answer.]
-
-    --- AI TRACING & EXPLAINABILITY ---
-    [Explain step-by-step how the answer was derived from the graph. Use an objective, third-person perspective. Do NOT use first-person pronouns like "I" or "my".]
-    """
-
-    payload = {
-        "model": TEXT_MODEL,
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.0
-    }
+    prompt = QA_TEMPLATE.format(facts_block=facts_block, question=question)
+    payload = {"model": TEXT_MODEL,
+               "messages": [{"role": "user", "content": prompt}],
+               "temperature": 0.0}
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}"}
-
-    # Step 4: Call the LLM and return its answer
     try:
         resp = requests.post(OPENROUTER_URL, headers=headers, json=payload)
         resp.raise_for_status()
@@ -534,8 +538,6 @@ def execute_graph_rag(question):
     except Exception as e:
         return f"Error executing Graph RAG: {e}"
 ```
-
-If no matching entity is found at all, the function stops early and lists a few known concepts instead of guessing. Otherwise, the connected facts are formatted into a clean bullet list and handed to the LLM along with strict formatting instructions, so the reply always separates the direct answer from the reasoning trace.
 
 ---
 

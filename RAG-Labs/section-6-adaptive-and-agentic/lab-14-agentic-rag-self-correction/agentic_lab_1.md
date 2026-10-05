@@ -1,7 +1,5 @@
 # Agentic RAG with Self-Correction
 
-**Difficulty:** Advanced | **Time:** ~50 min | **Requires:** Basic RAG and embedding familiarity
-
 ---
 
 # Problem Statement / Use Case Overview
@@ -229,7 +227,7 @@ The grade came back `YES` on the first attempt here, so the loop never had to re
 
 ---
 
-# Getting an OpenRouter API Key
+## Getting an OpenRouter API Key
 
 The LLM used here is accessed through OpenRouter, which provides a single API key that works across many different models, including free ones.
 
@@ -416,7 +414,6 @@ The current question is embedded the same way the chunks were, so both sides can
 def grade_node(state: AgentState) -> AgentState:
     facts_text = "\n".join(state["retrieved_facts"])
 
-    # We soften the prompt so the LLM looks for ANY helpful context, not a perfect match
     prompt = f"""
     You are a grading assistant evaluating search results.
     
@@ -428,15 +425,8 @@ def grade_node(state: AgentState) -> AgentState:
     Reply with ONLY one word: YES or NO.
     """
 
-    response = llm.invoke(prompt)
-    raw_grade = response.content.strip().upper()
-    
-    # Safeguard for open-source models that might add punctuation
-    if "YES" in raw_grade:
-        grade = "YES"
-    else:
-        grade = "NO"
-        
+    raw_grade = llm.invoke(prompt).content.strip().upper()
+    grade = "YES" if "YES" in raw_grade else "NO"
     print(f"Grade: {grade}")
 
     state["grade"] = grade

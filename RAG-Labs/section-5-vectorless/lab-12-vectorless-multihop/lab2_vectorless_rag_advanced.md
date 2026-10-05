@@ -1,7 +1,5 @@
 # Vectorless RAG: Multi-Hop Retrieval with Explainability Tracking
 
-**Difficulty:** Advanced | **Time:** ~50 min | **Requires:** Lab 11 (Vectorless RAG)
-
 ---
 
 # Problem Statement / Use Case Overview
@@ -156,24 +154,19 @@ First, install the packages this lab needs:
 | `requests` | Downloads the PDF from a link |
 
 ```python
-# Install PageIndex for vectorless hierarchical retrieval, LangChain AWS Bedrock for the LLM, and requests for downloading the file.
 !pip install pageindex langchain-aws boto3 requests
 ```
 
 ## Import Libraries
 
 ```python
-# Import core modules
 import os
 import time
-import requests
 import re
+import requests
 
-# Import PageIndex for vectorless retrieval
 from pageindex import PageIndexClient
 import pageindex.utils as utils
-
-# Import LangChain's AWS Bedrock wrapper
 from langchain_aws import ChatBedrockConverse
 ```
 
@@ -280,24 +273,16 @@ This is the main part of the lab. The question is sent to PageIndex, which searc
 
 The lab also waits patiently while the search runs, and if it hits a temporary hiccup (like a rate limit), it just tries again instead of stopping.
 
+The search itself is just the submit-and-poll half. A temporary hiccup while polling — a rate limit or timeout — is printed and retried rather than raised, so it does not stop the run:
+
 ```python
-def retrieve_from_pageindex(query, doc_id, top_k=5):
-    """
-    Searches the document tree for the given query.
-    Every piece of context returned here is tagged with:
-      - which hop it was (1st match, 2nd match, ...)
-      - the section title
-      - the node id (the tree's unique ID for that section)
-      - the page number(s) the text came from
-    This metadata is what lets us later explain WHY a node was chosen.
-    """
+def fetch_retrieved_nodes(query, doc_id):
+    """Submit the query to PageIndex and poll until the retrieval finishes."""
     response = pi_client.submit_query(doc_id=doc_id, query=query)
     retrieval_id = response.get("retrieval_id")
-
     if not retrieval_id:
         return []
 
-    # Polling loop with error handling and a slightly longer delay
     while True:
         try:
             retrieval = pi_client.get_retrieval(retrieval_id)
@@ -307,44 +292,45 @@ def retrieve_from_pageindex(query, doc_id, top_k=5):
             elif status == "failed":
                 return []
         except Exception as e:
-            # Catch temporary API rate limits (429s) or timeouts
             print(f"API rate limit or timeout during polling. Retrying... ({e})")
 
         time.sleep(3)
 
-    nodes = retrieval.get("retrieved_nodes", [])
-    hops = []
+    return retrieval.get("retrieved_nodes", [])
+```
 
-    for index, node in enumerate(nodes[:top_k]):
-        node_name = node.get("title") or f"Section {index + 1}"
-        node_id = node.get("id", "unknown")
-        relevant_contents = node.get("relevant_contents", [])
+Each returned section then becomes a "hop" tagged with the metadata that later explains *why* it was chosen: which hop it was, the section title, the node id (the tree's unique ID for that section), and the page number(s) the text came from.
 
-        section_text = []
-        page_numbers = []
-        for group in relevant_contents:
-            for item in group:
-                content = item.get("relevant_content")
-                if content:
-                    section_text.append(content)
+```python
+def node_to_hop(node, index):
+    node_name = node.get("title") or f"Section {index + 1}"
+    node_id = node.get("id", "unknown")
 
-                # page number is embedded in a string like "<physical_index_6>"
-                raw_page = item.get("physical_index", "")
-                match = re.search(r"(\d+)", raw_page) if isinstance(raw_page, str) else None
-                if match:
-                    page_num = int(match.group(1))
-                    if page_num not in page_numbers:
-                        page_numbers.append(page_num)
+    section_text = []
+    page_numbers = []
+    for group in node.get("relevant_contents", []):
+        for item in group:
+            content = item.get("relevant_content")
+            if content:
+                section_text.append(content)
 
-        hops.append({
-            "hop_number": index + 1,
-            "section": node_name,
-            "node_id": node_id,
-            "pages": page_numbers,
-            "text": "\n".join(section_text)
-        })
+            raw_page = item.get("physical_index", "")  # looks like "<physical_index_6>"
+            match = re.search(r"(\d+)", raw_page) if isinstance(raw_page, str) else None
+            if match:
+                page_num = int(match.group(1))
+                if page_num not in page_numbers:
+                    page_numbers.append(page_num)
 
-    return hops
+    return {"hop_number": index + 1, "section": node_name, "node_id": node_id,
+            "pages": page_numbers, "text": "\n".join(section_text)}
+```
+
+Finally the two halves are joined under the name the rest of the lab calls:
+
+```python
+def retrieve_from_pageindex(query, doc_id, top_k=5):
+    nodes = fetch_retrieved_nodes(query, doc_id)
+    return [node_to_hop(node, i) for i, node in enumerate(nodes[:top_k])]
 ```
 
 ---
@@ -376,7 +362,6 @@ Question: {query}
 
     response = llm.invoke(prompt)
     final_answer = response.content
-
     return final_answer, hops, labeled_context
 ```
 
@@ -418,26 +403,21 @@ For every section the lab checked, this prints where it came from, whether it lo
 
 The "was it used" check here is a simple one: it just looks for the section's name inside the final answer. It's a good rough guide, but not perfect — for a more exact check, the answer-writing step would need to be changed to tag each fact with the section it came from.
 
+Print one line per hop, then ask the model directly why that hop was relevant.
+
+Two notes on how honest this is. Whether a hop was "used" is a basic heuristic — the section title appearing in the answer — not strict citation tracking; that would need the answer prompt to force `[Hop X]` tags. And the explanation is generated by the LLM on the spot, not PageIndex's internal scoring (the API does not expose that), but it is grounded in the actual retrieved content rather than made up.
+
 ```python
 print("\n--- EXPLAINABILITY ---")
 for hop in hops:
     pages = ", ".join(str(p) for p in hop["pages"]) if hop["pages"] else "unknown"
 
-    # A basic heuristic check to see if the section name was mentioned.
-    # Note: For strict citation tracking, you would need to update
-    # the vectorless_rag prompt to force the LLM to output [Hop X] tags.
     was_used = hop["section"] in final_answer
-
     status = "LIKELY USED in answer" if was_used else "retrieved context"
 
     print(f"\nHop {hop['hop_number']}: \"{hop['section']}\"")
     print(f"node_id: {hop['node_id']} | page(s): {pages} | {status}")
 
-    # Ask the LLM directly, right here, why this hop is relevant --
-    # no helper function, built inline for each hop.
-    # Note: this is a generated explanation, not PageIndex's internal
-    # scoring (the API doesn't expose that), but it's grounded in the
-    # actual retrieved content, not made up.
     explain_prompt = f"""
 In 3-4 short lines, explain why the section below is relevant to the question.
 Be specific -- mention the actual numbers or facts in the section that connect to the question.

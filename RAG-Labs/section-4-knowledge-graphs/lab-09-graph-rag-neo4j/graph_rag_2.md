@@ -1,7 +1,5 @@
 # End-to-End Graph RAG with Neo4j
 
-**Difficulty:** Advanced | **Time:** ~55 min | **Requires:** Lab 8 (Generalized Graph RAG) and a Neo4j Aura instance
-
 ---
 
 # Problem Statement / Use Case Overview
@@ -27,7 +25,7 @@ This is useful for:
 
 ---
 
-# What is Neo4j
+## What is Neo4j
 
 Neo4j is a database built specifically to store and query connected data. Most databases store information in tables — rows and columns — where relationships between records have to be figured out afterward by joining tables together. Neo4j stores the relationships themselves, directly, as part of the data.
 
@@ -301,7 +299,7 @@ The explainability section always describes the exact chain of relationships use
 
 ---
 
-# Getting Neo4j Credentials
+## Getting Neo4j Credentials
 
 The pipeline needs three values to connect to Neo4j: a **URI**, a **username**, and a **password**. Here's how to get all three from a free Neo4j Aura instance:
 
@@ -424,27 +422,34 @@ By the end of this step, `sample_text` holds a short block of plain text from th
 
 This step asks the LLM to read the text and return a structured list of relationships, with no fixed list of entity types to look for — it works the same way regardless of what the document is about.
 
+The prompt is defined once, outside the function, so both halves stay short:
+
+```python
+EXTRACT_PROMPT = """
+You are an expert knowledge graph builder. Read the text below and extract all key concepts and their relationships.
+
+Text:
+{text}
+
+CRITICAL INSTRUCTIONS:
+Output ONLY a valid JSON list of objects with keys "source", "relation", and "target".
+Example format:
+[
+  {{"source": "Entity_A", "relation": "RELATES_TO", "target": "Entity_B"}}
+]
+Return ONLY pure JSON. Do not add explanations.
+"""
+```
+
+The function itself is then just the HTTP call and the JSON unwrapping:
+
 ```python
 def extract_graph_elements(text):
-    prompt = f"""
-    You are an expert knowledge graph builder. Read the text below and extract all key concepts and their relationships.
-
-    Text:
-    {text}
-
-    CRITICAL INSTRUCTIONS:
-    Output ONLY a valid JSON list of objects with keys "source", "relation", and "target".
-    Example format:
-    [
-      {{"source": "Entity_A", "relation": "RELATES_TO", "target": "Entity_B"}}
-    ]
-    Return ONLY pure JSON. Do not add explanations.
-    """
-
+    prompt = EXTRACT_PROMPT.format(text=text)
     payload = {
         "model": TEXT_MODEL,
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.0  # Keeps the AI strictly factual
+        "temperature": 0.0
     }
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}"}
 
@@ -454,7 +459,6 @@ def extract_graph_elements(text):
         resp.raise_for_status()
         raw_json = resp.json()["choices"][0]["message"]["content"].strip()
 
-        # Strip out markdown formatting if the AI added it
         if raw_json.startswith("```"):
             raw_json = raw_json.split("\n", 1)[1].rsplit("```", 1)[0].strip()
 
@@ -462,10 +466,14 @@ def extract_graph_elements(text):
     except Exception as e:
         print(f"Extraction Error: {e}")
         return []
+```
 
+Run it and preview the result:
+
+```python
 extracted_relationships = extract_graph_elements(sample_text)
 print(f"\nExtracted {len(extracted_relationships)} relationships from the text.")
-print(json.dumps(extracted_relationships[:2], indent=2))  # Preview first 2
+print(json.dumps(extracted_relationships[:2], indent=2))
 ```
 
 `temperature=0.0` keeps the LLM's output consistent and predictable, which matters here since the reply needs to be parsed as exact JSON. By the end of this step, `extracted_relationships` holds a plain Python list of `source`/`relation`/`target` triples pulled straight out of the text — nothing has touched Neo4j yet.
@@ -559,61 +567,69 @@ def fetch_graph_context(entity_name):
 
 ### Step 6 — The Neo4j Graph RAG Engine
 
-This step ties everything together: find the entity in Neo4j, gather its connected facts with a Cypher query, and ask the LLM for a direct answer plus an explainability trace, all in one function.
+This step ties everything together: find the entity in Neo4j, gather its connected facts with a Cypher query, and ask the LLM for a direct answer plus an explainability trace. It is split into two small functions so each one does a single job.
+
+The prompt lives at module level so both functions below stay short:
+
+```python
+QA_TEMPLATE = """
+You are an expert AI research assistant using a Neo4j Knowledge Graph.
+Answer the question using ONLY the connected relationship paths provided below.
+
+Graph Relationships:
+{facts_block}
+
+Question: {question}
+
+CRITICAL INSTRUCTIONS:
+Output your response in EXACTLY two sections as shown below.
+
+--- FINAL ANSWER ---
+[Provide a direct, simple, 1-sentence answer.]
+
+--- AI TRACING & EXPLAINABILITY ---
+[Explain step-by-step how the answer was derived from the Neo4j graph. Use an objective, third-person perspective.]
+"""
+```
+
+Detect the entity first, then gather its facts. If either half fails, the tuple comes back carrying the reason instead of a stack trace:
+
+```python
+def gather_graph_facts(question):
+    """Find the entity mentioned in the question and pull its connected relationships."""
+    target_entity = find_node_in_db(question)
+    if not target_entity:
+        return None, "Could not find any known concepts from the database in your question."
+
+    print(f"[System Log] Auto-detected focus concept: '{target_entity}'")
+    retrieved_facts = fetch_graph_context(target_entity)
+    if not retrieved_facts:
+        return None, f"Found '{target_entity}' in Neo4j, but no relationships were connected to it."
+
+    return target_entity, retrieved_facts
+```
+
+Then the half that talks to the LLM:
 
 ```python
 def execute_neo4j_rag(question):
-    # Step 1: Detect if any entity from the database is mentioned in the question
-    target_entity = find_node_in_db(question)
-    if not target_entity:
-        return "Could not find any known concepts from the database in your question."
-
-    print(f"[System Log] Auto-detected focus concept: '{target_entity}'")
-
-    # Step 2: Retrieve connected relationship paths from Neo4j
-    retrieved_facts = fetch_graph_context(target_entity)
-    if not retrieved_facts:
-        return f"Found '{target_entity}' in Neo4j, but no relationships were connected to it."
+    target_entity, retrieved_facts = gather_graph_facts(question)
+    if target_entity is None:
+        return retrieved_facts
 
     facts_block = "\n".join([f"- {f}" for f in retrieved_facts])
-
-    # Step 3: Build a prompt that forces the LLM to rely strictly on graph facts
-    prompt = f"""
-    You are an expert AI research assistant using a Neo4j Knowledge Graph.
-    Answer the question using ONLY the connected relationship paths provided below.
-
-    Graph Relationships:
-    {facts_block}
-
-    Question: {question}
-
-    CRITICAL INSTRUCTIONS:
-    Output your response in EXACTLY two sections as shown below.
-
-    --- FINAL ANSWER ---
-    [Provide a direct, simple, 1-sentence answer.]
-
-    --- AI TRACING & EXPLAINABILITY ---
-    [Explain step-by-step how the answer was derived from the Neo4j graph. Use an objective, third-person perspective.]
-    """
-
-    payload = {
-        "model": TEXT_MODEL,
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.0
-    }
+    prompt = QA_TEMPLATE.format(facts_block=facts_block, question=question)
+    payload = {"model": TEXT_MODEL,
+               "messages": [{"role": "user", "content": prompt}],
+               "temperature": 0.0}
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}"}
-
-    # Step 4: Send prompt to LLM and return the structured answer
     try:
         resp = requests.post(OPENROUTER_URL, headers=headers, json=payload)
         resp.raise_for_status()
-
         response_json = resp.json()
         if "choices" in response_json:
             return response_json["choices"][0]["message"]["content"].strip()
         return f"OpenRouter API Error: {response_json}"
-
     except Exception as e:
         return f"Error executing Graph RAG: {e}"
 ```
@@ -640,10 +656,12 @@ Since the graph now lives in Neo4j, it can be rendered as an interactive widget 
 ```python
 from yfiles_jupyter_graphs_for_neo4j import Neo4jGraphWidget
 
-# 'driver' is the connection we already opened earlier
 widget = Neo4jGraphWidget(driver)
+```
 
-# Run the exact same query you would run in the Aura console
+`driver` is the connection opened earlier, so there is nothing to re-authenticate here.
+
+```python
 widget.show_cypher("MATCH (n)-[r]->(m) RETURN n, r, m")
 ```
 

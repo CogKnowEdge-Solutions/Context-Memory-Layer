@@ -1,7 +1,5 @@
 # Agentic Hybrid RAG with Dynamic Routing
 
-**Difficulty:** Advanced | **Time:** ~60 min | **Requires:** Lab 14 (Agentic RAG with Self-Correction) and a Neo4j Aura instance
-
 ---
 
 # Problem Statement / Use Case Overview
@@ -277,7 +275,7 @@ The question — asking what sequence transduction models are "based on or conne
 
 ---
 
-# Getting Neo4j Credentials
+## Getting Neo4j Credentials
 
 The pipeline needs three values to connect to Neo4j: a **URI**, a **username**, and a **password**. Here's how to get all three from a free Neo4j Aura instance:
 
@@ -294,7 +292,7 @@ The pipeline needs three values to connect to Neo4j: a **URI**, a **username**, 
 
 ---
 
-# Getting an OpenRouter API Key
+## Getting an OpenRouter API Key
 
 1. Go to [openrouter.ai](https://openrouter.ai) and sign up, or log in if an account already exists.
 2. From the dashboard, open the **Keys** section.
@@ -557,34 +555,39 @@ This node runs once, right after `START`, before any retrieval happens. The prom
 
 ### Step 8 — Retrieve Node (Tool Execution)
 
+The two Cypher queries live above the node so the branch below is just a choice between them:
+
+```python
+CYPHER_GRAPH = """
+CALL db.index.vector.queryNodes('concept_embeddings', 2, $vector)
+YIELD node AS seed, score
+MATCH (seed)-[r]-(neighbor:Concept)
+RETURN seed.name + ' --[' + type(r) + ']-> ' + neighbor.name AS path
+LIMIT 5
+"""
+
+CYPHER_VECTOR = """
+CALL db.index.vector.queryNodes('concept_embeddings', 3, $vector)
+YIELD node AS n, score
+RETURN n.name AS text
+"""
+```
+
+That gives the node one job — pick the query for the tool that was chosen, run it, and package the rows:
+
 ```python
 def retrieve_node(state: AgentState) -> AgentState:
     print(f"Retrieving for: '{state['question']}' via {state['current_tool']} Tool")
     question_vector = embeddings.embed_query(state["question"])
-    retrieved_data = []
+
+    if state["current_tool"] == "GRAPH":
+        cypher_query, key = CYPHER_GRAPH, "path"
+    else:
+        cypher_query, key = CYPHER_VECTOR, "text"
 
     with driver.session() as session:
-        if state["current_tool"] == "GRAPH":
-            # Graph Traversal Query
-            cypher_query = """
-            CALL db.index.vector.queryNodes('concept_embeddings', 2, $vector)
-            YIELD node AS seed, score
-            MATCH (seed)-[r]-(neighbor:Concept)
-            RETURN seed.name + ' --[' + type(r) + ']-> ' + neighbor.name AS path
-            LIMIT 5
-            """
-            results = session.run(cypher_query, vector=question_vector)
-            retrieved_data = [record["path"] for record in results]
-            
-        else: # VECTOR
-            # Direct Vector Query on Node Names
-            cypher_query = """
-            CALL db.index.vector.queryNodes('concept_embeddings', 3, $vector)
-            YIELD node AS n, score
-            RETURN n.name AS text
-            """
-            results = session.run(cypher_query, vector=question_vector)
-            retrieved_data = [record["text"] for record in results]
+        results = session.run(cypher_query, vector=question_vector)
+        retrieved_data = [record[key] for record in results]
 
     if not retrieved_data:
         retrieved_data = ["No relevant information found in Neo4j."]
@@ -593,7 +596,7 @@ def retrieve_node(state: AgentState) -> AgentState:
     return state
 ```
 
-The question is embedded once, up front, and reused by whichever branch runs. If `current_tool` is `GRAPH`, the query finds close-matching seed nodes and immediately expands to their neighbors, returning full relationship paths. If it's `VECTOR`, the query just returns the closest-matching node names directly, without following any relationships. The `if not retrieved_data` check makes sure the grading step always has something to evaluate, even in the rare case nothing came back at all.
+If `current_tool` is `GRAPH`, the query finds close-matching seed nodes and immediately expands to their neighbors, returning full relationship paths. If it's `VECTOR`, the query just returns the closest-matching node names directly, without following any relationships. Both branches return a single column, so they only differ in the Cypher and the column name to read. The `if not retrieved_data` check makes sure the grading step always has something to evaluate, even in the rare case nothing came back at all.
 
 ---
 
@@ -685,12 +688,18 @@ This is reached once the grade comes back `YES`, or once the retry limit is hit 
 
 ### Step 12 — Build & Compile the LangGraph State Machine
 
+The routing rule is the only decision logic: pass the loop on a `YES` grade, or after two retries, otherwise go to the fallback.
+
 ```python
 def route_after_grading(state: AgentState) -> str:
     if state["grade"] == "YES" or state["retry_count"] >= 2:
         return "generate"
     return "fallback"
+```
 
+Now register the nodes and draw the edges. Note that `fallback` loops back into `retrieve`, which is what makes a failed grade a retry rather than the end of the run.
+
+```python
 builder = StateGraph(AgentState)
 
 builder.add_node("router", router_node)
@@ -750,12 +759,11 @@ The initial state starts with `current_tool` empty, since it hasn't been decided
 ```python
 from yfiles_jupyter_graphs import GraphWidget
 
-# Pull the entire graph we extracted into an interactive widget
 with driver.session() as session:
     graph_result = session.run("MATCH (n)-[r]->(m) RETURN n, r, m")
-    
-    widget = GraphWidget(graph=graph_result.graph())
-    display(widget)
+
+widget = GraphWidget(graph=graph_result.graph())
+display(widget)
 ```
 
 This renders the full graph built in Step 5 as an interactive, zoomable widget inside the notebook — a way to see every node and relationship the agent had available to search through, regardless of which tool it ended up choosing for the test question.

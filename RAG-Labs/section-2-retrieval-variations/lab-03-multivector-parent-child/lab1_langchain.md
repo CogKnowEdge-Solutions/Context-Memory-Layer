@@ -1,7 +1,5 @@
 # Parent-Child & Summary-Based Multi-Vector RAG
 
-**Difficulty:** Advanced | **Time:** ~50 min | **Requires:** Basic RAG and embedding familiarity, plus a Qdrant Cloud cluster
-
 ---
 
 # Problem Statement / Use Case Overview
@@ -140,7 +138,7 @@ flowchart TB
 
 ---
 
-# Qdrant Overview
+## Qdrant Overview
 
 **What is Qdrant?**
 
@@ -248,7 +246,7 @@ Notice the explainability trace references a specific table from the source docu
 
 ---
 
-# Getting Qdrant Credentials
+## Getting Qdrant Credentials
 
 1. Go to [cloud.qdrant.io](https://cloud.qdrant.io) and sign up, or log in if you already have an account.
 2. Click **Create Cluster** to set up a new cluster. A free tier is available for testing and is enough for this lab.
@@ -292,28 +290,20 @@ The cell below installs all required Python packages:
 
 ```python
 import uuid
+
 import requests
-from pypdf import PdfReader
-from langchain_openai import ChatOpenAI
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-
-# Retrieval and Storage
-from langchain_classic.retrievers.multi_vector import MultiVectorRetriever
-from langchain_core.stores import InMemoryByteStore
-
-# Vector Store
-from langchain_qdrant import QdrantVectorStore
-
-# Core Components
-from langchain_core.documents import Document
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough
-from langchain_core.runnables import RunnableParallel
-
-# Display
 from IPython.display import Markdown, display
+from langchain_classic.retrievers.multi_vector import MultiVectorRetriever
+from langchain_core.documents import Document
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnableParallel, RunnablePassthrough
+from langchain_core.stores import InMemoryByteStore
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_openai import ChatOpenAI
+from langchain_qdrant import QdrantVectorStore
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from pypdf import PdfReader
 ```
 
 | Import | Purpose |
@@ -436,32 +426,36 @@ A `chunk_size` of 10,000 characters is large enough to hold several paragraphs o
 
 ### Step 6 — Generate Child Documents
 
-```python
-# Child chunks are SMALL (~400 chars) so they embed precisely for semantic search
-child_splitter = RecursiveCharacterTextSplitter(chunk_size=400, chunk_overlap=50)
-child_docs = []
+This is where the link between parents and children is actually created: instead of a random `uuid`, each parent gets a deterministic ID derived from its own text. The `stable_id` helper hashes the chunk content with SHA-256, so the same chunk always produces the same `doc_id` — even across different runs of the notebook. That ID is stamped onto the parent itself, then copied onto every child cut out of it.
 
+```python
 import hashlib
 
 def stable_id(text):
     """Deterministic ID derived from the chunk text, so the same chunk always gets the same ID across runs."""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+```
+
+Child chunks are deliberately small, so they embed precisely for semantic search.
+
+```python
+child_splitter = RecursiveCharacterTextSplitter(chunk_size=400, chunk_overlap=50)
+child_docs = []
 
 for doc in parent_docs:
-    # Give each parent a stable ID, then tag every child with that same ID
     _id = stable_id(doc.page_content)
     doc.metadata["doc_id"] = _id
-    
+
     child_splits = child_splitter.split_documents([doc])
     for child in child_splits:
         child.metadata["doc_id"] = _id
-    
+
     child_docs.extend(child_splits)
 
 print(f"Created {len(child_docs)} Child Documents.")
 ```
 
-This is where the link between parents and children is actually created: instead of a random `uuid`, each parent gets a deterministic ID derived from its own text. The `stable_id(text)` helper hashes the chunk content with SHA-256, so the same chunk always produces the same `doc_id` — even across different runs of the notebook. That ID is stamped onto the parent itself and then copied onto every child cut out of it. By the end of this step, every parent has a stable `doc_id`, and every one of its children carries that exact same ID in its metadata.
+By the end of this step, every parent has a stable `doc_id`, and every one of its children carries that exact same ID in its metadata.
 
 ---
 
@@ -528,8 +522,9 @@ This is where the two storage systems set up in Step 3 are wired together into o
 
 ### Step 9 — Define the RAG Execution Function with Explainability
 
+The prompt asks for two sections: the answer, then a trace of which sources were used.
+
 ```python
-# Prompt instructing the LLM to answer AND explain its own reasoning/source usage
 qa_template = """
 You are a technical assistant. Answer the question using ONLY the provided context.
 
@@ -548,7 +543,11 @@ Respond in exactly this format:
 """
 
 qa_prompt = ChatPromptTemplate.from_template(qa_template)
+```
 
+Those "Source 1", "Source 2" labels are what the trace refers back to, so they get attached here, before the chain is assembled.
+
+```python
 def format_docs(docs):
     """Label each source so the LLM can reference it by number in its tracing."""
     formatted = []
@@ -556,13 +555,15 @@ def format_docs(docs):
         parent_id = doc.metadata.get('doc_id', 'N/A')
         formatted.append(f"[Source {i+1}] (Parent ID: {parent_id})\n{doc.page_content}")
     return "\n\n".join(formatted)
+```
 
-# Run retrieval and capture the raw query in parallel
+Now wire retrieval and generation together. `RunnableParallel` runs the retriever and carries the raw question forward at the same time, so both are available to the next step.
+
+```python
 retrieval_chain = RunnableParallel(
     {"context": retriever, "question": RunnablePassthrough()}
 )
 
-# Format the retrieved parents → prompt → LLM → answer text
 generation_chain = (
     RunnablePassthrough.assign(context=(lambda x: format_docs(x["context"])))
     | qa_prompt
@@ -570,11 +571,10 @@ generation_chain = (
     | StrOutputParser()
 )
 
-# Full pipeline: retrieval first, then generation on top of the retrieved context
 rag_chain = retrieval_chain.assign(answer=generation_chain)
 ```
 
-`format_docs` numbers each retrieved parent as "Source 1," "Source 2," and so on, which is what lets the LLM refer back to specific sources by name in its explainability trace, instead of describing them vaguely. `RunnableParallel` runs the retriever and simply carries the raw question forward at the same time, so both are available to the next step. `generation_chain` then formats whatever parents came back, fills in the prompt, and asks the LLM to answer strictly in the two-section format defined above. `rag_chain` ties both halves together into a single object that can be run with one call.
+Numbering each retrieved parent as "Source 1," "Source 2," and so on is what lets the LLM refer back to specific sources by name in its explainability trace instead of describing them vaguely. `generation_chain` formats whatever parents came back, fills in the prompt, and asks the LLM to answer strictly in the two-section format above. `rag_chain` ties both halves together into a single object that can be run with one call.
 
 ---
 

@@ -1,7 +1,5 @@
 # Automated Document Q&A: OCR + RAG on a Scanned PDF (OpenRouter)
 
-**Difficulty:** Intermediate | **Time:** ~45 min | **Requires:** Lab 5 (Structured OCR + RAG) and an OpenRouter API key
-
 ---
 
 # Problem Statement / Use Case Overview
@@ -342,20 +340,16 @@ TEST_PAGE_LIMIT = 2  # only process the first 2 pages for this test run
 pages_to_process = pages[:TEST_PAGE_LIMIT]
 print(f"Running OCR on {len(pages_to_process)} pages...")
 
-chunks = []  # We will store our text chunks here
-chunk_size = 450  # how far we move forward for each new chunk (see overlap note below)
+chunks = []
+chunk_size = 450
 
 for i, page_img in enumerate(pages_to_process, start=1):
-    # Convert image to a format EasyOCR understands
     page_array = np.array(page_img)
-
-    # Extract text from the image
     lines = ocr_reader.readtext(page_array, detail=0)
     full_page_text = "\n".join(lines)
 
-    # Split the page text into smaller chunks for our vector database.
-    # Each chunk is 500 characters, but we only step forward by 450 -> chunks
-    # overlap by 50 characters so we don't accidentally cut a sentence in half
+    # Each chunk is 500 characters, but we only step forward by 450, so
+    # chunks overlap by 50 characters and we don't cut a sentence in half
     # right at a chunk boundary.
     for start_idx in range(0, len(full_page_text), chunk_size):
         piece = full_page_text[start_idx : start_idx + 500].strip()
@@ -363,8 +357,6 @@ for i, page_img in enumerate(pages_to_process, start=1):
             chunks.append({"page": i, "text": piece})
 
     print(f"Page {i} transcribed! Found {len(full_page_text)} characters.")
-
-print(f"\nTotal chunks created: {len(chunks)}")
 ```
 
 By the end of this step, `chunks` holds every overlapping piece of text from the processed pages, each one tagged with the page number it came from — ready to be embedded in the next step.
@@ -430,44 +422,49 @@ def retrieve_documents(question, k=3):
 
 **`execute_rag_pipeline` — builds the prompt and gets the answer:**
 
+The prompt is pulled out as a template first. It fixes the response format up front: a one-line answer with a page citation, then a page-by-page account of what was used and what was ignored.
+
+```python
+QA_TEMPLATE = """
+You are an expert assistant. Answer the question using ONLY the provided context blocks.
+
+Context:
+{context}
+
+Question: {question}
+
+CRITICAL INSTRUCTIONS:
+Output your response in EXACTLY two sections as shown below.
+
+--- FINAL ANSWER ---
+[Provide a direct, 1-sentence answer without bold text or markdown formatting. End with simple citation like (Page X).]
+
+--- EXPLAINABILITY ---
+[For each Context Block provided above, list Page X and state either "NOT USED" or "USED (Extracted: <1 short fact>)]
+"""
+```
+
+The function itself stays short because everything above is reusable: retrieve the `k` closest chunks, label each one by its page number, fill the template, and post it.
+
 ```python
 def execute_rag_pipeline(question):
     """Runs RAG and gets both the answer and source reasoning in a single call."""
-    
     sources = retrieve_documents(question)
     if not sources:
         return "No sources found."
-        
-    # Format context with page numbers clearly labeled
-    context_block = "\n\n".join([f"--- Context Block (Page {c['page']}) ---\n{c['text']}" for c in sources])
-    
-    # This is the instruction ("prompt") we send to the AI model, telling it
-    # exactly how to answer and how to format its response.
-    qa_prompt = f"""
-    You are an expert assistant. Answer the question using ONLY the provided context blocks.
-    
-    Context:
-    {context_block}
-    
-    Question: {question}
-    
-    CRITICAL INSTRUCTIONS:
-    Output your response in EXACTLY two sections as shown below.
-    
-    --- FINAL ANSWER ---
-    [Provide a direct, 1-sentence answer without bold text or markdown formatting. End with simple citation like (Page X).]
-    
-    --- EXPLAINABILITY ---
-    [For each Context Block provided above, list Page X and state either "NOT USED" or "USED (Extracted: <1 short fact>)"]
-    """
-    
+
+    context_block = "\n\n".join(
+        [f"--- Context Block (Page {c['page']}) ---\n{c['text']}" for c in sources]
+    )
+    qa_prompt = QA_TEMPLATE.format(context=context_block, question=question)
+
     payload = {
         "model": TEXT_MODEL,
         "messages": [{"role": "user", "content": qa_prompt}],
         "temperature": 0.0
     }
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}"}
-    
+
     try:
         resp = requests.post(OPENROUTER_URL, headers=headers, json=payload)
         resp.raise_for_status()

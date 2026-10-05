@@ -1,7 +1,5 @@
 # Structured OCR + RAG Chatbot: Chatting with Scanned Invoices
 
-**Difficulty:** Intermediate | **Time:** ~40 min | **Requires:** Basic RAG familiarity
-
 ---
 
 # Problem Statement / Use Case Overview
@@ -254,44 +252,29 @@ The notebook reads this file automatically and falls back to prompting you inter
 ### Setup — Import Libraries
 
 ```python
+import logging
 import os
 
-# For downloading the sample invoices and doing vector math
-import requests
 import numpy as np
-
-# RapidOCR -- our OCR engine (runs on CPU via onnxruntime)
-from rapidocr import RapidOCR
-
-# Local embedding model -- turns text into vectors, no API key needed
-from sentence_transformers import SentenceTransformer
-
-# The LLM, pointed at OpenRouter
-from langchain_openai import ChatOpenAI
-
-# Reads OPENROUTER_API_KEY from .env
+import requests
 from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+from rapidocr import RapidOCR
+from sentence_transformers import SentenceTransformer
 ```
 
 ### Setup — Silence Noisy Logs
 
-OCR engines and model downloaders log every model they load. None of that is interesting here, and it buries the output you actually want to read, so it gets turned off.
+OCR engines and model downloaders log every model they load, which buries the output you actually want to read.
 
 ```python
-import logging
-import os
-
-# Hide the download progress bar and rate-limit hints -- they appear only on a
-# cold model cache, which would make the output differ between first and later runs.
 os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
-logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
-logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
-logging.getLogger("httpx").setLevel(logging.ERROR)
+
+for noisy in ("sentence_transformers", "huggingface_hub", "httpx"):
+    logging.getLogger(noisy).setLevel(logging.ERROR)
 ```
 
-RapidOCR needs its own approach, handled in Step 2 — it re-sets its own log level every time the engine is created, so changing the logging config beforehand has no effect.
-
-The progress bar is hidden deliberately. It only appears when the embedding model is downloaded for the first time, which means the same notebook prints different output on a fresh machine versus a second run — and an output section that changes between runs cannot be checked against anything.
+Two details here are deliberate. The progress bar is hidden because it only appears when the embedding model is downloaded for the first time — the same notebook would print different output on a fresh machine versus a second run, and an output section that changes between runs cannot be checked against anything. RapidOCR is not in that list because it re-sets its own log level every time the engine is created, so changing the config beforehand has no effect; Step 2 turns it off at the source instead.
 
 ### Setup — Load API Key & Configure the LLM
 

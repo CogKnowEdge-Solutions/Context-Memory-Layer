@@ -1,7 +1,5 @@
 # Classical RAG: The Canonical Pipeline
 
-**Difficulty:** Beginner | **Time:** ~40 min | **Requires:** None — this is the first lab
-
 ---
 
 # Problem Statement / Use Case Overview
@@ -153,7 +151,7 @@ Follow the arrows: the document takes the left path down to the index, the quest
 
 Everything below is **real output** from running this notebook end to end.
 
-The setup cell prints what it loaded:
+The setup cells print what they loaded as each piece comes up:
 
 ```
 API key loaded.
@@ -371,7 +369,7 @@ The notebook reads that file automatically and falls back to prompting you if th
 
 ---
 
-# Step-wise Development Instructions — Development
+# Step-wise Instructions — Development
 
 ---
 
@@ -382,25 +380,15 @@ These libraries print progress bars and warnings that bury the actual output. Th
 **This cell runs *before* the imports on purpose.** Two things happen at import time that we want already silenced: LangChain's own *"this package is being deprecated"* notice, and the download progress bar for the embedding model. Silence first, then import — otherwise the noise is already on screen.
 
 ```python
-# os lets us read and set environment variables.
-import os
-
-# Tell HuggingFace not to draw download progress bars. Without this you get a
-# noisy "Loading weights: 0%|..." bar in the middle of your results.
-os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
-
-# Warnings are mostly about model internals we never touch in this lab.
-import warnings
 import logging
+import os
+import warnings
 
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
 warnings.filterwarnings("ignore")
 
-# These libraries log every model download and every HTTP call at "info"
-# level, which drowns out our own print statements.
-logging.getLogger("transformers").setLevel(logging.ERROR)
-logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
-logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
-logging.getLogger("httpx").setLevel(logging.ERROR)
+for noisy in ("transformers", "sentence_transformers", "huggingface_hub", "httpx"):
+    logging.getLogger(noisy).setLevel(logging.ERROR)
 ```
 
 > **Two lines you may still see, both harmless.**
@@ -412,43 +400,21 @@ logging.getLogger("httpx").setLevel(logging.ERROR)
 LangChain splits its helpers into small packages, one per job. The imports below are grouped by that job so you can see where everything comes from.
 
 ```python
-# --- 1. READING THE DOCUMENT -----------------------------------------
-# pathlib is part of Python itself, so there is nothing to install here.
-# Path.read_text() is the whole "loader" for a plain-text file.
 from pathlib import Path
-# Document is the atom every RAG system passes around. A text loader would
-# have built these for us; here we build them ourselves, which is worth
-# seeing once so you know what is inside.
+
 from langchain_core.documents import Document
-
-# --- 2. CUTTING THE TEXT INTO CHUNKS ----------------------------------
-# RecursiveCharacterTextSplitter cuts long text into small, tidy pieces.
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-
-# --- 3. TURNING TEXT INTO NUMBERS, AND SEARCHING THOSE NUMBERS -------
-# HuggingFaceEmbeddings runs the all-MiniLM-L6-v2 model on your own machine.
-from langchain_huggingface import HuggingFaceEmbeddings
-# FAISS is the vector index: the searchable store of embeddings.
-from langchain_community.vectorstores import FAISS
-# DistanceStrategy lets us choose HOW similarity is measured. We use
-# MAX_INNER_PRODUCT — see the warning in Step 3, it matters more than it looks.
-from langchain_community.vectorstores.utils import DistanceStrategy
-
-# --- 4. CALLING THE LLM AND BUILDING THE PROMPT -----------------------
-# ChatOpenAI talks to any OpenAI-compatible API, which includes OpenRouter.
-from langchain_openai import ChatOpenAI
-# ChatPromptTemplate builds the instruction with holes ({context}, {question})
-# that we fill in later.
-from langchain_core.prompts import ChatPromptTemplate
-# StrOutputParser turns the model's reply object into a plain Python string.
 from langchain_core.output_parsers import StrOutputParser
-
-# --- 5. KEEPING THE API KEY OUT OF THE CODE ---------------------------
-# load_dotenv reads our API key out of the .env file.
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_community.vectorstores import FAISS
+from langchain_community.vectorstores.utils import DistanceStrategy
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_openai import ChatOpenAI
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from dotenv import load_dotenv
 ```
 
-- Every LangChain import is `from <package> import <thing>`, where the package name tells you the job: `document_loaders` reads files, `text_splitters` cuts text, `vectorstores` stores and searches vectors, `prompts` builds prompts.
+- The LangChain package names state the job: `document_loaders` reads files, `text_splitters` cuts text, `vectorstores` stores and searches vectors, `prompts` builds prompts.
+- `pathlib` and `dotenv` ship with Python and its usual companions, so they are not in the `!pip install` list.
 - Nothing here does any work yet. This cell only makes the tools available.
 
 ### Setup — Load the API Key and Build the Two Models
@@ -456,38 +422,41 @@ from dotenv import load_dotenv
 This cell authenticates the LLM and loads the embedding model once, so every later step reuses the same objects instead of reloading them.
 
 ```python
-# Read OPENROUTER_API_KEY from the .env file sitting next to this notebook.
 load_dotenv(".env")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-# If there is no .env file, ask for the key instead of crashing.
 if not OPENROUTER_API_KEY:
     OPENROUTER_API_KEY = input("Paste your OpenRouter API key: ").strip()
 
 print("API key loaded.")
+```
 
-# THE LLM — this is the "brain" that writes the final answer in Step 5.
-# It runs on someone else's computer, so it needs the key.
+**There are two models in this lab, and they do completely different jobs.** The embedding model (local, free) converts text to numbers so the computer can *compare* it. The LLM (remote, needs a key) *writes prose*. Steps 1–4 and 6–7 never touch the LLM, so if your key is wrong you will still get real retrieval results — a useful thing to know when something breaks.
+
+Now build the LLM. `base_url` is what sends the request to OpenRouter rather than OpenAI — same client, different server.
+
+```python
 llm = ChatOpenAI(
     model="nvidia/nemotron-3-ultra-550b-a55b:free",  # a free model on OpenRouter
-    base_url="https://openrouter.ai/api/v1",         # OpenRouter's OpenAI-compatible door
+    base_url="https://openrouter.ai/api/v1",
     api_key=OPENROUTER_API_KEY,
     temperature=0,  # 0 = as repeatable as the model allows
 )
 
-# THE EMBEDDING MODEL — this is the "translator" that turns text into numbers.
-# It runs on YOUR computer, so it costs nothing and needs no key. The first
-# run downloads ~90 MB and then remembers it.
+print("LLM ready:", llm.model_name)
+```
+
+Then the embedding model. It runs on your own machine, so it costs nothing and needs no key; the first run downloads ~90 MB and then remembers it.
+
+```python
 embedding_model = HuggingFaceEmbeddings(
-    model_name="all-MiniLM-L6-v2",              # small, fast, good enough for this lab
-    encode_kwargs={"normalize_embeddings": True},  # ask for unit-length vectors
+    model_name="all-MiniLM-L6-v2",
+    encode_kwargs={"normalize_embeddings": True},
 )
 
-print("LLM ready:", llm.model_name)
 print("Embedding model ready: 384 numbers per chunk")
 ```
 
-- **There are two models in this lab, and they do completely different jobs.** The embedding model (local, free) converts text to numbers so the computer can *compare* it. The LLM (remote, needs a key) *writes prose*. Steps 1–4 and 6–7 never touch the LLM, so if your key is wrong you will still get real retrieval results — a useful thing to know when something breaks.
 - `normalize_embeddings=True` asks the model for **unit-length** vectors. This model already returns them, so the setting is belt-and-braces rather than a rescue — but stating it means the next stage does not depend on a default you did not choose.
 - `temperature=0` makes the answer repeatable, so re-running gives you a near-identical answer.
 - Both objects are created **once** here. Reloading an embedding model takes seconds, and a later step would silently get a *different* model than the index was built with.
