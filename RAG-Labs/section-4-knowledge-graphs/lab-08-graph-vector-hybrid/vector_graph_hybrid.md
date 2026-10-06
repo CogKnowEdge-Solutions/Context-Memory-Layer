@@ -8,7 +8,7 @@ Pure vector search finds nodes that are *semantically close* to a question — g
 
 ### How This Lab Solves It
 
-This lab builds a pipeline that combines both. A knowledge graph is built inside Neo4j the same way as before, but this time every node also gets a **vector embedding** stored alongside it. When a question comes in, it's converted into a vector too, and Neo4j's **vector index** is used to instantly find the nodes closest in meaning to the question — these become "seed nodes." From each seed, a single Cypher query then expands outward to pull in every directly connected relationship. The result is a short list of graph facts that are both *semantically relevant* and *structurally connected*, which are handed to the LLM to produce the final answer.
+This lab builds a pipeline that combines both. A knowledge graph is built inside Neo4j the same way as before, but this time every node also gets a **vector embedding** (a list of numbers that captures the meaning of the node's name) stored alongside it. When a question comes in, it's converted into a vector too, and Neo4j's **vector index** is used to instantly find the nodes closest in meaning to the question — these become "seed nodes." From each seed, a single Cypher query then expands outward to pull in every directly connected relationship. The result is a short list of graph facts that are both *semantically relevant* and *structurally connected*, which are handed to the LLM to produce the final answer.
 
 **This pipeline has three connected parts:**
 
@@ -21,7 +21,7 @@ This is useful for:
 - **Answers that need more than one connected fact** — once a seed is found, its neighboring relationships are pulled in automatically.
 - **Combining two retrieval strengths in one query** — semantic relevance from the vector index, plus structural context from the graph, in a single round trip to the database.
 
-> A knowledge graph stored in Neo4j — nodes, relationships, and Cypher — was covered in the earlier walkthrough. This one builds directly on top of that same graph, so only what's new here is explained in detail.
+> A knowledge graph stored in Neo4j — nodes, relationships, and Cypher — was covered in the earlier walkthrough. This one builds directly on top of that same graph, so only what's new here is explained in detail. Each piece of Cypher is explained at the step where it first appears.
 
 ---
 
@@ -77,7 +77,7 @@ This diagram shows what happens at question time: the question itself is embedde
 
 Before any question can be asked, the document has to actually turn into a graph with vectors sitting on it. Here's what that looks like using a few generic stand-in concepts:
 
-**Step 1 — the document goes in, and the LLM reads it to identify individual entities:**
+**Step 1 — the document goes in, and the LLM reads it to identify individual entities.** (In the code, Step 2 asks for entities and relationships in one single LLM call; the next two diagrams split that one reply into two pictures only to make it easier to follow.)
 
 ```mermaid
 flowchart LR
@@ -92,9 +92,9 @@ flowchart LR
     class N1,N2,N3 nodeStyle
 ```
 
-At this point, the LLM has only picked out *what the entities are* — it hasn't yet said how they relate to each other, which is why the three boxes above aren't connected to one another. That's why they're drawn separately, each pointing back to the extraction step rather than to each other.
+This first picture shows only *what the entities are*, which is why the three boxes aren't connected to one another. Their relationships come from the same LLM reply and are drawn in the next picture.
 
-**Step 2 — the LLM also identifies how those entities relate to each other, and everything is written into Neo4j — now the connections appear:**
+**Step 2 — the same LLM reply also lists how those entities relate to each other, and everything is written into Neo4j — now the connections appear:**
 
 ```mermaid
 graph LR
@@ -164,7 +164,7 @@ flowchart LR
     class Merge,LLM,Final mergeStyle
 ```
 
-The vector index doesn't return an exact keyword match — it returns the nodes whose stored vectors are *closest in meaning* to the question, each with a similarity score between 0 and 1. Since `top_k` was set to more than one, two seeds came back here: "Sequence Transduction Models" at 0.68, and "Google Research" at 0.65.
+The vector index doesn't return an exact keyword match — it returns the nodes whose stored vectors are *closest in meaning* to the question, each with a similarity score between 0 and 1. `top_k` is the number of closest nodes the vector index is asked to return. This lab's code uses `top_k=3`, but the sample run produced facts from only two seeds: "Sequence Transduction Models" at 0.68 and "Google Research" at 0.65. The expansion step only keeps seeds that have at least one connected `Concept` node, so a seed with no neighbours produces no rows and does not appear in the output. That is the likely reason only two of the three seeds show up (the lab did not print the third seed, so this is the expected explanation rather than something the output shows). The arrows in the diagram above simply show expansion outward from each seed, not the stored direction of each relationship.
 
 From "Sequence Transduction Models," the query doesn't pick just one connected node — it follows **every** direct connection at once: Recurrent Neural Networks, Convolutional Neural Networks, Encoder, and Decoder are all pulled in together, which is why all four are highlighted in blue. The same happens from "Google Research," which pulls in "Attention Is All You Need." None of these five facts is skipped or chosen over another — all five get combined into a single block of context, which is what actually gets handed to the LLM. The LLM then reads that combined context and produces the one final answer shown earlier in the Output section.
 
@@ -223,7 +223,7 @@ Neural Networks" (foundational models), and INCLUDES relationships to
 Step 3: Compile all unique model/mechanism entities discussed in the text.
 ```
 
-Notice that two different seed nodes were picked up in the same query — one scoring 0.68 and one 0.65 — because the top-k setting asks the vector index for more than one closest match at a time, not just the single best one.
+Notice that facts from two different seed nodes appear in the same query — one scoring 0.68 and one 0.65 — because the top-k setting asks the vector index for several closest matches at a time, not just the single best one. The sample output above was captured before the printed arrows were changed to follow each relationship's stored direction (Step 6), so a line such as the Google Research one may print with its ends swapped when you run the lab now.
 
 ---
 
@@ -247,7 +247,40 @@ Notice that two different seed nodes were picked up in the same query — one sc
 
 **Embedding** is a way of turning a piece of text into a list of numbers — a vector — such that pieces of text with similar meaning end up with vectors that are close together. Here, every node's name is converted into a vector using the `all-MiniLM-L6-v2` model, which always produces vectors of exactly 384 numbers.
 
-**Vector Index** is a structure Neo4j builds over a set of stored vectors so that, given a new vector, it can instantly find the closest matches without comparing it against every node one by one. It's created once with `CREATE VECTOR INDEX`, specifying the vector size (384) and the similarity function (`cosine`, which measures how close two vectors point in the same direction).
+**Vector Index** is a structure Neo4j builds over a set of stored vectors so that, given a new vector, it can instantly find the closest matches without comparing it against every node one by one. It is created once (Step 4 shows exactly how), and it needs to know the vector size (384) and the similarity function used to compare vectors.
+
+**Similarity and `top_k`.** Cosine similarity is a score for how closely two vectors point in the same direction (1 means the same direction, values near 0 mean unrelated). `top_k` is simply "how many closest matches to return" — with `top_k=3`, the index returns the three nodes whose vectors score highest against the question.
+
+To picture it, imagine each node's vector squeezed onto a flat 2-D map (the real vectors have 384 numbers, so this is only a cartoon). Nodes with similar meaning sit close together, and the question lands somewhere on the same map:
+
+```mermaid
+flowchart LR
+    Q["Question<br/>(a point on the map)"]
+
+    subgraph IN["Inside the top_k = 3 circle: returned as seeds"]
+        direction TB
+        S1["Concept A<br/>(very close)"]
+        S2["Concept B<br/>(close)"]
+        S3["Concept C<br/>(fairly close)"]
+    end
+
+    subgraph OUT["Outside the circle: ignored"]
+        direction TB
+        F1["Concept D<br/>(far)"]
+        F2["Concept E<br/>(far)"]
+    end
+
+    Q --> S1
+    Q --> S2
+    Q --> S3
+    Q -.-> F1
+    Q -.-> F2
+
+    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    class Q,S1,S2,S3,F1,F2 defaultStyle
+```
+
+Mermaid cannot draw real coordinates, so the diagram shows the idea as two groups instead: the `top_k` closest points to the question are kept, everything else is dropped.
 
 **Seed Node** is the term used here for a node found via vector similarity search — the starting point for graph expansion. Because it's found by meaning rather than exact text matching, the question never has to name a node exactly.
 
@@ -369,7 +402,10 @@ llm = ChatOpenAI(
     openai_api_key=os.getenv("OPENROUTER_API_KEY"),
     openai_api_base="https://openrouter.ai/api/v1",
     model_name="nvidia/nemotron-3-super-120b-a12b:free",
-    temperature=0.0
+    temperature=0.0,
+    max_tokens=8000,
+    # openrouter-specific flag: disable the model's reasoning output
+    extra_body={"reasoning": {"enabled": False}},
 )
 print("LangChain LLM configured successfully!")
 ```
@@ -439,7 +475,7 @@ Format exactly like this:
 """
 ```
 
-Then the call, plus the strip of any Markdown fence the model wrapped its JSON in:
+The model is a reasoning model, so `max_tokens=8000` and `extra_body={"reasoning": {"enabled": False}}` (set in the LLM cell above) give it room to answer and turn its hidden reasoning off; otherwise it can spend its whole token budget thinking and return an empty reply. Then the call, plus the strip of any Markdown fence the model wrapped its JSON in:
 
 ```python
 response = llm.invoke(prompt)
@@ -455,13 +491,15 @@ graph_data = json.loads(raw_output)
 print(f"Extracted {len(graph_data.get('nodes', []))} nodes and {len(graph_data.get('relationships', []))} relationships!")
 ```
 
-Unlike the source-relation-target triples used elsewhere, this prompt asks the LLM for `nodes` and `relationships` as two separate lists — a format that maps cleanly onto the two Cypher writes that come next.
+The prompt is an f-string (a string starting with `f` that fills in `{variables}`). Because the JSON example itself needs literal curly braces, they are written doubled — `{{` and `}}` — which prints as a single `{` or `}`; only `{document_text}` is a real placeholder. Unlike the source-relation-target triples used elsewhere, this prompt asks the LLM for `nodes` and `relationships` as two separate lists — a format that maps cleanly onto the two Cypher writes that come next.
 
 ---
 
 ### Step 3 — Save Graph to Neo4j (Raw Cypher)
 
 Nodes are written first, then relationships, since a relationship can only be created between nodes that already exist.
+
+A few new terms show up here. The **driver** is the object that holds the connection to Neo4j. A **session** is a short conversation with the database opened from the driver (`with driver.session() as session:` opens one and closes it afterwards). `session.run(...)` sends one Cypher query and Neo4j runs it as its own transaction (a unit of work that either fully succeeds or is rolled back).
 
 ```python
 # Save nodes to Neo4j
@@ -496,7 +534,9 @@ with driver.session() as session:
 print("Relationships saved to Neo4j!")
 ```
 
-`UNWIND` turns a list of items (all the nodes, or all the relationships) into individual rows so the same query can be run once per item. Normal Cypher requires a relationship's type to be written directly into the query text — it can't be filled in from a variable. `apoc.create.relationship` works around that limit, letting the relationship type come from `rel.type` instead of being hardcoded, which is exactly what's needed since the LLM decides those types dynamically.
+**APOC** is a plugin of extra Neo4j procedures; `apoc.create.relationship` is one of them. `CALL ... YIELD` runs a procedure and `YIELD` picks which of its output values to keep (here `rel AS r`). `UNWIND` turns a list of items (all the nodes, or all the relationships) into individual rows so the same query can be run once per item. Normal Cypher requires a relationship's type to be written directly into the query text — it can't be filled in from a variable. `apoc.create.relationship` works around that limit, letting the relationship type come from `rel.type` instead of being hardcoded, which is exactly what's needed since the LLM decides those types dynamically.
+
+**Warning: the relationship write is not safe to re-run.** `MERGE` makes the node write safe to repeat, but `apoc.create.relationship` always creates a new relationship, so running that cell twice gives every relationship twice. To start over cleanly, first remove everything with `MATCH (n:Concept) DETACH DELETE n` (`DETACH DELETE` deletes a node together with all relationships attached to it), then re-run Steps 3 to 5.
 
 ---
 
@@ -516,9 +556,13 @@ OPTIONS {
     }
 }
 """
+
+with driver.session() as session:
+    session.run(index_query)
+print("Vector index 'concept_embeddings' is ready.")
 ```
 
-`all-MiniLM-L6-v2` is a small, fast embedding model that runs locally rather than through an API call, and it always outputs a vector of exactly 384 numbers — which is why the index is configured with `vector.dimensions: 384` to match. `cosine` similarity measures how closely two vectors point in the same direction, regardless of their length, which is the standard way to compare text embeddings.
+`all-MiniLM-L6-v2` is a small, fast embedding model that runs locally rather than through an API call, and it always outputs a vector of exactly 384 numbers — which is why the index is configured with `vector.dimensions: 384` to match. `cosine` similarity measures how closely two vectors point in the same direction, regardless of their length, which is the standard way to compare text embeddings. `CREATE VECTOR INDEX ... IF NOT EXISTS` is a Cypher command that builds the index on `Concept` nodes' `embedding` property; the backticks around `vector.dimensions` are needed because that option name contains a dot. The last three lines send `index_query` to Neo4j so the index really exists before the hybrid search in Step 6 uses it; `IF NOT EXISTS` makes it safe to re-run.
 
 ---
 
@@ -570,7 +614,7 @@ def execute_hybrid_retrieval(driver, question, top_k=3):
     CALL db.index.vector.queryNodes('concept_embeddings', $top_k, $question_vector)
     YIELD node AS seed, score
     MATCH (seed)-[r]-(neighbor:Concept)
-    RETURN seed.name AS Seed_Node, score AS Semantic_Score, type(r) AS Relationship, neighbor.name AS Connected_Node
+    RETURN seed.name AS Seed_Node, score AS Semantic_Score, startNode(r).name AS Source, type(r) AS Relationship, endNode(r).name AS Target
     """
 
     retrieved_facts = []
@@ -580,14 +624,52 @@ def execute_hybrid_retrieval(driver, question, top_k=3):
         print("RETRIEVED HYBRID PATHS:")
         print("-" * 60)
         for record in result:
-            fact = f"(Similarity: {record['Semantic_Score']:.2f}) {record['Seed_Node']} --[{record['Relationship']}]--> {record['Connected_Node']}"
+            fact = f"(Similarity: {record['Semantic_Score']:.2f}) {record['Source']} --[{record['Relationship']}]--> {record['Target']}"
             retrieved_facts.append(fact)
             print(fact)
 
     return retrieved_facts
 ```
 
-This function does two things in a row, inside one query to the database. First, it turns the question into a vector using the same method used for the graph's nodes, so both sides can be compared fairly. Then it asks the vector index for the closest matching nodes, along with a score showing how close each match is. Right after that, it looks at what each of those matching nodes is connected to, and returns the whole thing as a simple list of readable facts.
+The query reads clause by clause like this:
+
+| Clause | What it does |
+|---|---|
+| `CALL db.index.vector.queryNodes('concept_embeddings', $top_k, $question_vector)` | Asks the vector index for the `top_k` nodes closest to the question vector. `$top_k` and `$question_vector` are parameters filled in by `session.run(...)`. |
+| `YIELD node AS seed, score` | Keeps two outputs of that call: the matching node (renamed `seed`) and its similarity score. |
+| `MATCH (seed)-[r]-(neighbor:Concept)` | For each seed, finds every relationship `r` to a connected `Concept` node. There is no arrow, so it matches in both directions. A seed with no such neighbour gives no rows. |
+| `RETURN ...` | One row per seed-relationship pair. `startNode(r)` and `endNode(r)` give the real ends of the relationship, so the printed `--[TYPE]-->` always follows the direction it was saved in. |
+
+```mermaid
+flowchart LR
+    subgraph SEEDS["1. Seeds"]
+        A["CALL db.index.vector.queryNodes<br/>top_k closest nodes"] --> B["YIELD node AS seed, score"]
+    end
+    subgraph EXPAND["2. Expand"]
+        C["MATCH (seed)-[r]-(neighbor:Concept)<br/>every direct connection"]
+    end
+    subgraph RET["3. Return"]
+        D["RETURN seed, score,<br/>startNode, type, endNode"]
+    end
+    B --> C --> D
+
+    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    class A,B,C,D defaultStyle
+```
+
+Seeds shrink and grow on the way to the final rows, as this funnel shows:
+
+```mermaid
+flowchart TD
+    F1["top_k seeds from the vector index<br/>(top_k=3 in Step 8)"] --> F2["Seeds that have at least one<br/>connected Concept node"]
+    F2 --> F3["One row per seed and relationship<br/>(a seed with 4 links gives 4 rows)"]
+    F3 --> F4["One fact string per row,<br/>sent to the LLM"]
+
+    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    class F1,F2,F3,F4 defaultStyle
+```
+
+In plain words, this function does two things in a row, inside one query to the database. First, it turns the question into a vector using the same method used for the graph's nodes, so both sides can be compared fairly. Then it asks the vector index for the closest matching nodes, along with a score showing how close each match is. Right after that, it looks at what each of those matching nodes is connected to, and returns the whole thing as a simple list of readable facts.
 
 ---
 
@@ -644,7 +726,7 @@ facts = execute_hybrid_retrieval(driver, query, top_k=3)
 print(generate_hybrid_answer(query, facts))
 ```
 
-This is where everything from Steps 1–7 runs end-to-end: the question is embedded and matched against the vector index, the matching seeds are expanded into connected facts, and those facts are passed to the LLM to produce the final answer plus its reasoning trace. Notice `top_k=3` — this is why more than one seed node (with different similarity scores) can show up in a single answer.
+This is where everything from Steps 1–7 runs end-to-end: the question is embedded and matched against the vector index, the matching seeds are expanded into connected facts, and those facts are passed to the LLM to produce the final answer plus its reasoning trace. Notice `top_k=3` — this is why facts from more than one seed node (with different similarity scores) can show up in a single answer. A seed that has no connected nodes adds no facts, so you can see fewer seeds in the output than `top_k`.
 
 ---
 

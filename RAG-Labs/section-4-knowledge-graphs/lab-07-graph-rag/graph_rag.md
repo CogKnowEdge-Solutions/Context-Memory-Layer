@@ -26,7 +26,7 @@ This is useful for:
 
 | Part | Steps | New idea | You will see |
 |------|-------|----------|--------------|
-| Setup | 1-3 | Turn a PDF into a list of `source -> relation -> target` facts, **once** | A printed list of extracted triples |
+| Setup | 1-3 | Turn a PDF into a list of `source -> relation -> target` facts (each one is called a **triple**), **once** | A printed list of extracted triples |
 | Part 1 | 4-7 | Build an in-memory graph (NetworkX) and answer by walking it | An answer plus an explainability trace |
 | Part 2 | 8-12 | Store the same graph in Neo4j, query it with Cypher, and view it | The same question answered from the database, plus a picture of the graph |
 
@@ -201,13 +201,7 @@ graph LR
     class N1,N2 nodeStyle
 ```
 
-**Cypher.** Neo4j's query language, written to look like the pattern it describes. `MERGE` means "find this if it exists, otherwise create it", which stops the same entity from being duplicated when it appears in many triples. `MATCH` describes a pattern to find and returns what fits.
-
-```cypher
-MERGE (s:Concept {name: "Transformer"})
-MERGE (t:Concept {name: "Attention Mechanism"})
-MERGE (s)-[:RELIES_ON]->(t)
-```
+**Cypher.** Neo4j's query language. You meet it step by step in Part 2, starting at Step 9, where it is first used.
 
 **Graph RAG.** Retrieval-Augmented Generation where the retrieved material is *connected facts from a graph*, and the LLM is told to answer using only those facts.
 
@@ -565,6 +559,17 @@ Limits of Part 1: the graph lives only in this notebook's memory. When the sessi
 
 New idea: write the *same* `extracted_relationships` into Neo4j and read them back with Cypher. No extraction is repeated.
 
+### The same triples, two ways
+
+The same fact is stored differently in each part. This is a table rather than a diagram, because it compares two pieces of code side by side.
+
+| | Part 1: NetworkX | Part 2: Neo4j |
+|---|---|---|
+| The fact | `Transformer -- RELIES_ON --> Attention Mechanism` | `Transformer -- RELIES_ON --> Attention Mechanism` |
+| How it is written | `G.add_edge("Transformer", "Attention Mechanism", relation="RELIES_ON")` | `(:Concept {name: "Transformer"})-[:RELIES_ON]->(:Concept {name: "Attention Mechanism"})` |
+| What is stored | A nested Python dict: `{"Transformer": {"Attention Mechanism": {"relation": "RELIES_ON"}}}` (the same shape as `G.adj`) | A node, a relationship, and a node, kept in the database |
+| Where it lives | Python memory (lost when the session ends) | The Neo4j database (kept) |
+
 ### Step 8 — Connect to Neo4j
 
 ```python
@@ -580,11 +585,27 @@ print("Success: Connected to Neo4j Database!")
 
 > **Note:** `NEO4J_URI`, `NEO4J_USERNAME` and `NEO4J_PASSWORD` are read from the `.env` file — make sure they match the Aura instance from the credentials section above. `verify_connectivity()` checks the URI, username, and password immediately, so a connection problem shows up here and not several steps later.
 
+Three words you will see from now on:
+
+- A **driver** is the object that holds the connection to the database (`GraphDatabase.driver(...)`). You create it once and reuse it.
+- A **session** is a short conversation with the database, opened with `driver.session()` and closed when its `with` block ends.
+- A **transaction** is a group of database changes that either all succeed or all fail together, so you never end up with half-written data.
+
 ---
 
 ### Step 9 — Write the Triples into Neo4j
 
 Each triple becomes two `Concept` nodes and one relationship, written with `MERGE` so repeated entities are never duplicated.
+
+This is where you first meet **Cypher**, Neo4j's query language. It is written to look like the pattern it describes: round brackets are nodes, square brackets are relationships. `MERGE` means "find this if it exists, otherwise create it", which stops an entity from being duplicated when it appears in many triples.
+
+```cypher
+MERGE (s:Concept {name: "Transformer"})
+MERGE (t:Concept {name: "Attention Mechanism"})
+MERGE (s)-[:RELIES_ON]->(t)
+```
+
+> **Warning:** the cell below starts with `MATCH (n) DETACH DELETE n`, which **wipes the whole database**, including anything that was in it before this lab. `MATCH (n)` selects every node, and `DETACH DELETE` deletes each node together with the relationships attached to it (Neo4j will not delete a node that still has relationships unless you detach them). Use a fresh or throwaway Aura instance. Lab 8 also uses the `:Concept` label, so leftovers from one lab mix with the other if you do not clear the database between them.
 
 ```python
 def insert_into_neo4j(tx, relationships):
@@ -611,7 +632,7 @@ with driver.session() as session:
     print("Success: Knowledge Graph loaded into Neo4j!")
 ```
 
-`$source` and `$target` are **query parameters**: Neo4j fills them in safely from the Python values. A relationship *type* cannot be a parameter, which is why it is placed into the query text after being cleaned up. `execute_write` runs the whole loop in one transaction (all-or-nothing).
+`$source` and `$target` are **query parameters**: Neo4j fills them in safely from the Python values. A relationship *type* cannot be a parameter, which is why it is placed into the query text after being cleaned up. `execute_write` runs the whole loop in one transaction (the all-or-nothing group of changes described in Step 8).
 
 Check that the data really arrived by counting what is stored:
 
@@ -652,7 +673,47 @@ def fetch_graph_context(entity_name, hops=2):
         return [f"{rec['source']} --[{rec['relation']}]--> {rec['target']}" for rec in result]
 ```
 
-`[*1..2]` means "a path of one to two relationships, in either direction", the Cypher version of Part 1's radius-2 walk. `UNWIND relationships(p)` splits each path into its individual relationships, and `DISTINCT` removes repeats. Matching the question to a node reuses `find_node_in_question` from Step 5.
+Read the query one clause at a time:
+
+- `MATCH p = (n:Concept {name: $name})-[*1..N]-(m:Concept)` is the search pattern. It starts at the one `Concept` whose `name` equals `$name` (that `{name: $name}` filter does the job a `WHERE` clause would) and follows a path of 1 to N relationships to any other `Concept`. The path is saved as `p`.
+- `UNWIND relationships(p) AS r` splits each path into its individual relationships, one row each.
+- `RETURN DISTINCT startNode(r).name AS source, type(r) AS relation, endNode(r).name AS target` outputs the three parts of each relationship. `startNode` and `endNode` give the real arrow direction as stored, and `DISTINCT` removes repeats because different paths share relationships.
+
+Matching the question to a node reuses `find_node_in_question` from Step 5.
+
+#### Not quite the same as the NetworkX walk
+
+`[*1..2]` is Cypher's version of Part 1's radius-2 walk, but it is **not identical**:
+
+- The NetworkX `DiGraph` walk is **forward-only**: it follows arrows from tail to head, so a node that only points *to* the start node is never reached.
+- The Cypher pattern has no arrowhead (`-[*1..2]-`), so it matches **both directions**. It also reaches nodes that point into the start node.
+- The printed arrows are still correct, because `startNode(r)` and `endNode(r)` report the direction stored in the database, even though the match ignored it.
+- NetworkX also keeps every edge between the nodes it reached, while the Cypher query only returns relationships that lie on a path of at most N hops from the start node. The two fact lists can therefore differ in size. (You can force forward-only in Cypher by writing `-[*1..2]->`, but the lab keeps both directions.)
+
+```mermaid
+flowchart LR
+    subgraph FWD["NetworkX DiGraph: forward only"]
+        direction LR
+        P1["Paper"] -->|DESCRIBES| T1["Transformer"]
+        T1 -->|RELIES_ON| A1["Attention"]
+        T1 -->|HAS_PART| E1["Encoder"]
+        A1 -->|USES| S1["Self-Attention"]
+    end
+    subgraph BOTH["Cypher [*1..2] without arrowhead: both directions"]
+        direction LR
+        P2["Paper"] -->|DESCRIBES| T2["Transformer"]
+        T2 -->|RELIES_ON| A2["Attention"]
+        T2 -->|HAS_PART| E2["Encoder"]
+        A2 -->|USES| S2["Self-Attention"]
+    end
+
+    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    classDef reached fill:#ffe08a,stroke:#d68f00,stroke-width:2px,color:#1a1a1a
+    class P1 defaultStyle
+    class T1,A1,E1,S1,T2,A2,E2,S2,P2 reached
+```
+
+Yellow nodes are reached from `Transformer` within 2 hops. On the left, `Paper` stays white: its arrow points into `Transformer`, so a forward-only walk never reaches it. On the right, `Paper` is reached because the pattern ignores arrow direction.
 
 ```python
 focus = find_node_in_question(QUESTION, fetch_node_names())
@@ -660,6 +721,8 @@ print(f"Focus node: {focus}")
 for fact in fetch_graph_context(focus, hops=1):
     print(" ", fact)
 ```
+
+This demo passes `hops=1` to keep the printout short: only the direct facts. The function's default is `hops=2`, and Step 11 uses `hops=2` for answering, so the full answer pipeline sees connections-of-connections.
 
 **What you should see:** the focus node (`Transformer`) and its direct (1-hop) facts as `A --[TYPE]--> B` lines.
 

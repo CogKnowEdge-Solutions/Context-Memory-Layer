@@ -9,14 +9,14 @@ A lot of important documents exist only as **pictures of text**: scanned invoice
 OCR alone is not enough, though. Two new problems show up:
 
 1. **Layout gets lost.** An invoice is a table. If OCR returns a flat jumble of words, the label `Invoice Number` and its value `34278587` are no longer neighbours, and the LLM starts guessing which number belongs to which label.
-2. **Some documents are long.** A 32-page scanned PDF cannot be pasted into a prompt for every question. Only the few passages that matter should be sent to the LLM, and you should be able to see which ones were used.
+2. **Some documents are long.** A 32-page scanned PDF cannot be pasted into a prompt for every question, because an LLM can only read a limited amount of text at once (its **context window**). Only the few passages that matter should be sent to the LLM, and you should be able to see which ones were used.
 
 ### How This Lab Solves It
 
 This lab solves both, one idea at a time, on the same running example:
 
 - **Part 1 (short documents):** OCR three scanned documents (an invoice, a receipt, a purchase order) while keeping the page layout, turn each whole document into one searchable unit, and answer questions with a `[Source: ...]` tag on every fact.
-- **Part 2 (long documents):** OCR a scanned 32-page PDF, cut the text into small overlapping **chunks** (short pieces of text), store them in a **FAISS** index (a fast vector search library), and retrieve several chunks per question with an explainable "which chunk was used" check.
+- **Part 2 (long documents):** OCR a scanned 32-page PDF, cut the text into small overlapping **chunks** (short pieces of text), store them in a **FAISS** index (a library that stores vectors and quickly finds the closest ones), and retrieve several chunks per question with an explainable "which chunk was used" check.
 - **Part 3 (comparison):** a short look at when to retrieve whole documents and when to retrieve chunks.
 
 **Which part teaches what:**
@@ -26,6 +26,17 @@ This lab solves both, one idea at a time, on the same running example:
 | Part 1 | OCR that keeps layout, one vector per document, source tags on every fact | "What is the invoice number and total charge on the Contoso invoice?" |
 | Part 2 | Scanned PDF to pages to chunks to FAISS, several chunks per question, an explainable answer trail | "How long does each debate last?" |
 | Part 3 | Whole-document versus chunk retrieval | (no new question, just measurements) |
+
+**Key terms used in this lab** (each is explained again where it first appears in the steps):
+
+| Term | Plain meaning |
+|------|---------------|
+| **Vector / embedding** | A list of numbers that captures the meaning of a text; similar texts get similar vectors |
+| **Cosine similarity** | A score for how closely two vectors point the same way: 1.0 is the same direction, near 0 is unrelated |
+| **`top_k`** | How many of the best-scoring results a search returns |
+| **Token** | A small piece of a word; embedding models and LLMs count text in tokens, not characters |
+| **Context window** | The most text an LLM (or embedding model) can read in one go |
+| **FAISS** | A library that stores many vectors and finds the closest ones fast |
 
 This is especially useful for:
 - **Digitizing invoices, receipts, and forms**: turn scanned images into something you can query.
@@ -310,7 +321,7 @@ The whole PDF as ONE unit would be 7268 tokens, so about 97% of it would never b
 
 # Underlying Concepts (Summarized)
 
-**OCR** reads the text out of an image. A plain OCR engine returns a flat list of text boxes in whatever order it found them. For an invoice that is a problem, because the meaning of a number depends on the row and column it sits in. This lab uses the layout-aware output (`to_markdown()`) so `Invoice Number` and `34278587` stay lined up.
+**OCR** reads the text out of an image. A plain OCR engine returns a flat list of text boxes in whatever order it found them. For an invoice or any form that is a problem, because the meaning of a number depends on the row and column it sits in. This lab uses the layout-aware output (`to_markdown()`) so `Invoice Number` and `34278587` stay lined up.
 
 **An embedding** is a list of numbers (a **vector**) that captures the meaning of a piece of text. Texts with similar meaning get vectors that point in similar directions. **Cosine similarity** measures that: 1.0 means the same direction, and values near 0 mean unrelated. This model returns vectors already scaled to length 1, so cosine similarity is just a dot product.
 
@@ -502,11 +513,34 @@ flat_text = " ".join(ocr_engine(invoice_paths["simple-invoice.png"]).txts)
 print(flat_text)
 ```
 
-You should see one long line in which every label, date, and amount is mixed together. An LLM reading that line has to guess which number belongs to which header. (Do not test this with "are the label and value on the same line?". That is `True` for the flat text only because flattening puts everything on one line. The property that matters is column alignment, and only the layout version has it.)
+You should see one long line in which every label, date, and amount is mixed together. An LLM reading that line has to guess which number belongs to which header. The property that matters is column alignment, and only the layout version has it.
+
+```mermaid
+flowchart LR
+    B["OCR text boxes<br/>(text + position)"] --> F["Flat: join in<br/>detection order"]
+    B --> L["Layout: sort by position<br/>into rows and columns"]
+    F --> F2["One long line: all labels<br/>first, then all values"]
+    L --> L2["Row 1: the headers<br/>Row 2: a value under each header"]
+    F2 --> F3["LLM has to guess which<br/>value belongs to which label"]
+    L2 --> L3["LLM reads each value<br/>under its own header"]
+
+    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    class B,F,L,F2,L2,F3,L3 defaultStyle
+```
+
+This is what the layout version lines up for the invoice header (values taken from the printed output above):
+
+| Header | Value under it |
+|--------|----------------|
+| Invoice Number | 34278587 |
+| Invoice Date | 6/18/2017 |
+| Invoice Due Date | 6/24/2017 |
+| Charges | $56,651.49 |
+| VAT ID | PT |
 
 ### Step 1.3: Embed Each Document (One Vector Each)
 
-Each document is short, so the whole thing becomes one vector. The `embed` helper is reused in Part 2.
+Each document is short, so the whole thing becomes one vector (an embedding: a list of 384 numbers that captures the meaning of the text). The `embed` helper is reused in Part 2.
 
 ```python
 def embed(texts):
@@ -527,7 +561,7 @@ You should see `Vector table shape: (3, 384)`: three documents, 384 numbers each
 
 ### Step 1.4: Search the Documents
 
-The question is embedded the same way, then compared to every document with a dot product. A higher score means a closer match.
+The question is embedded the same way, then compared to every document with a dot product. A higher score means a closer match. The score is cosine similarity, and `top_k` is how many of the best matches to return.
 
 ```python
 def search_documents(query, top_k=2):
@@ -544,7 +578,7 @@ Every search function in this lab returns a list of dictionaries with the same t
 
 ### Step 1.5: Ask the LLM and Check the Sources
 
-Two functions that both parts use. `ask_llm` labels each retrieved source and tells the LLM to tag every fact. `show_sources` then looks for those tags in the answer.
+Three functions that both parts use, built one at a time. First, `ask_llm` labels each retrieved source and tells the LLM to tag every fact.
 
 ```python
 def ask_llm(query, hits):
@@ -561,7 +595,13 @@ Context:
 Question: {query}
 Answer:"""
     return llm.invoke(prompt).content.strip()
+```
 
+`.invoke()` is LangChain's single call: it sends the prompt and returns a response object. `.content` is the text.
+
+Next, `show_sources` looks for those tags in the answer.
+
+```python
 def show_sources(answer, hits):
     """Explainability: for every retrieved source, was its tag cited in the answer?"""
     print("--- EXPLAINABILITY ---")
@@ -573,7 +613,13 @@ def show_sources(answer, hits):
             for line in answer.splitlines():
                 if tag in line:
                     print(f"       cited in: {line.strip()}")
+```
 
+A retrieved source is not necessarily a used source. The search returns the top 2, so if only one is relevant, the other is retrieved and then ignored. `show_sources` tells the two cases apart by looking for the exact tag.
+
+Last, `answer_question` ties the search results, the answer, and the check together.
+
+```python
 def answer_question(query, hits):
     """Print the retrieved sources, the answer, and the explainability check."""
     print(f"Question: {query}\n")
@@ -587,8 +633,7 @@ def answer_question(query, hits):
     show_sources(answer, hits)
 ```
 
-- `.invoke()` is LangChain's single call: it sends the prompt and returns a response object. `.content` is the text.
-- A retrieved source is not necessarily a used source. The search returns the top 2, so if only one is relevant, the other is retrieved and then ignored. `show_sources` tells the two cases apart by looking for the exact tag.
+It only prints; all the real work happens in `ask_llm` and `show_sources`.
 
 ### Step 1.6: Ask Questions
 
@@ -627,15 +672,15 @@ PDF_PATH = download(
 def render_pages(pdf_path, dpi=200):
     """Draw every PDF page as an image array. A higher dpi means a sharper image for OCR."""
     zoom = dpi / 72                                   # PDF pages are 72 dpi by default
-    matrix = fitz.Matrix(zoom, zoom)
-    pages = []
-    with fitz.open(pdf_path) as doc:
-        for page in doc:
-            pix = page.get_pixmap(matrix=matrix)
+    matrix = fitz.Matrix(zoom, zoom)                  # scaling rule: enlarge width and height by the same factor
+    pages = []                                        # will hold one image array per page, in order
+    with fitz.open(pdf_path) as doc:                  # open the PDF (it closes itself at the end of the block)
+        for page in doc:                              # visit the pages one by one
+            pix = page.get_pixmap(matrix=matrix)      # draw this page as raw pixels at the chosen zoom
             # raw page pixels -> RGB image -> numpy array for the OCR engine
-            image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            pages.append(np.array(image))
-    return pages
+            image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)  # wrap the pixels as an RGB image
+            pages.append(np.array(image))             # store the image as a numpy array
+    return pages                                      # give back every page image
 
 page_images = render_pages(PDF_PATH)
 print(f"Rendered {len(page_images)} pages. Page 1 is {page_images[0].shape[1]}x{page_images[0].shape[0]} pixels.")
@@ -688,6 +733,30 @@ print("Start of chunk 2:", repr(chunks[1]["text"][:50]))
 print("Chunk 2 starts with text already inside chunk 1:", chunks[1]["text"][:40] in chunks[0]["text"])
 ```
 
+#### Worked example: `CHUNK_SIZE`, `OVERLAP` and `STEP`
+
+`STEP` is how far the window moves each time: `STEP = CHUNK_SIZE - OVERLAP = 500 - 50 = 450`. Take a page whose OCR text is 1,100 characters long. `range(0, 1100, 450)` gives the starts 0, 450 and 900:
+
+| Chunk | Start | Slice | Length | Shared with the next chunk |
+|-------|-------|-------|--------|----------------------------|
+| 1 | 0 | characters 0 to 500 | 500 | characters 450 to 500 |
+| 2 | 450 | characters 450 to 950 | 500 | characters 900 to 950 |
+| 3 | 900 | characters 900 to 1100 | 200 (page ends) | none |
+
+```mermaid
+flowchart LR
+    T["One page of OCR text<br/>(example: 1,100 characters)"] --> W0["Chunk 1<br/>characters 0 to 500"]
+    T --> W1["Chunk 2<br/>characters 450 to 950"]
+    T --> W2["Chunk 3<br/>characters 900 to 1,100"]
+    W0 -.->|"450 to 500 shared"| W1
+    W1 -.->|"900 to 950 shared"| W2
+
+    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    class T,W0,W1,W2 defaultStyle
+```
+
+Each window starts 450 characters after the previous one but is 500 long, which is why neighbours overlap by 50. Chunks never cross a page boundary, because the loop restarts at 0 for each page.
+
 You should see the end of chunk 1 and the start of chunk 2 show the same text, and `True` on the last line. That shared text is the overlap. (The two printed strings can differ by a character or two because blank space at the ends of a chunk is trimmed.)
 
 ### Step 2.4: Build the FAISS Index
@@ -728,7 +797,9 @@ query = "How long does each debate last, and are opening statements allowed?"
 answer_question(query, search_chunks(query))
 ```
 
-You should see three chunks retrieved, an answer stating 90 minutes and no opening statements (a two-minute closing statement), and the explainability list marking which chunks were cited and which were retrieved but ignored.
+You should see three chunks retrieved, an answer stating 90 minutes and no opening statements, and the explainability list marking which chunks were cited and which were retrieved but ignored.
+
+Notice that the rank-1 chunk (score 0.690, page 7) is not the one that answered. The chunk that was cited (page 4, chunk 10) ranked second with 0.689. When scores are this close, the order is nearly a tie, so a high score does not guarantee the best chunk. This is one reason to retrieve several chunks and let the LLM choose.
 
 A question whose answer is spread over more than one chunk:
 
@@ -745,7 +816,7 @@ With `top_k=4` the LLM sees four chunks at once and may cite more than one. This
 
 **New idea in this part:** measure why Part 1 can use whole documents and Part 2 cannot.
 
-An embedding model can only read a limited amount of text per input and silently ignores the rest. This cell compares the retrieval units of both parts to that limit.
+An embedding model can only read a limited amount of text per input (counted in **tokens**: small pieces of words, roughly three-quarters of a word each) and silently ignores the rest. That limit is the model's context window. This cell compares the retrieval units of both parts to that limit.
 
 ```python
 def count_tokens(text):
@@ -767,7 +838,7 @@ print(f"\nThe whole PDF as ONE unit would be {count_tokens(whole_pdf)} tokens, "
       f"so about {100 - 100 * embedder.max_seq_length // count_tokens(whole_pdf)}% of it would never be seen by the embedding model.")
 ```
 
-You should see the invoices fitting comfortably under the limit (the purchase order is the longest and may be close to it), every chunk well under it, and the whole PDF far over it. That is why short documents can be one vector each, while long documents must be chunked.
+You should see the three documents fitting under the limit (the purchase order is the longest and may be close to it), every chunk well under it, and the whole PDF far over it. That is why short documents can be one vector each, while long documents must be chunked.
 
 | | Whole-document retrieval (Part 1) | Chunk retrieval (Part 2) |
 |---|---|---|
@@ -785,7 +856,7 @@ You should see the invoices fitting comfortably under the limit (the purchase or
 This lab turned scanned images into something you can question, first with short documents and then with a long PDF, and showed which sources ended up in every answer.
 
 - **OCR gives you text from images, and layout matters.** RapidOCR's `to_markdown()` keeps rows and columns together, so `Invoice Number` stays next to `34278587` instead of dissolving into a flat word list.
-- **Short documents can be one vector each.** With a handful of invoice-length documents, one embedding per document and a plain dot product retrieve the right one, with no database.
+- **Short documents can be one vector each.** With a handful of short documents, one embedding per document and a plain dot product retrieve the right one, with no database.
 - **Long documents must be chunked.** A scanned PDF is rendered to page images, OCR'd page by page, and cut into 500-character chunks that overlap by 50, so a sentence on a boundary survives whole in at least one chunk.
 - **FAISS makes chunk search scale.** The same normalized vectors and the same cosine score are used in both parts; only the search tool changes.
 - **Retrieval returns several sources, and the answer is checkable.** The LLM tags every fact with `[Source: ...]`, and looking for that exact tag shows which sources were used and which were retrieved but ignored.

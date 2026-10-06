@@ -6,9 +6,20 @@
 
 A standard RAG pipeline embeds the exact same piece of text it later hands to the LLM. That creates a tug-of-war between two goals that both want a different chunk size. Small chunks embed precisely and match a question well, but they don't give the LLM enough surrounding context to answer fully. Large chunks give the LLM plenty of context, but they embed poorly, since a big block of mixed topics rarely matches a specific question closely.
 
+### Key Terms Used in This Lab
+
+| Term | Meaning |
+|---|---|
+| **Vector / embedding** | A list of numbers (here 384 of them) that represents the meaning of a piece of text. Texts with similar meaning get vectors that point in similar directions. |
+| **Cosine similarity** | A score for how close two vectors are, based on the angle between them. Closer to 1 means more similar in meaning. Qdrant uses it to rank matches. |
+| **`top_k` (written `k` in code)** | How many of the best-scoring matches a search returns. `search_kwargs={"k": 2}` means "give me the 2 closest". |
+| **Token** | A small piece of text (a short word or part of a word) that an LLM reads and counts. Roughly, 1 token is about 4 characters of English. |
+| **Context window** | The maximum number of tokens an LLM can read in one request (prompt plus answer). Parents have to be small enough to fit. |
+| **LCEL** | LangChain Expression Language: the `\|` syntax that chains steps together, such as `prompt \| llm \| StrOutputParser()`. |
+
 ### How This Lab Solves It
 
-This lab builds a way around that trade-off: stop using the same chunk for both jobs. A document is split into large **parent** chunks, which hold all the context the LLM will eventually need. Each parent is then split further into small **child** chunks, and also condensed into a short **summary** — both of which are built specifically to be easy to search. The children and summaries are the only things actually embedded and searched; the parents are stored separately and never touched during search. When a question comes in, the search step finds the closest-matching child or summary, and a retriever swaps it out for its full parent document before that goes to the LLM — meaning the piece that wins the search is never the piece the LLM actually reads.
+This lab builds a way around that trade-off: stop using the same chunk for both jobs. A document is split into large **parent** chunks, which hold all the context the LLM will eventually need. Each parent is then split further into small **child** chunks, and also condensed into a short **summary** — both of which are built specifically to be easy to search. The children and summaries are the only things actually embedded and searched; the parents are kept in a separate **parent store** (a plain key-value store, not a vector index) and never touched during search. When a question comes in, the search step finds the closest-matching child or summary, and a retriever swaps it out for its full parent document before that goes to the LLM — meaning the piece that wins the search is never the piece the LLM actually reads.
 
 **This pipeline has four connected parts:**
 
@@ -32,7 +43,7 @@ This is useful for:
 | **Your question** | A natural-language question about the document |
 | **LLM API Key** | Used to generate summaries and the final answer |
 | **Embedding model** | Runs locally — no API key needed, downloaded automatically the first time it's used |
-| **Qdrant Cloud cluster (URL + API key)** | Hosts the vector store that holds the child and summary embeddings |
+| **Qdrant Cloud cluster (URL + API key)** | Hosts the vector store that holds the child and summary embeddings. Optional: Step 3 also shows an in-memory Qdrant option that needs no account |
 
 ---
 
@@ -48,13 +59,13 @@ flowchart LR
     PC --> SM["Summarize each Parent<br/>using the LLM"]
     CC --> EMB["Embed Children into Qdrant"]
     SM --> EMB2["Embed Summaries into Qdrant"]
-    PC --> DS["Store full Parents in a<br/>separate document store"]
+    PC --> DS["Store full Parents in a<br/>separate parent store"]
 
     classDef ingestStyle fill:#eef7ee,stroke:#3a7d3a,stroke-width:1px,color:#111111
     class PDF,DL,PC,CC,SM,EMB,EMB2,DS ingestStyle
 ```
 
-Every parent chunk feeds three separate things: its own storage in the document store, a set of child chunks, and a summary. Only the children and summaries end up as vectors in Qdrant — the parents themselves are never embedded, since their job is to hold context, not to be found through search.
+Every parent chunk feeds three separate things: its own storage in the parent store, a set of child chunks, and a summary. Only the children and summaries end up as vectors in Qdrant — the parents themselves are never embedded, since their job is to hold context, not to be found through search.
 
 ### Part B — How a Question Finds Its Answer
 
@@ -92,7 +103,7 @@ flowchart TB
     C3 --> Qd
     Sum --> Qd
 
-    Parent --> Store[("Stored, untouched,<br/>in the document store")]
+    Parent --> Store[("Stored, untouched,<br/>in the parent store")]
 
     classDef parentStyle fill:#ffe08a,stroke:#d68f00,stroke-width:2px,color:#1a1a1a
     classDef childStyle fill:#e7f1ff,stroke:#1d6fa5,stroke-width:1px,color:#0b1f33
@@ -106,7 +117,7 @@ Every one of those four searchable pieces — the three children and the summary
 
 ### Walking Through a Sample Retrieval
 
-Now here's the reverse direction — a real question coming in and actually finding its way to an answer, using the question from this lab's own sample run:
+Now here's the reverse direction: a question coming in and finding its way to an answer, using this lab's own question. The diagram below is **illustrative** — it shows the shape of the journey, not saved output. Which pieces win the search (and their IDs) is something you can see for yourself with the optional cell at the end of Step 8, which prints your real hits.
 
 ```mermaid
 flowchart TB
@@ -114,16 +125,16 @@ flowchart TB
 
     Q --> Search["Search Qdrant<br/>(across every embedded Child and Summary)"]
 
-    Search -->|"closest match"| M1["Child chunk:<br/>'...Table 1: Self-Attention O(n²·d),<br/>Recurrent O(n·d²)...'<br/>doc_id: parent-3"]
-    Search -->|"second closest match"| M2["Summary of a parent about<br/>model comparisons<br/>doc_id: parent-5"]
+    Search -->|"closest match"| M1["Hit 1: a Child chunk or a Summary<br/>doc_id: A"]
+    Search -->|"second closest match"| M2["Hit 2: a Child chunk or a Summary<br/>doc_id: B (or A again)"]
 
-    M1 -->|"doc_id looked up"| P1["Full Parent 3 fetched<br/>(~10,000 characters,<br/>includes Table 1 and surrounding text)"]
-    M2 -->|"doc_id looked up"| P2["Full Parent 5 fetched<br/>(~10,000 characters)"]
+    M1 -->|"doc_id looked up"| P1["Full Parent A fetched<br/>(up to ~10,000 characters)"]
+    M2 -->|"doc_id looked up"| P2["Full Parent B fetched<br/>(up to ~10,000 characters)"]
 
     P1 --> Ctx["Combined into labeled context:<br/>Source 1, Source 2"]
     P2 --> Ctx
 
-    Ctx --> LLM["LLM answers using<br/>only Source 1 and Source 2"]
+    Ctx --> LLM["LLM answers using<br/>only the labeled Sources"]
     LLM --> Ans["Final Answer:<br/>O(n²·d) vs O(n·d²)"]
 
     classDef qStyle fill:#fff3cd,stroke:#d68f00,stroke-width:2px,color:#1a1a1a
@@ -134,7 +145,9 @@ flowchart TB
     class P1,P2,Ctx,LLM,Ans parentStyle
 ```
 
-`search_kwargs={"k": 2}` means two matches come back, not just one — here, the closest match happens to be a *child* chunk (since the exact numbers from Table 1 sit in a small, precise fragment), while the second-closest happens to be a *summary* (since it's a broader match on the surrounding topic). Both matches immediately hand off to their full parents rather than being used as-is, so the LLM ends up reading two complete ~10,000-character sections, not two small fragments — which is exactly why its explainability trace was able to reference "Table 1" by name, something a lone 400-character child could easily have cut off mid-sentence.
+`search_kwargs={"k": 2}` means two matches come back, not just one. Each match can be a *child* chunk (good for exact details such as numbers in a table) or a *summary* (good for broad topic questions). Either way, the match is swapped for its full parent before the LLM sees anything, so the LLM reads complete sections instead of small fragments. That is why the real explainability trace in the Output section could refer to "Table 1" by name — a lone 400-character child could easily have cut that table off mid-sentence.
+
+**Two hits can come from the same parent.** A child and the summary of the same parent share one `doc_id`, so they can both rank in the top 2. Both then point to the same parent. In that case the retriever hands back that parent once, so you can get fewer parents than `k`. The optional cell in Step 8 lets you check this on your own run.
 
 ---
 
@@ -212,7 +225,7 @@ Notice the explainability trace references a specific table from the source docu
 | **Summarization** | LLM (`nvidia/nemotron-3-super-120b-a12b:free`), via an LCEL chain built with `langchain-core` |
 | **Embedding Model** | `sentence-transformers` / `all-MiniLM-L6-v2`, via `langchain-huggingface` — runs locally |
 | **Vector Store** | `Qdrant` Cloud, via `langchain-qdrant` — a hosted vector database holding only the children and summaries, accessed with a cluster `url` and `api_key` |
-| **Document Store** | `InMemoryByteStore` — holds the full parent documents, keyed by ID |
+| **Parent Store** | `InMemoryByteStore` — holds the full parent documents, keyed by ID (the retriever calls it `docstore`) |
 | **Retrieval Logic** | `MultiVectorRetriever`, from `langchain-classic` — searches the vector store, then swaps each match for its linked parent |
 | **Prompt & Chain Orchestration** | `langchain-core` — `ChatPromptTemplate`, `RunnablePassthrough`, `RunnableParallel`, and `StrOutputParser`, chained together with the `\|` operator |
 | **Notebook Display** | `IPython.display` (`Markdown`, `display`) — renders the LLM's markdown answer with formatting in the notebook |
@@ -229,7 +242,7 @@ Notice the explainability trace references a specific table from the source docu
 
 **Summary** is a short, LLM-generated condensation of a parent's content. Because it's phrased more like a general description of the topic, it tends to match broader questions that a narrow child chunk might miss.
 
-**`doc_id`** is the shared identifier that ties a parent to all of its children and its summary. It's the only thing connecting the searchable vectors to the real documents sitting in the separate document store.
+**`doc_id`** is the shared identifier that ties a parent to all of its children and its summary. It's the only thing connecting the searchable vectors to the real documents sitting in the separate parent store.
 
 **LCEL (LangChain Expression Language)** is the `|`-based syntax used to chain steps together — for example, `prompt | llm | StrOutputParser()` means "fill in the prompt, send it to the model, then turn the reply into a plain string." It keeps a multi-step process readable as a single expression.
 
@@ -242,7 +255,7 @@ Notice the explainability trace references a specific table from the source docu
 - **Basic familiarity** with Python (functions, loops, `import` statements).
 - **A general sense of what RAG and embeddings are** — retrieving relevant text using vector similarity before asking an LLM to answer.
 - **An LLM API Key** — used for summarization and for generating the final answer.
-- **A Qdrant Cloud cluster** — you'll need its URL and API key to host the vector store (see "Getting Qdrant Credentials" below).
+- **A Qdrant Cloud cluster** — its URL and API key host the vector store (see "Getting Qdrant Credentials" below). No account? Skip that section and use the optional in-memory cell in Step 3 instead.
 
 ---
 
@@ -299,7 +312,6 @@ The cell below installs all required Python packages:
 
 ```python
 import os
-import uuid
 
 import requests
 from dotenv import load_dotenv
@@ -321,7 +333,7 @@ from pypdf import PdfReader
 |---|---|
 | `os` | Reads the secrets loaded from `.env` via `os.getenv(...)` |
 | `load_dotenv` | Loads the `.env` file sitting next to the notebook into the environment |
-| `uuid` | Generates a unique ID linking each parent to its children and summary |
+| `hashlib` | Imported later, in Step 6 — its SHA-256 hash gives each parent a stable ID that links it to its children and summary |
 | `requests` | Downloads the PDF |
 | `PdfReader` | Extracts raw text from the PDF |
 | `ChatOpenAI` | LangChain's wrapper for calling the LLM |
@@ -396,6 +408,45 @@ This cell connects the pipeline to Qdrant Cloud and sets up the storage that bac
 
 The second cell is the alternative for when the collection is **already stored in the cloud** — for example, from a previous run of this notebook. `QdrantVectorStore.from_existing_collection(...)` connects to that existing `multi_vector_collection` using the same `url` and `api_key`, without creating a new one or re-seeding it. It sets up the exact same `store` and `id_key`, so nothing downstream changes. This cell is **commented out by default** because the first-time setup needs to create the collection; only use it if you already ran the notebook before, in which case you comment out the cell above and uncomment this one.
 
+#### Optional: no Qdrant Cloud account? Use in-memory Qdrant
+
+Qdrant can also run entirely inside your notebook. Pass `location=":memory:"` instead of `url` and `api_key`, and nothing needs to be signed up for or stored in `.env` (except `OPENROUTER_API_KEY`). Run this cell **instead of** the Qdrant Cloud cell above:
+
+```python
+# OPTIONAL: no Qdrant Cloud account? Run this INSTEAD of the Qdrant Cloud cell above.
+# It keeps the vectors in this notebook's memory, so they disappear when the kernel restarts.
+vectorstore = QdrantVectorStore.from_texts(
+    texts=["Initialize"],
+    embedding=embeddings,
+    location=":memory:",
+    collection_name="multi_vector_collection"
+)
+
+store = InMemoryByteStore()
+id_key = "doc_id"
+```
+
+Everything after this step works unchanged. The trade-off: the vectors live only in this notebook session. If you restart the kernel they are gone, so rerun the notebook from the top, and the `from_existing_collection` cell does not apply.
+
+#### The leftover "Initialize" vector
+
+`texts=["Initialize"]` really does leave one throwaway vector in the collection, and nothing in this lab removes it. After Step 8 the collection holds that one seed plus the real children and summaries. It is harmless in most searches, but a very odd query could match it. Because it has no `doc_id`, the retriever has no parent to swap it for, so it adds nothing useful. If you want it gone, run this optional cell once after the collection is created and before Step 8:
+
+```python
+# OPTIONAL: delete the throwaway "Initialize" vector so it can never show up as a search hit.
+# Run it once, right after the cell that creates the collection and before Step 8.
+from qdrant_client import models
+
+vectorstore.client.delete(
+    collection_name="multi_vector_collection",
+    points_selector=models.FilterSelector(
+        filter=models.Filter(
+            must=[models.FieldCondition(key="page_content", match=models.MatchValue(value="Initialize"))]
+        )
+    ),
+)
+```
+
 ---
 
 ### Step 4 — Download & Extract Document
@@ -421,7 +472,7 @@ raw_text = "\n".join([page.extract_text() for page in reader.pages if page.extra
 print(f"Extracted {len(raw_text)} characters.")
 ```
 
-Unlike the shorter previews used in some other pipelines, this step reads every page in the PDF rather than stopping after a small character limit, since the full multi-vector setup is meant to handle a complete, long document. By the end of this step, `raw_text` holds the entire extracted document as one string.
+This step reads every page in the PDF rather than stopping after a character limit, since the full multi-vector setup is meant to handle a complete, long document. By the end of this step, `raw_text` holds the entire extracted document as one string.
 
 ---
 
@@ -477,6 +528,8 @@ print(f"Created {len(child_docs)} Child Documents.")
 
 By the end of this step, every parent has a stable `doc_id`, and every one of its children carries that exact same ID in its metadata.
 
+**Why a hash instead of a random ID?** The parent store is in memory, so it is empty every time the notebook restarts, while vectors in Qdrant Cloud stay. If IDs were random, rebuilding the parents would give them new IDs and the vectors already in Qdrant would point at parents that no longer exist. With a hash of the text, the same PDF and the same splitter settings always rebuild the same IDs, so the old vectors still link to the rebuilt parents. (Change the text or the chunk size and the hashes change too, so re-index in that case.)
+
 ---
 
 ### Step 7 — Define and Execute Summarization Pipeline
@@ -526,7 +579,7 @@ retriever = MultiVectorRetriever(
     search_kwargs={"k": 2}    # return top-2 matches per query
 )
 
-# Store the full parent Documents in the docstore (auto-serialized into the ByteStore)
+# Store the full parent Documents in the parent store (auto-serialized into the byte store)
 retriever.docstore.mset([(doc.metadata[id_key], doc) for doc in parent_docs])
 
 # First-time setup: uploads vectors to Qdrant. If you already ran this notebook before and data already exists in Qdrant, comment out these two lines to avoid uploading duplicates.
@@ -536,7 +589,37 @@ retriever.vectorstore.add_documents(summary_docs)
 print("Multi-vector search index ready.")
 ```
 
-This is where the two storage systems set up in Step 3 are wired together into one retriever. `retriever.docstore.mset(...)` saves every parent, keyed by its `doc_id`, into the byte store. `add_documents` then embeds the children and summaries into Qdrant, each still carrying the `doc_id` that connects it back to its parent. `search_kwargs={"k": 2}` means every query returns the top 2 closest matches, whether those happen to be children, summaries, or a mix of both.
+This is where the two storage systems set up in Step 3 are wired together into one retriever. `retriever.docstore.mset(...)` saves every parent, keyed by its `doc_id`, into the parent store. `add_documents` then embeds the children and summaries into Qdrant, each still carrying the `doc_id` that connects it back to its parent. `search_kwargs={"k": 2}` means every query returns the top 2 closest matches, whether those happen to be children, summaries, or a mix of both.
+
+#### What lives where
+
+After Step 8, the two storage systems hold different things. The counts come from this lab's printed outputs (5 parents, 117 children, 5 summaries):
+
+| | Qdrant (vector store) | Parent store (`InMemoryByteStore`) |
+|---|---|---|
+| **Holds** | Child chunks and summaries, as vectors plus their text | Full parent chunks, as stored `Document`s |
+| **How many** | 117 children + 5 summaries = 122 vectors (plus the 1 seed vector from Step 3) | 5 parents |
+| **Size of each item** | About 400 characters per child; a short summary | Up to about 10,000 characters |
+| **Keyed by** | Searched by meaning; each carries `doc_id` in its metadata | Looked up by `doc_id` |
+| **Searched?** | Yes | No, only fetched by ID |
+| **Survives a restart?** | Qdrant Cloud: yes. In-memory Qdrant: no | No, rebuilt each run |
+
+#### Optional: see the swap on your own run
+
+The retrieval walkthrough above is illustrative. This optional cell prints your real raw hits and the parents they are swapped for. Its output is not saved in this lesson, because it depends on your run.
+
+```python
+# OPTIONAL: look at the raw search hits, then at the parents the retriever swaps them for
+peek_query = "What is the computational complexity per layer of a self-attention mechanism compared to a recurrent layer?"
+
+raw_hits = vectorstore.similarity_search(peek_query, k=2)
+for i, hit in enumerate(raw_hits):
+    print(f"RAW HIT {i + 1}: {len(hit.page_content)} chars | doc_id {hit.metadata['doc_id'][:16]} | {hit.page_content[:80]!r}")
+
+parents = retriever.invoke(peek_query)
+for i, parent in enumerate(parents):
+    print(f"PARENT {i + 1}: {len(parent.page_content)} chars | doc_id {parent.metadata['doc_id'][:16]}")
+```
 
 ---
 
@@ -596,6 +679,27 @@ generation_chain = (
 rag_chain = retrieval_chain.assign(answer=generation_chain)
 ```
 
+#### What shape is the data at each stage?
+
+```mermaid
+flowchart TB
+    Q["Input: question<br/>(a str)"] --> RP["RunnableParallel<br/>runs two branches"]
+    RP --> R["retriever branch<br/>list of parent Documents"]
+    RP --> QP["RunnablePassthrough branch<br/>question (a str)"]
+    R --> D1["dict:<br/>context + question"]
+    QP --> D1
+    D1 --> F["format_docs<br/>context becomes one labeled str"]
+    F --> PR["qa_prompt<br/>filled-in prompt"]
+    PR --> L["llm<br/>AIMessage"]
+    L --> SP["StrOutputParser<br/>answer (a str)"]
+    SP --> OUT["Final dict: context (Documents),<br/>question, answer"]
+
+    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    class Q,RP,R,QP,D1,F,PR,L,SP,OUT defaultStyle
+```
+
+Note that `format_docs` only changes the context *inside* `generation_chain`; the final dict returned by `rag_chain` still holds the original parent `Document` objects under `context`, next to the `question` and the `answer`.
+
 Numbering each retrieved parent as "Source 1," "Source 2," and so on is what lets the LLM refer back to specific sources by name in its explainability trace instead of describing them vaguely. `generation_chain` formats whatever parents came back, fills in the prompt, and asks the LLM to answer strictly in the two-section format above. `rag_chain` ties both halves together into a single object that can be run with one call.
 
 ---
@@ -629,6 +733,6 @@ By the end of this lab, a single document has been indexed twice over — once a
 - **Search precision and answer context don't have to come from the same chunk** — small children and summaries are what get searched, while their much larger parents are what actually get read by the LLM.
 - **A shared ID is what makes the swap possible** — every child and summary carries the exact same `doc_id` as its parent, which is how a match on one instantly resolves to the other.
 - **A parent can be found more than one way** — through any of its child chunks, or through its own summary, giving broad and narrow questions both a fair chance of finding it.
-- **Two separate storage systems play different roles** — a vector store holds only what needs to be searched, while a plain document store holds the full content that needs to be preserved exactly as written.
+- **Two separate storage systems play different roles** — a vector store holds only what needs to be searched, while a plain parent store holds the full content that needs to be preserved exactly as written.
 - **LCEL chains keep multi-step logic readable** — formatting, prompting, calling the LLM, and parsing the reply are expressed as one chained pipeline rather than several separate function calls.
 - **Explainability still works, even with retrieved parents rather than tiny fragments** — labeling each source lets the LLM reference exactly which parent contributed which part of the answer.

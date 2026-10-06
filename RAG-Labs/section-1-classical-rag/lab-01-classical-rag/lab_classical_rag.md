@@ -83,7 +83,7 @@ This is deliberately the **baseline**. Every later lab in this module changes ex
 
 # Processing
 
-The pipeline is a straight line. Data flows in one direction, and each stage transforms whatever the previous stage produced.
+The pipeline is a straight line. Data flows in one direction, and each stage transforms whatever the previous stage produced. The notebook's Steps are numbered slightly differently from these Stages, because Stages 3 and 4 happen in one call: Step 1 is Stage 1, Step 2 is Stage 2, Step 3 is Stages 3 and 4, Step 4 is Stage 5, Step 5 is Stage 6. Steps 6 and 7 are experiments on top of the finished pipeline.
 
 ### Stage 1 — Load
 
@@ -91,7 +91,7 @@ Reading a `.txt` file needs no library at all — `Path.read_text()` is the enti
 
 So Stage 1 is really two jobs: read the string, then wrap it in `Document` objects. We build one per "page", splitting on `\f` — the ASCII **form feed** character, which is the traditional page break in plain text. That metadata is the reason a retrieved chunk can later tell you *which page* it came from.
 
-The payoff of starting from a text file: every later stage is byte-identical to what it would be with a PDF, and none of the five stages has to care what format the document arrived in.
+The payoff of starting from a text file: every later stage is byte-identical to what it would be with a PDF, and none of the six stages has to care what format the document arrived in.
 
 ### Stage 2 — Chunk
 
@@ -104,21 +104,39 @@ Two details worth knowing:
 
 ### Stage 3 — Embed
 
-Each chunk is passed through `all-MiniLM-L6-v2`, which returns a **384-number vector** for it. The name for that vector is an **embedding**, and the trick it performs is turning *meaning* into *geometry*: texts that mean similar things end up pointing in similar directions.
+Each chunk is passed through `all-MiniLM-L6-v2`, which returns a **384-number vector** for it (a **vector** is just a list of numbers). The name for that vector is an **embedding**, and the trick it performs is turning *meaning* into *geometry*: texts that mean similar things end up pointing in similar directions.
 
 Every vector this model returns is already **unit length** — each one is a direction, not a magnitude. We state that requirement explicitly with `normalize_embeddings=True` rather than relying on it happening by default, because the next stage depends on it.
+
+The picture below is a schematic (real vectors have 384 dimensions, so this is a flowchart, not a true plot). Each chunk is a point, the question becomes a point too, and the chunk whose direction is closest to the question is the one retrieval will rank first.
+
+```mermaid
+flowchart LR
+    Q(["Question<br/>embedded as a vector"])
+    C1["Chunk: Reintroducing Tidal Flow<br/>closest in meaning"]
+    C2["Chunk: tide gates<br/>nearby, same topic"]
+    C3["Chunk: introduction<br/>further away"]
+    C4["Chunk: planting<br/>far away"]
+    Q ==>|"highest score"| C1
+    Q -->|"lower"| C2
+    Q -.->|"lower still"| C3
+    Q -.->|"lowest"| C4
+
+    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    class Q,C1,C2,C3,C4 defaultStyle
+```
 
 ### Stage 4 — Index
 
 `FAISS.from_documents` does Stage 3 and Stage 4 together in a single call: it embeds every chunk, then stores all 13 vectors in a **FAISS** index. FAISS is a free library for searching vectors.
 
-The measurement is chosen with `distance_strategy=DistanceStrategy.MAX_INNER_PRODUCT`, which builds a FAISS **`IndexFlatIP`** — a plain list of every vector, compared against your question by **inner product**, exactly. And because all the vectors are unit length, inner product *is* cosine similarity, so the number FAISS hands back can be read directly as "how similar are these two texts".
+The measurement is chosen with `distance_strategy=DistanceStrategy.MAX_INNER_PRODUCT`, which builds a FAISS **`IndexFlatIP`** — a plain list of every vector, compared against your question by **inner product**, exactly. And because all the vectors are unit length, inner product *is* cosine similarity, so the number FAISS hands back can be read directly as "how similar are these two texts". (**Inner product** means multiply the two lists of numbers position by position and add everything up; **cosine similarity** is the angle-based score from -1 to 1 that says how closely two vectors point the same way.)
 
 > **This is the one setting in the lab worth reading twice.** LangChain also offers a strategy literally named `COSINE`. On this version of `langchain-community` it quietly builds an `IndexFlatL2` instead and returns **squared straight-line distance** — a different number entirely, whose direction is *opposite* (lower is better). Section 7 works through why that trips people up.
 
 ### Stage 5 — Retrieve
 
-The question is embedded by the **same model** — this is not optional, see Section 7 — and FAISS returns the `k` highest-scoring chunks. Higher score means closer in meaning, and with unit vectors the score is a cosine: **1** means identical direction, **0** means unrelated, **-1** means opposite.
+The question is embedded by the **same model** — this is not optional, see Section 7 — and FAISS returns the `k` highest-scoring chunks (`k` is called `TOP_K` or `top_k` in the code: simply how many chunks you ask for). Higher score means closer in meaning, and with unit vectors the score is a cosine: **1** means identical direction, **0** means unrelated, **-1** means opposite.
 
 ### Stage 6 — Generate
 
@@ -126,14 +144,20 @@ The retrieved chunks are pasted into a prompt under one hard instruction — *an
 
 ```mermaid
 flowchart LR
-    D["Text document"] --> L["1. LOAD<br/>read_text()"]
-    L --> C["2. CHUNK<br/>400 chars, 50 overlap"]
-    C --> E["3. EMBED<br/>all-MiniLM-L6-v2<br/>384 unit numbers each"]
-    E --> V[("4. INDEX<br/>FAISS IndexFlatIP<br/>inner product = cosine")]
-    Q["Your question"] --> R["5. RETRIEVE<br/>top-k closest chunks"]
+    subgraph ONCE["Build once, when the document arrives"]
+        direction LR
+        D["Text document"] --> L["1. LOAD<br/>read_text()"]
+        L --> C["2. CHUNK<br/>400 chars, 50 overlap"]
+        C --> E["3. EMBED<br/>all-MiniLM-L6-v2<br/>384 unit numbers each"]
+        E --> V[("4. INDEX<br/>FAISS IndexFlatIP<br/>inner product = cosine")]
+    end
+    subgraph EACH["Repeat for every question"]
+        direction LR
+        Q["Your question"] --> R["5. RETRIEVE<br/>top-k closest chunks"]
+        R --> G["6. GENERATE<br/>LLM, context only"]
+        G --> A["Grounded answer<br/>+ the sources used"]
+    end
     V --> R
-    R --> G["6. GENERATE<br/>LLM, context only"]
-    G --> A["Grounded answer<br/>+ the sources used"]
 
     classDef input fill:#e1f5ff,stroke:#0288d1,stroke-width:2px,color:#0d3b66
     classDef proc fill:#fff9c4,stroke:#f9a825,stroke-width:2px,color:#5c4300
@@ -143,7 +167,7 @@ flowchart LR
     class A out
 ```
 
-Follow the arrows: the document takes the left path down to the index, the question takes the short path to retrieval, they meet at retrieval, and the result flows out to the right.
+Follow the arrows: the top lane runs once per document and ends in the index; the bottom lane runs again for every new question and reads from that same index. That is why adding a second question costs almost nothing, while adding a new document means rebuilding the top lane.
 
 ---
 
@@ -178,7 +202,7 @@ Coastal wetlands sit at the boundary between land and sea, absorbing storm surge
 providing nursery habitat for fish and shellfish. Over the past century, many of these ecosystems have
 ```
 
-Notice what the "recursive" part bought us: the chunk ends at a paragraph edge, not in the middle of the word "have".
+Notice where the cut landed: the chunk stops right after the word "have", at a space between words, not in the middle of a word. The sentence itself is cut off there, and the next chunk repeats the last 50 characters (the overlap) so the idea is not lost.
 
 **Step 3** confirms every chunk reached the index:
 
@@ -213,6 +237,18 @@ This guide summarizes the general principles behind restoring a degraded wetland
 system, written as a plain-text reference document for testing purposes.
 2. Assessing the Site
 ```
+
+Placed on one 0-to-1 line (a table, because the scale is the point), the three retrieved chunks all sit well above zero, and the "I don't know" threshold you will pick in Step 7 belongs in the gap below them:
+
+| Score | What sits there |
+|---|---|
+| 1.0 | identical meaning |
+| **0.771** | Chunk 1, retrieved, answers the question |
+| **0.626** | Chunk 2, retrieved, related but not the answer |
+| **0.485** | Chunk 3, retrieved, not the answer |
+| *threshold band, anywhere between 0.021 and 0.485* | a cutoff placed here rejects the off-topic question and keeps all three chunks |
+| 0.021 | the off-topic question in Step 7 |
+| 0.0 | unrelated |
 
 Read those three scores carefully, because they are the whole lesson:
 
@@ -277,7 +313,7 @@ on-topic best match:  0.771
 
 Versions above are the ones the Section 9 command installs in a clean virtual environment, and the run in Section 5 was verified against them. They are deliberately **not** pinned in the install line, so this lab shares one environment with the rest of the module instead of forcing a downgrade on it.
 
-> **Why LangChain here?** Every other lab in this module builds on LangChain, and the Beginner guidance in the Constitution says to prefer high-level libraries over hand-rolled loops. LangChain also lets the six-stage pipeline be expressed in about 40 lines instead of well over a hundred, which means there is far less code for you to get lost in. Later labs swap one import at a time — the same pipeline with a better chunker is a one-line change.
+> **Why LangChain here?** Every other lab in this module builds on LangChain, so learning it here pays off again and again. LangChain also lets the six-stage pipeline be expressed in about 40 lines instead of well over a hundred, which means there is far less code for you to get lost in. Later labs swap one import at a time — the same pipeline with a better chunker is a one-line change.
 
 ---
 
@@ -302,7 +338,7 @@ Versions above are the ones the Section 9 command installs in a clean virtual en
 
 So `COSINE` is a genuine trap on this version: it names cosine, returns a distance, and inverts the direction. The tell is that its rank 1 score comes back as `0.457` while the true cosine is `0.771` — and `0.457` is exactly `2 × (1 − 0.771)`, the squared distance between two unit vectors. Always confirm **which index was built** (`type(vector_store.index).__name__`) and **which direction is good** before you trust a score.
 
-**Chunking and overlap.** A document is too long to embed whole, so we cut it into pieces. Chunk size is a genuine trade-off: chunks that are too small lose the surrounding context and become ambiguous; chunks that are too large dilute the signal and waste the model's context window. Overlap exists because meaning does not respect a fixed boundary — a sentence split across two chunks still appears intact in at least one of them.
+**Chunking and overlap.** A document is too long to embed whole, so we cut it into pieces. Chunk size is a genuine trade-off: chunks that are too small lose the surrounding context and become ambiguous; chunks that are too large dilute the signal and waste the model's context window (the maximum amount of text an LLM can read in one request). Overlap exists because meaning does not respect a fixed boundary — a sentence split across two chunks still appears intact in at least one of them.
 
 **Vector index and top-k.** A vector index is just a searchable store of vectors, and `k` is how many neighbours to ask for. The behaviour to internalise: **the retriever always returns `k` chunks whether or not any of them are relevant.** On a small corpus you will always get `k` confident-looking results. Relevance is decided by the score and by reading the text — never by the fact that something came back.
 
@@ -321,7 +357,7 @@ So `COSINE` is a genuine trap on this version: it names cosine, returns a distan
 - **Basic Python** — variables, `print()`, lists, `if` statements, and `for` loops. You do not need classes or decorators.
 - **No prior RAG knowledge** — this is the first lab; every concept above is introduced here.
 - **An OpenRouter API key** — used only for Step 5. Get one at [openrouter.ai](https://openrouter.ai); the model used here is free.
-- **Disk and RAM** — ~500 MB for the local embedding model on first run, plus roughly 4 GB RAM. No GPU needed; everything runs on CPU.
+- **Disk and RAM** — the local embedding model itself is a ~90 MB download on first run; the larger download is the PyTorch install that comes with `sentence-transformers`. Plan for roughly 4 GB RAM. No GPU needed; everything runs on CPU.
 - **Run the notebook from inside this folder** — the document path in Step 1 is relative, so Jupyter's working directory must be the lab folder.
 
 ---
@@ -415,7 +451,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from dotenv import load_dotenv
 ```
 
-- The LangChain package names state the job: `document_loaders` reads files, `text_splitters` cuts text, `vectorstores` stores and searches vectors, `prompts` builds prompts.
+- The LangChain package names state the job: `text_splitters` cuts text, `vectorstores` stores and searches vectors, `prompts` builds prompts. LangChain also has a `document_loaders` package for reading files such as PDFs, but this lab does not import it, because `pathlib` is enough for a `.txt`.
 - `pathlib` and `dotenv` ship with Python and its usual companions, so they are not in the `!pip install` list.
 - Nothing here does any work yet. This cell only makes the tools available.
 
@@ -468,7 +504,7 @@ print("Embedding model ready: 384 numbers per chunk")
 
 ---
 
-### Step 1 — Load the Document
+### Step 1 — Load the Document (Stage 1)
 
 This step turns the file into `Document` objects the rest of the pipeline can cut up.
 
@@ -505,7 +541,7 @@ print(f"Loaded {len(pages)} page(s), {total_characters:,} characters.")
 
 ---
 
-### Step 2 — Chunk the Text
+### Step 2 — Chunk the Text (Stage 2)
 
 This step slices the long text into small, overlapping pieces — the units the retriever will actually search.
 
@@ -529,14 +565,14 @@ print("\nFirst chunk:\n" + chunks[0].page_content)
 ```
 
 - **`split_documents` returns `Document` objects, not strings.** That is what lets the page number survive the cut — every chunk still knows where it came from.
-- **Why "recursive"?** It tries to cut at paragraph breaks first, then line breaks, then sentences, and only cuts mid-word as a last resort. That is why the first chunk above ends cleanly at a paragraph edge instead of in the middle of the word "have".
+- **Why "recursive"?** It tries to cut at paragraph breaks first, then line breaks, then sentences, and only cuts mid-word as a last resort. That is why the first chunk above stops at a space between words ("...have") instead of in the middle of a word; because chunks are limited to 400 characters, a sentence can still be cut, which is what the overlap is for.
 - **Why overlap at all?** So an idea that would be cut in half still appears whole in one of the two neighbouring chunks.
-- **Common misunderstanding:** `chunk_size=400` counts **characters**, not words and not LLM tokens. 400 characters is roughly 60–70 English words.
+- **Common misunderstanding:** `chunk_size=400` counts **characters**, not words and not LLM tokens (a **token** is a small piece of text, often a word or part of a word, which is what an LLM counts and bills by). 400 characters is roughly 60–70 English words.
 - `chunks[0].page_content` is the text; the `.page_content` part is how you get at the text inside a `Document`.
 
 ---
 
-### Step 3 — Embed the Chunks and Build the Index
+### Step 3 — Embed the Chunks and Build the Index (Stages 3 and 4)
 
 This is where text becomes searchable numbers. LangChain does the embedding *and* the storing in one call.
 
@@ -564,7 +600,7 @@ print("Index type:", type(vector_store.index).__name__)
 
 ---
 
-### Step 4 — Retrieve the Top-k Chunks
+### Step 4 — Retrieve the Top-k Chunks (Stage 5)
 
 This step embeds your question and asks FAISS which chunks are closest to it.
 
@@ -596,7 +632,7 @@ for rank, (chunk, score) in enumerate(matches, start=1):
 
 ---
 
-### Step 5 — Generate the Answer
+### Step 5 — Generate the Answer (Stage 6)
 
 This step hands the retrieved chunks to the LLM and gets a grounded answer back.
 
@@ -643,9 +679,12 @@ for k in (1, 3, 5):
     trial_matches = vector_store.similarity_search_with_score(QUESTION, k=k)
     context_characters = sum(len(chunk.page_content) for chunk, _ in trial_matches)
     print(f"TOP_K={k}: {k} chunks, {context_characters:,} context chars, best match {trial_matches[0][1]:.3f}")
+```
 
+The second knob goes in its own cell, because it rebuilds the index three times and is the slower of the two:
+
+```python
 # --- Knob 2: CHUNK_SIZE — how finely we cut the document ---
-print()
 print("--- Changing CHUNK_SIZE (how finely we cut the document) ---")
 for size in (300, 400, 800):
     # A different chunk size means different chunks, which means we must

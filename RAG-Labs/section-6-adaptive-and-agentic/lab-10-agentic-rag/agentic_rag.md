@@ -24,7 +24,7 @@ Both parts are built with **LangGraph**, a library for wiring steps into a graph
 | **Part 2** | Pick the tool, swap on failure | A Neo4j graph tool, a `router` node, a `fallback` node (swap first, rewrite second) | Meaning questions go to VECTOR, connection questions go to GRAPH |
 
 This is useful for:
-- **Vague or awkward questions** — the rewrite step gives retrieval a second chance with better wording.
+- **Questions that are worded poorly** — the rewrite step gives retrieval a second chance with different wording. (In this lab's demo the rewrite does not rescue the liquid-nitrogen question, because the paper truly has no answer. Try a vague question yourself in the exercise after Step 12.)
 - **Mixed question types in one pipeline** — "what is X?" and "what is X connected to?" need different tools, and the agent chooses automatically.
 - **Recovering from a wrong tool choice, not just a bad question** — swapping tools first means a good question isn't needlessly rewritten.
 
@@ -101,7 +101,7 @@ flowchart LR
     class StartNode,EndNode terminalStyle
 ```
 
-A **retry counter** in the state goes up by one on every rewrite. When it reaches 2, the agent stops looping and answers with the best chunks it has, so it can never run forever.
+The **state** is the one dictionary of information (question, retrieved chunks, grade, retry count, answer) that every node reads and updates. A **retry counter** in the state goes up by one on every rewrite. When it reaches 2, the agent stops looping and answers with the best chunks it has, so it can never run forever.
 
 ### Part 2 — Router, Two Tools, Fallback
 
@@ -355,7 +355,7 @@ embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 print("LLM and embedding model configured successfully!")
 ```
 
-One LLM connection serves every thinking step in both parts (grade, rewrite, route, answer). `temperature=0.0` keeps the YES/NO grade and the router's choice consistent. This model is a "reasoning" model that normally spends its token budget thinking before it answers, so `extra_body={"reasoning": {"enabled": False}}` switches that off and gets a direct reply. `all-MiniLM-L6-v2` is a small embedding model that runs on your machine.
+One LLM connection serves every thinking step in both parts (grade, rewrite, route, answer). `temperature=0.0` keeps the YES/NO grade and the router's choice consistent. This model is a "reasoning" model that normally spends its token budget (a token is a small piece of text, roughly a word or part of a word, and models limit how many they can produce) thinking before it answers, so `extra_body={"reasoning": {"enabled": False}}` switches that off and gets a direct reply. `all-MiniLM-L6-v2` is a small embedding model that runs on your machine.
 
 ---
 
@@ -531,8 +531,23 @@ The only node that writes the answer. It is reached either on a `YES` grade or w
 
 ### Step 10 — Routing Function and Graph
 
+First, how the pieces relate. `grade` is a node (it does work and changes the state). `decide_after_grading` is only a function: it reads the state and returns a label, and the mapping you pass to `add_conditional_edges` turns each label into a node name.
+
+```mermaid
+flowchart LR
+    G["grade<br/>(node)"] --> D{"decide_after_grading<br/>(function, not a node)"}
+    D -->|"label: generate"| N1["generate<br/>(node)"]
+    D -->|"label: rewrite (Part 1)"| N2["rewrite<br/>(node)"]
+    D -.->|"label: rewrite (Part 2)"| N3["fallback<br/>(node)"]
+
+    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    classDef decisionStyle fill:#fff3cd,stroke:#d68f00,stroke-width:1px,color:#1a1a1a
+    class G,N1,N2,N3 defaultStyle
+    class D decisionStyle
+```
+
 ```python
-def route_after_grading(state: AgentState) -> str:
+def decide_after_grading(state: AgentState) -> str:
     if state["grade"] == "YES" or state["retry_count"] >= 2:
         return "generate"
     return "rewrite"
@@ -546,8 +561,8 @@ builder.add_node("generate", generate_node)
 
 builder.add_edge(START, "retrieve")
 builder.add_edge("retrieve", "grade")
-# keys are the labels route_after_grading returns, values are the nodes they jump to
-builder.add_conditional_edges("grade", route_after_grading, {
+# keys are the labels decide_after_grading returns, values are the nodes they jump to
+builder.add_conditional_edges("grade", decide_after_grading, {
     "generate": "generate",
     "rewrite": "rewrite",
 })
@@ -563,7 +578,7 @@ except Exception:
     print(agent.get_graph().draw_mermaid())
 ```
 
-`route_after_grading` is not a node — it does not change the state. It just returns the name of the next node. `retry_count >= 2` is the retry limit. `add_conditional_edges` connects `grade` to that function with two possible destinations, and `compile()` turns everything into one runnable `agent`. The last lines draw the graph so you can confirm the wiring matches the Part 1 diagram.
+`decide_after_grading` is not a node — it does not change the state. It just returns the name of the next node. `retry_count >= 2` is the retry limit. `add_conditional_edges` connects `grade` to that function with two possible destinations, and `compile()` turns everything into one runnable `agent`. The last lines draw the graph so you can confirm the wiring matches the Part 1 diagram.
 
 ---
 
@@ -595,11 +610,23 @@ The paper says nothing about liquid nitrogen, so the chunks cannot help. The gra
 
 **What you should see:** `Grade: NO` followed by `Rewritten question: ...` (up to twice), then `Retries used: 2` and an answer saying the document does not cover it.
 
+Here is the run from the Output section, one row per grading attempt:
+
+| Attempt | `retry_count` when graded | Grade | What happens next |
+|---------|---------------------------|-------|-------------------|
+| 1 | 0 | NO | `rewrite` (count becomes 1) |
+| 2 | 1 | NO | `rewrite` (count becomes 2) |
+| 3 | 2 | NO | `generate` (retry limit reached) |
+
+**Try it yourself:** the rewrite never recovers this question because the paper has no answer. Ask a vaguely worded question the paper *can* answer, such as `"transformer stuff"`, and watch whether the grade or the rewrite changes. Results vary from run to run, so note what you see rather than expecting a fixed outcome.
+
 ---
 
 ## Part 2 — Add a Graph Tool, a Router and a Fallback
 
 ### Step 13 — Connect to Neo4j
+
+> **Part 2 needs Neo4j.** If you have not created your free Aura instance yet, do it now (see *Getting Neo4j Aura Credentials* above) and add the three `NEO4J_*` values to `.env`. Part 1 works without them. A **driver** is the Python object that holds the connection to the database, and a **session** is one short conversation with it.
 
 ```python
 # Values come from the .env file loaded in Step 1
@@ -618,7 +645,9 @@ print("Connected to Neo4j successfully!")
 
 ### Step 14 — Build the Knowledge Graph
 
-First clear any old data, then ask the LLM to turn the same `document_text` into concepts and relationships:
+> **Warning:** the first command below, `MATCH (n) DETACH DELETE n`, deletes **every** node and relationship in the connected Neo4j database (`DETACH DELETE` removes a node together with all its links). That is fine for a fresh free Aura instance made for this course. Do **not** point these credentials at a database that holds data you want to keep.
+
+First clear any old data, then ask the LLM to turn the same `document_text` into concepts and relationships. The LLM is asked to reply in **JSON** (a plain-text format of nested lists and key-value pairs that Python can read with `json.loads`):
 
 ```python
 with driver.session() as session:
@@ -682,7 +711,7 @@ with driver.session() as session:
 print(f"Neo4j now holds {len(names)} concepts, {n_rels} relationships, and a vector index.")
 ```
 
-**What you should see:** a few dozen concepts and relationships, each concept embedded.
+**What you should see:** roughly a dozen concepts and some relationships, each concept embedded. The exact numbers change from run to run because the LLM does the extracting. In the sample run in the Output section, the LLM *returned* 13 nodes and 17 relationships, but Neo4j *holds* 13 concepts and 9 relationships. The stored count can be lower because `MERGE` collapses duplicate relationships into one, and a relationship whose source or target name is not in the node list is silently skipped by the `MATCH` before the `MERGE`. So compare the two lines, and do not expect them to be equal.
 
 ---
 
@@ -707,7 +736,25 @@ def graph_search(question: str) -> List[str]:
     return paths or ["No relevant information found in Neo4j."]
 ```
 
-This is the second **tool**. The vector index finds the two concepts nearest the question (the "seeds"), then `MATCH (seed)-[r]-(neighbor)` walks one step along each link and returns lines like `Transformer --[BASED_ON]-> attention mechanisms`. Where `vector_search` returns text that sounds like the question, `graph_search` returns how concepts connect. If nothing comes back, a placeholder line is returned so the grade step still has something to judge.
+This is the second **tool**. The vector index finds the two concepts nearest the question (the "seeds"), then `MATCH (seed)-[r]-(neighbor)` walks one step along each link and returns lines like `Transformer --[BASED_ON]-> attention mechanisms`. The pattern has no arrowhead, so it matches links in either direction, and the `->` in the printed line is only a separator: it does **not** tell you which concept the link actually points from. (To see the stored direction, you would match `(a)-[r]->(b)` instead.) Where `vector_search` returns text that sounds like the question, `graph_search` returns how concepts connect. If nothing comes back, a placeholder line is returned so the grade step still has something to judge.
+
+The traversal looks like this (the concept names are illustrative, yours depend on the extraction):
+
+```mermaid
+flowchart LR
+    Q["Question<br/>as a vector"] --> IDX["Vector index<br/>concept_embeddings"]
+    IDX -->|"nearest"| S1["Seed concept 1"]
+    IDX -->|"2nd nearest"| S2["Seed concept 2"]
+    S1 -->|"link type A"| N1["Neighbor"]
+    S1 -->|"link type B"| N2["Neighbor"]
+    S2 -->|"link type C"| N3["Neighbor"]
+    N1 --> OUT["Result lines<br/>seed --[TYPE]-> neighbor<br/>(at most 5)"]
+    N2 --> OUT
+    N3 --> OUT
+
+    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    class Q,IDX,S1,S2,N1,N2,N3,OUT defaultStyle
+```
 
 ---
 
@@ -764,6 +811,14 @@ def fallback_node(state: RoutedState) -> RoutedState:
     return state
 ```
 
+To see the fallback in action, here is the third question from the Part 2 run in the Output section (the liquid-nitrogen question), one row per grading attempt:
+
+| Attempt | Tool | `retry_count` when graded | Grade | Action |
+|---------|------|---------------------------|-------|--------|
+| 1 | VECTOR | 0 | NO | `fallback` swaps the tool to GRAPH (count becomes 1) |
+| 2 | GRAPH | 1 | NO | `fallback` rewrites the question (count becomes 2) |
+| 3 | GRAPH | 2 | NO | `generate` (retry limit reached) |
+
 `routed_retrieve_node` simply calls whichever tool the router chose. `fallback_node` is the two-stage recovery: swap first, rewrite second. It reuses `rewrite_node` from Part 1 instead of writing the rewrite prompt again, and both branches add one to `retry_count`, so the same limit of 2 still applies.
 
 ---
@@ -782,7 +837,7 @@ builder.add_edge(START, "router")
 builder.add_edge("router", "retrieve")
 builder.add_edge("retrieve", "grade")
 # same grading function as Part 1, but its "rewrite" label now targets the fallback node
-builder.add_conditional_edges("grade", route_after_grading, {
+builder.add_conditional_edges("grade", decide_after_grading, {
     "generate": "generate",
     "rewrite": "fallback",
 })
@@ -798,7 +853,7 @@ except Exception:
     print(routed_agent.get_graph().draw_mermaid())
 ```
 
-The grading rule is the same `route_after_grading` from Part 1. Its `"rewrite"` answer is simply pointed at the `fallback` node here, so the same decision function drives both agents. `fallback` loops back into `retrieve`, which is what makes a failed grade a retry. Compare the drawn graph with the Part 2 diagram.
+The grading rule is the same `decide_after_grading` from Part 1. Its `"rewrite"` answer is simply pointed at the `fallback` node here, so the same decision function drives both agents. `fallback` loops back into `retrieve`, which is what makes a failed grade a retry. Compare the drawn graph with the Part 2 diagram.
 
 ---
 

@@ -6,15 +6,33 @@
 
 You have a company's earnings report as a PDF and a few questions. "How much cash did the company have at the end of the quarter?" lives in one paragraph. "Did profit go up or down, and does the adjusted number tell a different story?" needs numbers from two different places. "What was total revenue?" lives inside a table, and if that table gets chopped in half, the number loses its column header and the answer turns into a guess.
 
-Normal RAG handles this by cutting the document into small chunks, turning each chunk into a vector (a list of numbers that captures meaning), and searching those vectors for the closest match. That works, but it needs an embedding model and a vector database, and chunking is exactly what slices tables apart.
+A few finance words appear in this lab. **GAAP** (generally accepted accounting principles) is the official standard way of calculating profit. An **adjusted** number is the same profit recalculated by the company after leaving out certain one-off items. **EBITDA** (earnings before interest, taxes, depreciation and amortization) is a rough measure of operating profit.
+
+Normal RAG handles this by cutting the document into small chunks, turning each chunk into a vector (a list of numbers that captures meaning, produced by an embedding model), and searching those vectors for the closest match. That works, but it needs an embedding model and a vector database, and chunking is exactly what slices tables apart.
+
+#### Why chunking hurts tables
+
+Chunking means cutting the text every N words. A table cut in the middle leaves the lower rows without their column headers. A tree node keeps the table as one piece.
+
+```mermaid
+flowchart LR
+    T["One table:<br/>header + rows + footnotes"]
+    T --> C1["Chunking: chunk A<br/>header + first rows"]
+    T --> C2["Chunking: chunk B<br/>remaining rows, no header"]
+    C2 --> B["Search returns chunk B:<br/>numbers with no column names"]
+    T --> W["Tree node: the whole table<br/>kept as one unit"]
+    W --> G["Search returns the whole table:<br/>every number keeps its header"]
+    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    class T,C1,C2,B,W,G defaultStyle
+```
 
 ### How This Lab Solves It
 
-**Vectorless RAG** skips all of that. A tool called **PageIndex** reads the PDF once and builds a **tree** of it: sections, sub-sections and whole tables, each with a short summary. Then retrieval is done by *reading and reasoning* instead of by vector search. This lab builds that idea in three parts, on one document and one running set of questions:
+**Vectorless RAG** skips all of that. A tool called **PageIndex** reads the PDF once and builds a **tree** of it: sections, sub-sections and whole tables, each with a short summary. Then retrieval is done by *reading and reasoning* instead of by vector search. An **LLM** (large language model) is the AI that reads and writes text, the same kind of model behind ChatGPT and Claude. This lab builds that idea in three parts, on one document and one running set of questions:
 
 1. **Reasoning retrieval** — an LLM reads the tree's titles and summaries and picks the right section, like a person scanning a table of contents.
 2. **Multi-hop retrieval** — for a question that needs facts from several places, collect text from several sections ("hops") and record where each piece came from.
-3. **Table retrieval** — tables come back whole, every number in the answer carries a `[Table n]` tag, and the lab checks which tables were actually used.
+3. **Table retrieval** — tables are kept whole, every number in the answer carries a `[Table n]` tag, and the lab checks which tables were actually used.
 
 This is useful for:
 - **Earnings reports and financial filings**, where numbers sit in tables and must be traceable.
@@ -39,7 +57,7 @@ This is useful for:
 | **The PDF** | Century Communities' Q1 2025 earnings release (public SEC Form 8-K, Exhibit 99.1), bundled in `data/CCS-Q1-2025-Earnings-Release.pdf` — 11 pages, nothing to download. The same file is used in all three parts. |
 | **Your questions** | One per part: a single-section question, a two-section question, and a table lookup. |
 | **PageIndex API key** | Used to read the PDF into a tree and to search it. Sign up at [pageindex.ai](https://pageindex.ai). |
-| **OpenRouter API key** | Used to call the LLM (a free-tier model, so a full run costs nothing). |
+| **OpenRouter API key** | Used to call the LLM (a free-tier model, so a full run costs nothing). This is a separate key from the PageIndex one. |
 
 ---
 
@@ -76,10 +94,10 @@ PageIndex looks for a table of contents (or, if there is none, has an LLM infer 
 ```mermaid
 graph TD
     R["0000 Earnings release<br/>pages 1-11"]
-    R --> H["0001 Q1 Highlights"]
-    R --> Q["0002 Q1 Results"]
+    R --> H["0001 First Quarter 2025 Highlights"]
+    R --> Q["0002 First Quarter 2025 Results"]
     R --> L["0003 Balance Sheet and Liquidity"]
-    R --> N["0007 Non-GAAP Measures"]
+    R --> N["0007 Non-GAAP Financial Measures"]
     R --> F["0008 Forward-Looking Statements<br/>pages 3-11"]
     F --> T1["0010 Net New Home Contracts (table)"]
     F --> T2["0015 Adjusted Net Income (table)"]
@@ -96,7 +114,7 @@ graph TD
     style T3 fill:#fce4ec,stroke:#c62828,color:#b71c1c
 ```
 
-Notice that the financial tables are their own nodes where PageIndex splits them out — they are not cut apart.
+Notice that the financial tables are their own nodes where PageIndex splits them out — they are not cut apart. The node names here match the names in the Setup step below.
 
 ---
 
@@ -128,9 +146,9 @@ followed by a short report saying which tables were retrieved, which page each c
 
 **Reasoning retrieval (Part 1).** The LLM is shown only titles and short summaries, never the full text. It answers "which sections probably contain the answer?" with a list of `node_id`s and a short reason. We then read the real text of those pages and let the LLM answer from it. Because the reason is written in words, you can check it — a similarity score can't be read that way.
 
-**Multi-hop retrieval (Part 2).** A **hop** is one section visited on the way to an answer. Some questions need more than one hop: GAAP net income sits in one place and adjusted net income in another. We collect text from several sections, then answer. To keep it honest, every hop remembers its title, `node_id` and page numbers, so the answer comes with a trail.
+**Multi-hop retrieval (Part 2).** A **hop** is one section collected on the way to an answer. Some questions need more than one hop: GAAP net income sits in one place and adjusted net income in another. We collect text from several sections, then answer. To keep it honest, every hop remembers its title, `node_id` and page numbers, so the answer comes with a trail.
 
-**Table retrieval (Part 3).** Fixed-size chunking can cut a table so that numbers lose their column headers. PageIndex keeps each table whole. We label each retrieved table `[Table 1]`, `[Table 2]`, and tell the LLM to tag every number with its table. A table counts as "used" only if its tag appears in the answer — an exact check, not a guess.
+**Table retrieval (Part 3).** Fixed-size chunking can cut a table so that numbers lose their column headers. PageIndex keeps each table as one node, so a table node that is retrieved arrives whole (the search can also return non-table nodes, such as a results section). We label each retrieved table `[Table 1]`, `[Table 2]`, and tell the LLM to tag every number with its table. A table counts as "used" only if its tag appears in the answer — an exact check, not a guess.
 
 > **Honesty note:** the "why this section mattered" text is written by the LLM from the retrieved content. PageIndex does not expose its internal scores, so this is a grounded explanation, not an official relevance score.
 
@@ -166,9 +184,9 @@ import json
 import os
 import re
 import time
+from dotenv import load_dotenv
 
 import pymupdf
-from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
 from pageindex import PageIndexClient, utils
@@ -184,6 +202,8 @@ PAGEINDEX_API_KEY=<your PageIndex API key>
 ```
 
 Each cell below first loads that file, then reads the key from it, and only asks you to paste it if it isn't there.
+
+The notebook needs **two different keys**: the **OpenRouter** key pays for the LLM calls (the free model costs nothing), and the **PageIndex** key lets PageIndex build and search the tree. They are not interchangeable, and the prompts name which one they want.
 
 ```python
 # Load the secrets from the .env file next to this notebook
@@ -206,7 +226,7 @@ print("Keys loaded.")
 
 ## Set Up the LLM
 
-`call_llm(prompt)` sends one prompt and returns the reply text. It is used in every part. `temperature=0` keeps answers repeatable. The model is a *reasoning* model, so `extra_body={"reasoning": {"enabled": False}}` turns its hidden thinking off; without it, it can spend the whole `max_tokens` budget thinking and return an empty answer.
+`call_llm(prompt)` sends one prompt and returns the reply text. It is used in every part. `temperature=0` keeps answers repeatable. A **token** is a small piece of text (roughly three-quarters of an English word) and `max_tokens` caps how long the reply can be. The **context window** is the most text, counted in tokens, that the LLM can read in one prompt, so we never send it a whole PDF blindly. The model is a *reasoning* model, so `extra_body={"reasoning": {"enabled": False}}` turns its hidden thinking off; without it, it can spend the whole `max_tokens` budget thinking and return an empty answer.
 
 ```python
 llm = ChatOpenAI(
@@ -252,13 +272,13 @@ tree = pi_client.get_tree(doc_id, node_summary=True)["result"]
 utils.print_tree(tree)
 ```
 
-**What you should see:** a tree with one root (`0000`, pages 1-11) and children such as `First Quarter 2025 Highlights`, `Balance Sheet and Liquidity`, `Non-GAAP Financial Measures` and `Forward-Looking Statements`, which in many runs has sub-nodes for the report's tables (`Net New Home Contracts`, `Home Deliveries`, `Adjusted Net Income ...`, `EBITDA and Adjusted EBITDA`, and so on). Each node has a summary. The exact tree can vary slightly between runs.
+**What you should see:** a tree with one root (`0000`, pages 1-11) and children such as `First Quarter 2025 Highlights`, `First Quarter 2025 Results`, `Balance Sheet and Liquidity`, `Non-GAAP Financial Measures` and `Forward-Looking Statements`, which in many runs has sub-nodes for the report's tables (`Net New Home Contracts`, `Home Deliveries`, `Adjusted Net Income ...`, `EBITDA and Adjusted EBITDA`, and so on). Each node has a summary. The exact tree can vary slightly between runs.
 
 ---
 
 ### Part 1 — Reasoning Retrieval: Let the LLM Pick the Section
 
-**The idea:** give the LLM the tree (titles and summaries only) and ask which sections hold the answer. Then read the text of those pages and answer from it. No vectors anywhere.
+You control all of Part 1 (see "Who does what" at the start of Part 2). **The idea:** give the LLM the tree (titles and summaries only) and ask which sections hold the answer. Then read the text of those pages and answer from it. No vectors anywhere.
 
 ```mermaid
 flowchart LR
@@ -269,7 +289,7 @@ flowchart LR
     X --> A["LLM answers from<br/>that text only"]
 ```
 
-First, the search step. The prompt demands JSON, and `parse_json` has a fallback for when the LLM wraps the JSON in extra words:
+First, the search step. The prompt demands **JSON** (a plain-text format of `{ "key": value }` pairs that code can read), and `parse_json` has a fallback for when the LLM wraps the JSON in extra words:
 
 ```python
 def parse_json(reply):
@@ -296,7 +316,7 @@ Respond with ONLY this JSON:
     return parse_json(call_llm(prompt))
 ```
 
-Next, turn the chosen `node_id`s into page text. `node_map` looks up each node's page range; `page_texts` holds the raw text of every page. We read at most 3 pages per node so one huge node cannot flood the prompt.
+Next, turn the chosen `node_id`s into page text. `node_map` looks up each node's page range; `page_texts` holds the raw text of every page. We read at most 3 pages per node so one huge node cannot flood the prompt (the LLM can only read so much, its context window).
 
 ```python
 node_map = utils.create_node_mapping(tree, include_page_ranges=True)
@@ -317,6 +337,8 @@ def build_context(node_ids, max_pages=3):
     context = "\n\n".join(f"--- Page {p} ---\n{page_texts[p]}" for p in pages)
     return context, pages
 ```
+
+**Watch the cap.** `build_context` reads only the first 3 pages of each node's range. For a wide node such as `Forward-Looking Statements` (pages 3-11 in the tree above), only pages 3-5 reach the LLM; any table on a later page is dropped with no warning. Picking a narrow child node avoids this, and it is one reason Parts 2 and 3 use PageIndex's search, which returns the matching passage itself.
 
 Finally, the whole of Part 1 in one function, then run it:
 
@@ -351,7 +373,27 @@ print("Answer:", answer_1)
 
 ### Part 2 — Multi-Hop Retrieval: Collect From Several Sections
 
-**The idea:** some questions need facts from more than one place. Instead of stopping at one section, we ask PageIndex's search for the top several matching sections and visit them one after another (each is a **hop**). For every hop we keep its title, `node_id`, pages and text, so we can show a trail afterward.
+#### Who does what
+
+In **Part 1** you control everything: the tree you read, the prompt, the JSON parsing and which pages are read. In **Parts 2 and 3** PageIndex runs the search for you on its servers, and your code only sends the question and handles what comes back.
+
+```mermaid
+flowchart LR
+    subgraph P1["Part 1: your code + the tree"]
+        A1["Your prompt with the tree"] --> A2["LLM picks node_ids"]
+        A2 --> A3["Your code reads those pages<br/>with PyMuPDF"]
+    end
+    subgraph P23["Parts 2 and 3: PageIndex search"]
+        B1["Your code sends the question<br/>(submit_query)"] --> B2["PageIndex searches the tree<br/>and returns matching nodes"]
+        B2 --> B3["Your code parses the nodes<br/>(retrieve)"]
+    end
+    A3 --> Z["LLM answers from the text"]
+    B3 --> Z
+    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    class A1,A2,A3,B1,B2,B3,Z defaultStyle
+```
+
+**The idea:** some questions need facts from more than one place. Instead of stopping at one section, we ask PageIndex's search for the top several matching sections in one go (each is a **hop**). For every hop we keep its title, `node_id`, pages and text, so we can show a trail afterward.
 
 ```mermaid
 flowchart LR
@@ -367,6 +409,30 @@ flowchart LR
     H2 --> E
     H3 --> E
 ```
+
+#### What the search sends back
+
+PageIndex replies with a **JSON** object (JSON is a plain-text format of nested `{ "key": value }` pairs and `[ ]` lists). `retrieve` reads only the parts shown below. This is the shape of the reply, not a real run, so the values are descriptions.
+
+```mermaid
+flowchart TD
+    R["get_retrieval result"] --> S["status: 'completed' or 'failed'"]
+    R --> N["retrieved_nodes: a list, one entry per section"]
+    N --> T["title and id: the section name and node_id"]
+    N --> RC["relevant_contents: groups of passages"]
+    RC --> P["relevant_content: the passage text"]
+    RC --> PI["physical_index: a string with the page number,<br/>for example physical_index_6<br/>wrapped in angle brackets"]
+    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    class R,S,N,T,RC,P,PI defaultStyle
+```
+
+| Key in the reply | What `retrieve` does with it |
+|---|---|
+| `status` | Waits until it is `completed`; stops on `failed` |
+| `retrieved_nodes` | Loops over the first `top_k` entries |
+| `title`, `id` | Become `section` and `node_id` |
+| `relevant_contents` -> `relevant_content` | Joined into `text` |
+| `relevant_contents` -> `physical_index` | The regex pulls the page number into `pages` |
 
 `retrieve` submits the question, waits for the search to finish (retrying on temporary hiccups such as rate limits), and turns each returned node into a small record. PageIndex puts the page inside a string like `"<physical_index_6>"`, so a tiny regex pulls out the number. Parts 2 and 3 both use this function.
 
@@ -463,11 +529,11 @@ explain(QUERY_2, hops, is_used=lambda h: h["section"] in answer_2, kind="Hop")
 
 ### Part 3 — Table Retrieval: Whole Tables With `[Table n]` Citations
 
-**The idea:** a table lookup needs the table intact — headers, rows and footnotes together. PageIndex keeps tables as whole nodes, so `retrieve` already hands them back whole. What is new here is **proof**: we label each table `[Table 1]`, `[Table 2]` in the context and instruct the LLM to tag every number with its table. Then "was this table used?" is an exact check — is the tag in the answer?
+**The idea:** a table lookup needs the table intact — headers, rows and footnotes together. PageIndex keeps tables as whole nodes, so when a table node is retrieved it arrives whole. The search is not limited to tables, though: `top_k=2` can also return another node, such as a results section. What is new here is **proof**: we label each table `[Table 1]`, `[Table 2]` in the context and instruct the LLM to tag every number with its table. Then "was this table used?" is an exact check — is the tag in the answer?
 
 ```mermaid
 flowchart LR
-    Q["Question"] --> R["retrieve(top_k=2)<br/>whole tables"]
+    Q["Question"] --> R["retrieve(top_k=2)<br/>top 2 nodes (tables kept whole)"]
     R --> L["Label: [Table 1 - title],<br/>[Table 2 - title]"]
     L --> A["LLM answers and tags<br/>every number [Table n]"]
     A --> C{"Is [Table n]<br/>in the answer?"}
@@ -532,7 +598,7 @@ You built three kinds of retrieval on one PDF without a vector database, an embe
 **Key takeaways:**
 - **PageIndex builds a tree** of sections and whole tables with summaries; it is indexed once and reused.
 - **Reasoning retrieval** — an LLM reads titles and summaries, picks `node_id`s, and gives a readable reason.
-- **Multi-hop** — questions that need several sections are answered by visiting several nodes and keeping a trail (title, `node_id`, pages).
-- **Whole tables** — nothing is cut by word count, so numbers stay with their headers.
+- **Multi-hop** — questions that need several sections are answered by collecting from several nodes and keeping a trail (title, `node_id`, pages).
+- **Whole tables** — nothing is cut by word count, so a retrieved table node keeps its numbers with their headers.
 - **`[Table n]` citations** make "which table was used" an exact check instead of a guess.
 - **Explanations are grounded, not official** — the "why" is written by the LLM from the retrieved text.

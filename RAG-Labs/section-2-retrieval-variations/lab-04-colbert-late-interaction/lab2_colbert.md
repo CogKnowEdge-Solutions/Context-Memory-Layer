@@ -4,11 +4,11 @@
 
 # Problem Statement / Use Case Overview
 
-In standard RAG, every text chunk is squeezed into a single dense vector. That works fine for small, focused chunks, but it fails when a chunk covers many topics. A long chunk gets compressed into one averaged number, so the meaning of individual words gets blurred together. If your question matches only one small detail inside that chunk, the search may not find it, because the detail is lost inside the averaged vector.
+In standard RAG, every text chunk is squeezed into a single dense vector. (A **vector**, also called an **embedding**, is a list of numbers that captures the meaning of a piece of text, so texts with similar meaning get similar numbers.) That works fine for small, focused chunks, but it fails when a chunk covers many topics. A long chunk gets compressed into one averaged number, so the meaning of individual words gets blurred together. If your question matches only one small detail inside that chunk, the search may not find it, because the detail is lost inside the averaged vector.
 
 ### How This Lab Solves It
 
-ColBERT takes a completely different approach. Instead of keeping **one vector per chunk**, it keeps **one vector per TOKEN**. This means every single word in the chunk gets its own separate vector, so the fine-grained meaning of every word is preserved. Nothing gets averaged out.
+ColBERT takes a completely different approach. Instead of keeping **one vector per chunk**, it keeps **one vector per TOKEN**. A **token** is the small piece of text a model reads at a time: usually a whole word, but a rare word may be split into word pieces (for example, "tokenization" can become "token" + "ization"). This means every single word in the chunk gets its own separate vector, so the fine-grained meaning of every word is preserved. Nothing gets averaged out.
 
 But keeping a vector per token creates a new problem: how do you compare two sets of vectors? This is solved with **MaxSim** — short for **Max**imum **Sim**ilarity — the "late interaction" method ColBERT uses. MaxSim is just one three-step rule:
 
@@ -21,7 +21,7 @@ A chunk scores well when a few of its tokens match the query's tokens very preci
 **This pipeline has four connected parts:**
 
 1. **Embedding** — embed every token of every chunk with ColBERT, producing a matrix per chunk instead of a single vector.
-2. **Indexing** — store these token matrices in a Qdrant **multivector** collection, which Qdrant compares with MaxSim instead of plain cosine similarity.
+2. **Indexing** — store these token matrices in a Qdrant **multivector** collection, which Qdrant compares with MaxSim instead of plain cosine similarity. (**Cosine similarity** measures how closely two vectors point in the same direction, from -1 to 1; for vectors scaled to length 1 it equals the **inner product**, also called the dot product: multiply the matching numbers and add them up.)
 3. **Retrieving** — embed the query as a token matrix and run a MaxSim (late interaction) search to find the closest chunks.
 4. **Answering** — label the retrieved chunks as sources, hand them to an LLM, and generate a final answer with a full reasoning trace.
 
@@ -60,7 +60,7 @@ flowchart LR
     class PDF,DL,CH,CE,M,QD ingestStyle
 ```
 
-The big difference from Lab 3 is what gets stored. In Lab 3, each chunk became one vector. Here, each chunk becomes a whole **matrix** of vectors — one 128-dimensional vector for every token in the chunk. A chunk with 93 tokens produces a `(93, 128)` matrix. The whole collection is created with the `MAX_SIM` comparator, which tells Qdrant to score matches the ColBERT way instead of the normal cosine way.
+The big difference from Lab 3 is what gets stored. In Lab 3, each chunk became one vector. Here, each chunk becomes a whole **matrix** of vectors — one 128-dimensional vector (a list of 128 numbers; ColBERTv2 uses 128 per token) for every token in the chunk. A chunk with 93 tokens produces a `(93, 128)` matrix. The whole collection is created with the `MAX_SIM` comparator, which tells Qdrant to score matches the ColBERT way instead of the normal cosine way.
 
 ### Part B — How a Question Finds Its Answer
 
@@ -141,6 +141,8 @@ flowchart TB
 
 Step 2 reads the grid row by row: for q1 the best cell is 0.8 (vs *models*); for q2 the best cell is 0.9 (vs *masked*). Every other cell is discarded. Step 3 adds the two winners: **0.8 + 0.9 = 1.7**, and that single number is the chunk's MaxSim score.
 
+Note that a MaxSim score is a sum, so it is **not limited to 1**. Each query token adds up to about 1 (the maximum cosine similarity), so a query with many tokens can score well above 1. Only compare scores for the same query.
+
 **Why this beats one averaged vector:** with a single vector per chunk, a score like 1.7 could never be computed — all those words would already be blurred into one number. With MaxSim, the chunk scores high because *pre-training* matched *models* strongly and *task* matched *masked* strongly, even though every other word in the chunk is irrelevant to the question. That is exactly why ColBERT can find a chunk that shares only a couple of precise words with the question.
 
 ### Walking Through a Sample Retrieval
@@ -173,7 +175,7 @@ flowchart TB
     class Ctx,LLM,Ans outStyle
 ```
 
-`top_k=3` means three chunk matrices come back. The top match contains the exact phrase "masked language models", which is the precise answer. The second and third matches are related but do not name the specific pre-training task. Only Source 1 really answers the question, and the LLM's explainability trace says exactly that — showing how token-level search can surface one very specific chunk out of 144.
+`top_k=3` means three chunk matrices come back (`top_k` is simply "how many best results to return"). The top match contains the exact phrase "masked language models", which is the precise answer. The second and third matches are related but do not name the specific pre-training task. Only Source 1 really answers the question, and the LLM's explainability trace says exactly that — showing how token-level search can surface one very specific chunk out of 144.
 
 ---
 
@@ -332,7 +334,6 @@ The cell below installs all required Python packages:
 ### Step 1 — Imports
 
 ```python
-import hashlib
 import os
 import uuid
 
@@ -353,7 +354,6 @@ from qdrant_client import QdrantClient, models
 | `os` | Reads the secrets loaded from `.env` via `os.getenv(...)` |
 | `load_dotenv` | Loads the `.env` file sitting next to the notebook into the environment |
 | `uuid` | Generates deterministic chunk IDs with `uuid5` |
-| `hashlib` | Hashing helpers for stable IDs |
 | `requests` | Downloads the PDF |
 | `PdfReader` | Extracts raw text from the PDF |
 | `QdrantClient` | Connects to the Qdrant vector store |
@@ -395,6 +395,7 @@ colbert = LateInteractionTextEmbedding("colbert-ir/colbertv2.0")
 ### Step 3 — Initialize Qdrant with Multivector Support or Use Existing Collection if Already Made
 
 ```python
+# CELL A (first run): connect AND create the collection
 client = QdrantClient(
     url=os.getenv("QDRANT_URL"), 
     api_key=os.getenv("QDRANT_API_KEY"),
@@ -418,6 +419,7 @@ client.recreate_collection(
 ```
 
 ```python
+# CELL B (rerun): connect only, no wipe
 # ALREADY RAN THIS NOTEBOOK? Uncomment this cell if you have already
 # made the DB (collection) / uploaded data, then run it instead of Cell A
 # (Cell A wipes and recreates the collection, so only use it the first time).
@@ -432,7 +434,9 @@ client.recreate_collection(
 
 This is where the special multivector collection is born. `QdrantClient(...)` connects to your Qdrant Cloud cluster using `os.getenv("QDRANT_URL")` and `os.getenv("QDRANT_API_KEY")`, both read from the `.env` file loaded in Step 2. Then `recreate_collection` builds a collection called `colbert_late_interaction`. The key part is `multivector_config`: because ColBERT produces one vector per token, Qdrant must allow each point to hold a whole matrix. `size=128` matches ColBERT's vector size, `COSINE` is the per-token similarity measure, and `comparator=MAX_SIM` tells Qdrant to score whole chunks using MaxSim. `recreate_collection` wipes any old data with the same name and builds it fresh, so it is only meant for the first run.
 
-The second cell is for when the collection **already exists in the cloud** — for example, from a previous run. It connects to the same cluster and collection name, but never wipes or recreates anything, so your data is preserved. This cell is **commented out by default**; only use it if you already ran the notebook before, in which case you comment out the cell above and uncomment this one.
+**Rule:** the first cell is **Cell A** and the second is **Cell B**. On your first run, run Cell A only (leave Cell B commented out). On every rerun, comment out Cell A, uncomment Cell B, and run Cell B only. Never run both, because Cell A deletes everything already stored.
+
+Cell B is for when the collection **already exists in the cloud** — for example, from a previous run. It connects to the same cluster and collection name, but never wipes or recreates anything, so your data is preserved. This cell is **commented out by default**; only use it if you already ran the notebook before, in which case you comment out the cell above and uncomment this one.
 
 ---
 
@@ -459,7 +463,7 @@ raw_text = "\n".join([page.extract_text() for page in reader.pages if page.extra
 print(f"Extracted {len(raw_text)} characters.")
 ```
 
-This step downloads the BERT paper ("Attention Is All You Need"'s famous successor) from arXiv and saves it locally as `bert_paper.pdf`. Then every page is read and its text extracted, with pages joined by newlines into one big string called `raw_text`. `raise_for_status()` stops the code with an error if the download fails, instead of silently continuing.
+This step downloads the BERT paper from arXiv (BERT builds on the Transformer architecture introduced in "Attention Is All You Need") and saves it locally as `bert_paper.pdf`. Then every page is read and its text extracted, with pages joined by newlines into one big string called `raw_text`. `raise_for_status()` stops the code with an error if the download fails, instead of silently continuing.
 
 ---
 
@@ -473,7 +477,7 @@ chunks = chunk_splitter.split_text(raw_text)
 print(f"Created {len(chunks)} chunks.")
 ```
 
-Chunks here are much smaller than in Lab 3 (500 characters instead of 10,000). Why? Because ColBERT embeds every single token. A big chunk would produce a huge matrix, which is slow to embed and slow to store. Smaller chunks keep each matrix small while still holding enough context. By the end of this step, `chunks` holds a list of 500-character text pieces.
+Chunks here are much smaller than in Lab 3 (500 characters instead of 10,000). Why? Because ColBERT embeds every single token. A big chunk would produce a huge matrix, which is slow to embed and slow to store. Smaller chunks keep each matrix small while still holding enough context. The 500-character size is a practical choice for this lab, not a ColBERT rule. By the end of this step, `chunks` holds a list of 500-character text pieces.
 
 ---
 
@@ -505,6 +509,26 @@ print(f"First chunk embedding shape: {chunk_embeddings[0].shape}")
 ```
 
 This is the heart of ColBERT. `colbert.embed(chunks)` processes every chunk and, for each one, produces a matrix where every row is the 128-dimensional vector of one token. The printed shape `(93, 128)` confirms the first chunk had 93 tokens — a whole matrix, not a single vector. This is the sanity check that tells you the pipeline is working the way ColBERT is supposed to.
+
+The shape of each matrix in one picture (the tokens shown are illustrative, since real tokenizers may split words differently):
+
+```mermaid
+flowchart LR
+    S["Chunk text<br/>BERT uses masked language models"] --> T["Split into tokens<br/>BERT | uses | masked | language | models"]
+    T --> R1["Row 1: 128 numbers for BERT"]
+    T --> R2["Row 2: 128 numbers for uses"]
+    T --> R3["Row 3: 128 numbers for masked"]
+    T --> R4["Row 4: 128 numbers for language"]
+    T --> R5["Row 5: 128 numbers for models"]
+    R1 --> MX["Token matrix<br/>shape (num_tokens, 128)<br/>here (5, 128)"]
+    R2 --> MX
+    R3 --> MX
+    R4 --> MX
+    R5 --> MX
+
+    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    class S,T,R1,R2,R3,R4,R5,MX defaultStyle
+```
 
 ---
 
@@ -546,6 +570,11 @@ def retrieve(query, top_k=3):
     ).points
     return hits
 ```
+
+A few details in this function:
+- **`query_embed` vs `embed`:** both turn text into token matrices with the same ColBERT model. `embed` is for documents (the chunks) and `query_embed` is for questions, because ColBERT prepares queries slightly differently from documents. Always use `query_embed` for the question and `embed` for the chunks.
+- **Why `list(...)[0]`:** `query_embed` returns a generator (a lazy stream of results) that yields one matrix per input text. `list(...)` pulls the results out, and `[0]` takes the first one, since we passed a single question.
+- **Why `.tolist()`:** the matrix is a NumPy array, but the Qdrant client expects plain Python lists of numbers, so `.tolist()` converts it. The same is done for the chunks in Step 8.
 
 This function does retrieval the ColBERT way. The question is embedded with `colbert.query_embed`, which produces a token matrix just like the documents. That matrix is passed to `query_points`, and because the collection was created with `comparator=MAX_SIM`, Qdrant automatically scores the stored matrices with MaxSim. The `limit=top_k` (default 3) controls how many results come back.
 

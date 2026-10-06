@@ -22,6 +22,19 @@ This is useful for:
 
 ---
 
+### Key Terms Used in This Lab
+
+| Term | Meaning |
+|---|---|
+| **LLM** | Large Language Model: an AI that reads and writes natural language. |
+| **JSON** | A plain-text format for structured data (lists and `"key": value` pairs) that Python can turn into lists and dictionaries with `json.loads`. |
+| **Frontmatter** | The few `key: value` metadata lines at the top of a file, kept apart from the body text. |
+| **OKF** | The name this lab uses for its file layout: metadata lines, a `---` line, then the explanation. |
+| **Token** | A small piece of text (roughly a word or part of a word) that the LLM counts its input and output in. |
+| **Context window** | The maximum number of tokens the LLM can read in one request (your prompt plus its reply). |
+
+---
+
 # Input Data
 
 | Item | Detail |
@@ -84,6 +97,40 @@ graph TD
 
 These two parts are kept separate on purpose. The top part is meant to be scanned quickly to decide if a file is worth opening. The bottom part is meant to be read in full, but only once the top part has already confirmed it's relevant.
 
+#### What a Real File Looks Like
+
+This is a real file from a run of the lab, `output_wiki/earth_mass_1024_kg.md`. The first four lines are the frontmatter. The file has no opening `---`; the single `---` line is what separates the metadata from the body:
+
+```
+type: concept
+title: Earth Mass in 10^24 kg
+tags: ['Earth', 'mass', 'astronomy']
+description: Mass of the Earth in units of 10^24 kg
+---
+# Earth Mass in 10^24 kg
+
+5.9736
+```
+
+And this is the matching line in `index.md`, which holds only the filename and the description:
+
+```
+- **earth_mass_1024_kg.md**: Mass of the Earth in units of 10^24 kg
+```
+
+#### One Sentence, One File, One Index Line
+
+```mermaid
+flowchart LR
+    A["One fact in the PDF<br/>e.g. Earth mass"] --> B["One concept entry<br/>from the LLM"]
+    B --> C["One file<br/>earth_mass_1024_kg.md"]
+    B --> D["One index line<br/>filename + description"]
+    D --> E["index.md"]
+
+    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    class A,B,C,D,E defaultStyle
+```
+
 ### How the Files and the Index Relate
 
 ```mermaid
@@ -105,47 +152,50 @@ The index doesn't hold any facts itself — just one short line per file, its fi
 
 # Output
 
-**Building the knowledge base** prints one line per fact it saved:
+> **Note:** The notebook in this folder is saved without outputs, so the exact printed lines of your run are not reproduced here. The shapes below are what the code prints; your filenames and counts will vary from run to run because the LLM chooses them.
+
+**Building the knowledge base** prints how many concepts the LLM found, then one `Created:` line per file it wrote:
 
 ```
-Created: fact_one.md
-Created: fact_two.md
-Created: fact_three.md
+Sending document to the LLM for extraction...
+Success! AI identified <number> distinct concepts.
+Output directory ready at: output_wiki
+Created: <filename>.md
+Created: <filename>.md
 ...
-Created: fact_n.md
 ```
 
-Alongside this, an `output_wiki/` folder is created, with one file per fact and one `index.md` listing all of them.
+Alongside this, an `output_wiki/` folder is created, with one file per fact and one `index.md` with one line per file. A saved run in this folder produced 78 concept files plus `index.md`.
 
-**Querying the knowledge base** prints the question, which files were picked, and a full explanation of how the answer was reached:
+**Querying the knowledge base** prints the question, which files were picked, and the reasoning, sources and answer:
 
 ```
 Question: '<your question>'
-
 Phase 1: Asking the LLM to review index.md and select relevant files...
-Success! The LLM requested N file(s):
- - relevant_file_1.md
- - relevant_file_2.md
- - relevant_file_3.md
-
+Success! The LLM requested <number> file(s):
+ - <filename>.md
+ ...
 Phase 2: Sending the selected file contents to generate the final answer...
+Done
 
 EXPLAINABILITY TRACE
 
--> Reasoning step 1, pointing to a specific file and fact.
--> Reasoning step 2, pointing to a specific file and fact.
--> Reasoning step 3, pointing to a specific file and fact.
+-> <one sentence of reasoning per line>
 
 SOURCES CITED
-- relevant_file_1.md
-- relevant_file_2.md
-- relevant_file_3.md
+
+- <filename>.md
 
 FINAL ANSWER
-The direct answer, built from the facts in the cited files.
+
+<the direct answer>
 ```
 
-Notice that only the files actually relevant to the question get picked — nothing more, nothing less — and the final answer can be traced straight back to those same files.
+Only the files the LLM judged relevant get opened, and the final answer lists those same files as its sources.
+
+> **Two caveats.**
+> - `trace_path` is text the LLM wrote to describe its reasoning. It is not a real log of what the code did, so check the answer against the cited files yourself.
+> - The whole `index.md` is pasted into the Phase 1 prompt, so the index must fit inside the LLM's context window. That is fine for about 80 short lines, but a much larger knowledge base would need a smaller or split index.
 
 ---
 
@@ -269,7 +319,7 @@ The PDF is downloaded directly from a link and saved locally, then every page's 
 # The URL for the NASA Sun Fact Sheet
 pdf_url = "https://radiojove.gsfc.nasa.gov/education/educationalcd/Posters&Fliers/FactSheets/SunFactSheet.pdf"
 
-# Save it one level up in your root directory
+# Save it in a data/ folder next to this notebook
 local_pdf_path = "data/SunFactSheet.pdf"
 
 os.makedirs("data", exist_ok=True)
@@ -366,6 +416,32 @@ except json.JSONDecodeError:
     concepts = []
 ```
 
+#### The Three Reply Shapes the Parser Must Handle
+
+The LLM is told to reply with JSON only, but in practice the reply comes back in one of three shapes:
+
+| Shape | What it looks like | What the code does |
+|---|---|---|
+| Clean JSON | `{"concepts": [...]}` | `json.loads` works straight away. |
+| Fenced JSON | The same JSON wrapped in a code fence (three backticks, often tagged `json`) | The fence and the `json` tag are stripped, then it is parsed. |
+| Broken JSON | Cut off or malformed text | `json.loads` raises `JSONDecodeError`, an error is printed, and `concepts = []`. |
+
+```mermaid
+flowchart TD
+    A["LLM reply text"] --> B{"Starts with<br/>a code fence?"}
+    B -- Yes --> C["Strip fence and<br/>json tag"]
+    B -- No --> D["json.loads"]
+    C --> D
+    D --> E{"Valid JSON?"}
+    E -- Yes --> F["concepts = list<br/>from the reply"]
+    E -- No --> G["Print error<br/>concepts = empty list"]
+
+    classDef defaultStyle fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111
+    class A,B,C,D,E,F,G defaultStyle
+```
+
+Steps 5 and 6 strip fences the same way but have no broken-JSON fallback, so a malformed reply there raises an error.
+
 By the end of this step, every fact the AI found exists as its own small entry, ready to be turned into files.
 
 ---
@@ -396,15 +472,14 @@ os.makedirs(output_dir, exist_ok=True)
 
 index_path = os.path.join(output_dir, "index.md")
 
-# Create master index if it doesn't exist
-if not os.path.exists(index_path):
-    with open(index_path, "w", encoding="utf-8") as f:
-        f.write("# Master Index\n\n")
+# Start a fresh master index (re-running rebuilds it, so lines never duplicate)
+with open(index_path, "w", encoding="utf-8") as f:
+    f.write("# Master Index\n\n")
 
 print(f"Output directory ready at: {output_dir}")
 ```
 
-This makes sure the `output_wiki` folder exists, and starts the master index file if one doesn't already exist — without overwriting one from a previous run.
+This makes sure the `output_wiki` folder exists, and starts a fresh master index file — each run rebuilds it from scratch, so re-running the cell never duplicates lines in the index.
 
 **Part 2 — Writing the files:**
 
@@ -417,7 +492,7 @@ for concept in concepts:
 
     file_path = os.path.join(output_dir, filename)
 
-    # frontmatter metadata above the --- line, markdown body below it
+    # metadata lines above the --- line (no opening ---), markdown body below it
     okf_content = f"""type: {concept['type']}
 title: {concept['title']}
 tags: {concept['tags']}
