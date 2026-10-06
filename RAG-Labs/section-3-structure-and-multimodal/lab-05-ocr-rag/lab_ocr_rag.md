@@ -11,6 +11,8 @@ OCR alone is not enough, though. Two new problems show up:
 1. **Layout gets lost.** An invoice is a table. If OCR returns a flat jumble of words, the label `Invoice Number` and its value `34278587` are no longer neighbours, and the LLM starts guessing which number belongs to which label.
 2. **Some documents are long.** A 32-page scanned PDF cannot be pasted into a prompt for every question. Only the few passages that matter should be sent to the LLM, and you should be able to see which ones were used.
 
+### How This Lab Solves It
+
 This lab solves both, one idea at a time, on the same running example:
 
 - **Part 1 (short documents):** OCR three scanned documents (an invoice, a receipt, a purchase order) while keeping the page layout, turn each whole document into one searchable unit, and answer questions with a `[Source: ...]` tag on every fact.

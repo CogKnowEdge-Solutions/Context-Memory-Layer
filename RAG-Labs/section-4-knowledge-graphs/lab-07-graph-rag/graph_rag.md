@@ -8,6 +8,8 @@
 
 A normal RAG pipeline finds chunks of text that are *similar* to a question and hands them to an LLM. But similar is not the same as *connected*. When the answer depends on following a link between two facts ("the Transformer **relies on** attention"), a pile of similar-looking chunks can miss it.
 
+### How This Lab Solves It
+
 This lab stores the document's facts as a **knowledge graph** instead: a network where each thing (an *entity*, such as "Transformer") is a dot, and each link between two things (a *relationship*, such as `RELIES_ON`) is an arrow. To answer a question, the pipeline finds the right dot, walks along its arrows to collect the connected facts, and only then asks the LLM to answer from those facts, with a written trail of how it got there.
 
 You build it in two stages, on the same document and the same question:

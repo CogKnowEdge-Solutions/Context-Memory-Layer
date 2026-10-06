@@ -8,6 +8,8 @@ You have a company's earnings report as a PDF and a few questions. "How much cas
 
 Normal RAG handles this by cutting the document into small chunks, turning each chunk into a vector (a list of numbers that captures meaning), and searching those vectors for the closest match. That works, but it needs an embedding model and a vector database, and chunking is exactly what slices tables apart.
 
+### How This Lab Solves It
+
 **Vectorless RAG** skips all of that. A tool called **PageIndex** reads the PDF once and builds a **tree** of it: sections, sub-sections and whole tables, each with a short summary. Then retrieval is done by *reading and reasoning* instead of by vector search. This lab builds that idea in three parts, on one document and one running set of questions:
 
 1. **Reasoning retrieval** — an LLM reads the tree's titles and summaries and picks the right section, like a person scanning a table of contents.

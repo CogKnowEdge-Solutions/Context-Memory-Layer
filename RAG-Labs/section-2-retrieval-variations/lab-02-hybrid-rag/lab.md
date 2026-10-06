@@ -6,6 +6,8 @@
 
 A coastal-restoration team keeps its field notes in a PDF. Someone asks why the crews let the tide back in slowly instead of opening the breach all at once. Standard RAG turns that question into a vector, compares it to every chunk, and hands the nearest few to the LLM — but vector search has one reliable weakness: if the answer lives in an exact term, a code snippet, a species name, or a measurement, and the sentence around it doesn't read as *semantically* close to the question, it never surfaces. Keyword search has the mirror-image weakness: it nails "Section 4.2" and is blind to the fact that "they open the breach in stages" answers a question about "phased reintroduction."
 
+### How This Lab Solves It
+
 This lab searches the same document **both** ways and blends the two rankings, so each retriever covers the other's blind spot. It also fixes a problem that happens *before* retrieval: most chunkers cut at a fixed character count, slicing sentences in half, and a chunk cut mid-thought is a bad chunk no matter how good the retriever is. Here the split happens where the **meaning** changes instead.
 
 **The pipeline has four connected parts:**
