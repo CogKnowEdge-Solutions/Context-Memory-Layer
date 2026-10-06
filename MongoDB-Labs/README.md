@@ -1,8 +1,8 @@
 # MongoDB Labs — Foundations to Production
 
-This module teaches MongoDB from first principles through six hands-on labs, all built around one simple, consistent domain — a student/university management system — so every lab reinforces the same story instead of jumping between unrelated examples. A seventh, capstone lab is documented in the roadmap below but intentionally not built for now; that's where the module's real end goal — the MongoDB skills needed for the storage/memory layer of an AI agent harness — is reserved for later.
+This module teaches MongoDB from first principles through ten hands-on labs grouped into seven sections, all built around one simple, consistent domain — a student/university management system — so every lab reinforces the same story instead of jumping between unrelated examples. The final section is a capstone, where the module's real end goal — the MongoDB skills needed for the storage/memory layer of an AI agent harness — comes together.
 
-All six labs run against a real, cloud-hosted **MongoDB Atlas** cluster rather than a local install or a mock database. This README first explains what MongoDB is and how it works, then walks through setting up the Atlas environment, and finally lays out how the labs are organized. Read it fully before opening Lab 1.
+All labs run against a real, cloud-hosted **MongoDB Atlas** cluster rather than a local install or a mock database. This README first explains what MongoDB is and how it works, then walks through setting up the Atlas environment, and finally lays out how the labs are organized. Read it fully before opening Lab 1.
 
 ---
 
@@ -219,77 +219,67 @@ Don't share it or commit it anywhere. If this project ever goes into a git repos
 
 ## 9. Module Roadmap
 
-### 9.1 Lab Sequence
+### 9.1 Course Sections and Lab Sequence
 
-One domain — a student/university management system — runs through every lab below. Different labs touch different parts of that same system; none of them switch to an unrelated example.
+The course is organized into **seven sections**. One domain — a student/university management system — runs through every lab; none of them switch to an unrelated example. Labs numbered with a letter (3B, 4B, 4C) are the optimization, schema-pattern and search labs added to the original seven.
 
 ```mermaid
 flowchart LR
-    B["Beginner<br/>Labs 1-2<br/>Read & write data"] --> I["Intermediate<br/>Labs 3-4<br/>Aggregation & schema design"]
-    I --> A["Advanced<br/>Labs 5-6<br/>Transactions & clusters"]
-    A --> C["Capstone<br/>Lab 7<br/>Documented, not built"]
+    S1["1 Foundations"] --> S2["2 Writing Data"] --> S3["3 Analytics &<br/>Performance"] --> S4["4 Data Modeling"] --> S5["5 Search & AI"] --> S6["6 Reliability<br/>& Scale"] --> S7["7 Capstone"]
 
     classDef defaultStyle fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
-    class B,I,A,C defaultStyle
+    class S1,S2,S3,S4,S5,S6,S7 defaultStyle
 ```
 
-| # | Lab | Concept Title | Level | Domain Content | What You Learn |
-|---|-----|----------------|-------|-----------------|-----------------|
-| 1 | Student Records Lookup | MongoDB Basics: How to Query Data | Beginner | Students, grades, courses | Connect, insert, filter, sort, aggregate |
-| 2 | Student Enrollment Tracker | MongoDB Basics: How to Write, Update & Delete Data | Beginner | Enrolling/withdrawing students, status updates | Full CRUD lifecycle, upserts |
-| 3 | Academic Performance Analytics | MongoDB Intermediate: How to Analyze Data at Scale | Intermediate | Average grades per course, attendance trends | Aggregation pipelines, indexing, `.explain()` |
-| 4 | Courses & Instructors | MongoDB Intermediate: How to Design Schemas & Search Data | Intermediate | Courses referencing instructors, descriptions | Schema design, embedding vs. referencing, `$lookup`, text search |
-| 5 | Enrollment Transactions | MongoDB Advanced: How to Guarantee Data Consistency | Advanced | Enrolling a student while reducing course seat count, atomically | Transactions, change streams, backup/restore |
-| 6 | Scaling the University Database | MongoDB Advanced: How to Scale & Secure a Database | Advanced | Same student/course data, now replicated and secured | Replica sets, RBAC, TLS *(sharding stays conceptual — Atlas's free tier can't shard)* |
-| 7 | AI Agent Memory Service *(documented only, not built)* | MongoDB Capstone: Building a Real Agent Memory Layer | Capstone | Conversation logs, memory entries, tool-call history | Full-stack: everything above, applied to the real AI harness use case |
+| Section | Lab | Concept Title | Level | What You Learn |
+|---|---|---|---|---|
+| 1 Foundations | Lab 1 - Student Records Lookup | MongoDB Basics: How to Query Data | Beginner | Connect, insert, filter, sort, aggregate |
+| 2 Writing Data | Lab 2 - Student Enrollment Tracker | MongoDB Basics: How to Write, Update & Delete Data | Beginner | Full CRUD lifecycle, upserts |
+| 3 Analytics and Performance | Lab 3 - Academic Performance Analytics | MongoDB Intermediate: How to Analyze Data at Scale | Intermediate | Aggregation pipelines, first index, `.explain()` |
+| 3 Analytics and Performance | **Lab 3B - Query Optimization** | MongoDB Intermediate: How to Make Queries Fast | Intermediate | Reading `executionStats`, ESR compound indexes, covered queries, `$indexStats`, aggregation tuning |
+| 4 Data Modeling | Lab 4 - Courses and Instructors | MongoDB Intermediate: How to Design Schemas & Search Data | Intermediate | Embedding vs. referencing, `$lookup`, text search |
+| 4 Data Modeling | **Lab 4B - Schema Patterns and Anti-patterns** | MongoDB Intermediate: How to Recognize Schema Patterns and Anti-patterns | Intermediate | Unbounded arrays, subset, computed, bucket, extended reference |
+| 5 Search and AI | **Lab 4C - Atlas Search and Vector Search** | MongoDB Intermediate: How to Search by Keywords and by Meaning | Intermediate to Advanced | `$search`, embeddings, `$vectorSearch`, hybrid fusion, RAG context |
+| 6 Reliability and Scale | Lab 5 - Enrollment Transactions | MongoDB Advanced: How to Guarantee Data Consistency | Advanced | Transactions, change streams, backup/restore |
+| 6 Reliability and Scale | Lab 6 - Scaling the University Database | MongoDB Advanced: How to Scale & Secure a Database | Advanced | Replica sets, RBAC, TLS *(sharding stays conceptual — Atlas's free tier can't shard)* |
+| 7 Capstone | Lab 7 - AI Agent Memory Service | MongoDB Capstone: Building a Real Agent Memory Layer | Capstone | Everything above, applied to an AI agent's memory layer |
+
+Recommended order: follow the sections top to bottom; inside a section, do the numbered lab first and its letter lab second. Lab 4C's catalog search is the direct preparation for the Lab 7 capstone.
+
+> **Numbering note.** The original labs keep numbers 1-7 because their database names, tests and cross-references use them. The added labs use letters so nothing already built had to change. If you later want strictly sequential numbering (1-10), rename the folders and update the cross-references together.
 
 ### 9.2 Repository Structure
 
-Each lab lives in its own folder, named `Lab N - <Title>`. Inside each folder are the same four pieces every lab follows: a notebook (the runnable pipeline), a markdown write-up (problem statement, diagrams, step-by-step explanation), an assignment file (practice exercises plus an answer key), and a test file (the grading harness).
+Labs are grouped into section folders. Inside each lab folder are the same pieces every lab follows: a notebook (the runnable pipeline), a markdown write-up (problem statement, diagrams, step-by-step explanation), an assignment file (practice exercises plus an answer key), and a test file (the grading harness). Lab 4C also carries its data file, `course_catalog.json`.
 
 ```
 MongoDB-Labs/
-├── Lab 1 - Student Records Lookup/
-│   ├── lab-1-student-records-lookup.ipynb
-│   ├── lab-1-student-records-lookup.md
-│   ├── lab-1-student-records-lookup-assignment.md
-│   └── test_lab1_student_records_lookup.py
-├── Lab 2 - Student Enrollment Tracker/
-│   ├── lab-2-student-enrollment-tracker.ipynb
-│   ├── lab-2-student-enrollment-tracker.md
-│   ├── lab-2-student-enrollment-tracker-assignment.md
-│   └── test_lab2_student_enrollment_tracker.py
-├── Lab 3 - Academic Performance Analytics/
-│   ├── lab-3-academic-performance-analytics.ipynb
-│   ├── lab-3-academic-performance-analytics.md
-│   ├── lab-3-academic-performance-analytics-assignment.md
-│   └── test_lab3_academic_performance_analytics.py
-├── Lab 4 - Courses and Instructors/
-│   ├── lab-4-courses-instructors.ipynb
-│   ├── lab-4-courses-instructors.md
-│   ├── lab-4-courses-instructors-assignment.md
-│   └── test_lab4_courses_instructors.py
-├── Lab 5 - Enrollment Transactions/
-│   ├── lab-5-enrollment-transactions.ipynb
-│   ├── lab-5-enrollment-transactions.md
-│   ├── lab-5-enrollment-transactions-assignment.md
-│   └── test_lab5_enrollment_transactions.py
-├── Lab 6 - Scaling the University Database/
-│   ├── lab-6-scaling-university-database.ipynb
-│   ├── lab-6-scaling-university-database.md
-│   ├── lab-6-scaling-university-database-assignment.md
-│   └── test_lab6_scaling_university_database.py
-└── Lab 7 - AI Agent Memory Service/   (documented capstone — no notebook, you build it)
-    ├── lab-agent-memory-service.md
-    ├── lab-agent-memory-service-assignment.md
-    ├── test_lab_agent_memory_service.py
-    └── README.md
+├── Section 1 - Foundations/
+│   └── Lab 1 - Student Records Lookup/
+├── Section 2 - Writing Data/
+│   └── Lab 2 - Student Enrollment Tracker/
+├── Section 3 - Analytics and Performance/
+│   ├── Lab 3 - Academic Performance Analytics/
+│   └── Lab 3B - Query Optimization/
+├── Section 4 - Data Modeling/
+│   ├── Lab 4 - Courses and Instructors/
+│   └── Lab 4B - Schema Patterns and Anti-patterns/
+├── Section 5 - Search and AI/
+│   └── Lab 4C - Atlas Search and Vector Search/     (includes course_catalog.json)
+├── Section 6 - Reliability and Scale/
+│   ├── Lab 5 - Enrollment Transactions/
+│   └── Lab 6 - Scaling the University Database/
+├── Section 7 - Capstone/
+│   └── Lab 7 - AI Agent Memory Service/
+├── test-results/
+├── MongoDB_Labs_Overview.pptx
+├── .env.example
+└── README.md                   # this file
 
-.env                        # your MONGODB_URI, kept inside this module, never committed
-README.md                   # this file
+.env                            # your MONGODB_URI, created by you, never committed
 ```
 
-The `.env` file sits once at the root, not inside each lab folder — every notebook reads the same shared connection string from it, regardless of which lab folder it's in. Open the `.ipynb` to run a lab, read its `.md` if a step needs more explanation, and use the assignment file afterward to verify understanding.
+The `.env` file sits once at the module root, not inside each lab folder. Every notebook loads it with `load_dotenv("../../.env")` (two folders up: lab folder, then section folder). Open the `.ipynb` to run a lab, read its `.md` if a step needs more explanation, and use the assignment file afterward to verify understanding.
 
 ---
 

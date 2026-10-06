@@ -1,0 +1,156 @@
+[
+  {
+    "course_id": "CAT101",
+    "title": "Python Programming Fundamentals",
+    "level": "beginner",
+    "topic": "programming",
+    "description": "Learn variables, loops, functions and data structures by writing small Python programs. No prior coding experience is needed."
+  },
+  {
+    "course_id": "CAT102",
+    "title": "Relational Databases and SQL",
+    "level": "beginner",
+    "topic": "databases",
+    "description": "Design tables, write SELECT queries, join related tables and enforce integrity with keys and constraints."
+  },
+  {
+    "course_id": "CAT103",
+    "title": "Introduction to Document Databases",
+    "level": "beginner",
+    "topic": "databases",
+    "description": "Store flexible JSON-like records, run filter queries and understand when a document model beats fixed tables."
+  },
+  {
+    "course_id": "CAT104",
+    "title": "Statistics for Everyday Decisions",
+    "level": "beginner",
+    "topic": "data science",
+    "description": "Understand averages, spread, probability and sampling so you can read charts and survey results with confidence."
+  },
+  {
+    "course_id": "CAT105",
+    "title": "Web Basics: HTML, CSS and Layout",
+    "level": "beginner",
+    "topic": "web",
+    "description": "Build and style simple web pages, arrange content with flexible layouts and make pages usable on phones."
+  },
+  {
+    "course_id": "CAT106",
+    "title": "Cloud Computing Essentials",
+    "level": "beginner",
+    "topic": "cloud",
+    "description": "Tour virtual machines, storage, networking and billing in the cloud, and learn how to launch a small service safely."
+  },
+  {
+    "course_id": "CAT107",
+    "title": "Version Control with Git",
+    "level": "beginner",
+    "topic": "tools",
+    "description": "Track changes, branch and merge work, and collaborate on shared code without overwriting each other."
+  },
+  {
+    "course_id": "CAT201",
+    "title": "Data Modeling for Document Stores",
+    "level": "intermediate",
+    "topic": "databases",
+    "description": "Decide when to nest related information and when to link it, and avoid records that grow without limit."
+  },
+  {
+    "course_id": "CAT202",
+    "title": "Query Tuning and Indexing",
+    "level": "intermediate",
+    "topic": "databases",
+    "description": "Read execution plans, build compound indexes in the right field order and remove indexes that slow down writes."
+  },
+  {
+    "course_id": "CAT203",
+    "title": "Machine Learning Foundations",
+    "level": "intermediate",
+    "topic": "data science",
+    "description": "Train and evaluate classification and regression models, split data correctly and guard against overfitting."
+  },
+  {
+    "course_id": "CAT204",
+    "title": "Building REST and GraphQL APIs",
+    "level": "intermediate",
+    "topic": "web",
+    "description": "Design clear endpoints, validate requests, handle errors and secure services with tokens."
+  },
+  {
+    "course_id": "CAT205",
+    "title": "Containers and Orchestration",
+    "level": "intermediate",
+    "topic": "cloud",
+    "description": "Package applications into containers, run many copies and roll out updates without downtime."
+  },
+  {
+    "course_id": "CAT206",
+    "title": "Text Mining and Natural Language Processing",
+    "level": "intermediate",
+    "topic": "ai",
+    "description": "Clean raw text, turn words into numbers, classify documents and extract names, places and dates."
+  },
+  {
+    "course_id": "CAT207",
+    "title": "Data Pipelines and Streaming",
+    "level": "intermediate",
+    "topic": "data engineering",
+    "description": "Move data between systems on a schedule or continuously, handle late records and keep results reproducible."
+  },
+  {
+    "course_id": "CAT301",
+    "title": "Embeddings and Semantic Retrieval",
+    "level": "advanced",
+    "topic": "ai",
+    "description": "Represent sentences as vectors so that passages with similar meaning sit close together, then find them with nearest-neighbour lookups."
+  },
+  {
+    "course_id": "CAT302",
+    "title": "Retrieval-Augmented Generation Systems",
+    "level": "advanced",
+    "topic": "ai",
+    "description": "Split documents, find the passages that matter for a question and give them to a language model so answers cite real sources."
+  },
+  {
+    "course_id": "CAT303",
+    "title": "Persistent Conversation State for AI Assistants",
+    "level": "advanced",
+    "topic": "ai",
+    "description": "Store dialogue history and learned facts across sessions so a virtual helper picks up where earlier talks left off."
+  },
+  {
+    "course_id": "CAT304",
+    "title": "Distributed Data at Scale",
+    "level": "advanced",
+    "topic": "databases",
+    "description": "Spread data over many servers, keep copies in sync, survive machine failures and choose a partition key wisely."
+  },
+  {
+    "course_id": "CAT305",
+    "title": "Transactions and Consistency",
+    "level": "advanced",
+    "topic": "databases",
+    "description": "Make several writes succeed or fail together, reason about isolation and design workflows that tolerate retries."
+  },
+  {
+    "course_id": "CAT306",
+    "title": "Observability and Reliability Engineering",
+    "level": "advanced",
+    "topic": "cloud",
+    "description": "Collect metrics, logs and traces, define service targets and respond to incidents with calm, repeatable steps."
+  },
+  {
+    "course_id": "CAT307",
+    "title": "Deep Learning for Vision",
+    "level": "advanced",
+    "topic": "ai",
+    "description": "Build convolutional networks that recognise objects in photographs, and fine-tune pretrained models on small image sets."
+  },
+  {
+    "course_id": "CAT308",
+    "title": "Security for Data Platforms",
+    "level": "advanced",
+    "topic": "security",
+    "description": "Control who can read and write data with roles, encrypt traffic and storage, and audit access."
+  }
+]
