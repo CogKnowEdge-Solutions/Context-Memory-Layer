@@ -233,6 +233,7 @@ load_dotenv(".env")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 if not OPENROUTER_API_KEY:
+    # fall back to an interactive prompt when .env does not provide a key
     OPENROUTER_API_KEY = input("Enter your OpenRouter API key (get one at https://openrouter.ai): ").strip()
 
 print("OpenRouter key loaded.")
@@ -247,6 +248,7 @@ llm = ChatOpenAI(
     openai_api_base="https://openrouter.ai/api/v1",
     temperature=0.0,
     max_tokens=8000,
+    # openrouter-specific flag: disable the model's reasoning output
     extra_body={"reasoning": {"enabled": False}},
 )
 ```
@@ -347,6 +349,7 @@ raw_json = response.content.strip()
 
 # Clean up potential markdown formatting wrapping the JSON
 if raw_json.startswith("```"):
+    # [1] grabs the text between the first pair of backticks; [4:] drops the json tag
     raw_json = raw_json.split("```")[1]
     if raw_json.startswith("json"):
         raw_json = raw_json[4:]
@@ -407,12 +410,14 @@ This makes sure the `output_wiki` folder exists, and starts the master index fil
 
 ```python
 for concept in concepts:
+    # normalize the llm-provided name into a safe filename
     filename = concept['filename'].replace(" ", "_").lower()
     if not filename.endswith('.md'):
         filename += '.md'
 
     file_path = os.path.join(output_dir, filename)
 
+    # frontmatter metadata above the --- line, markdown body below it
     okf_content = f"""type: {concept['type']}
 title: {concept['title']}
 tags: {concept['tags']}
@@ -507,6 +512,7 @@ Then read the file list off the reply. Nothing has been opened or read in full y
 
 ```python
 retrieval_data = json.loads(raw_content_1)
+# .get with a default survives an unexpected schema from the model
 selected_files = retrieval_data.get("files_to_read", [])
 
 print(f"Success! The LLM requested {len(selected_files)} file(s):")
@@ -542,6 +548,7 @@ for filename in selected_files:
     file_path = os.path.join(output_dir, filename)
     if os.path.exists(file_path):
         with open(file_path, "r", encoding="utf-8") as f:
+            # delimit each file so the model knows where one source ends
             loaded_context += f"--- START OF {filename} ---\n{f.read()}\n--- END OF {filename} ---\n\n"
     else:
         print(f"Warning: {filename} not found on disk.")

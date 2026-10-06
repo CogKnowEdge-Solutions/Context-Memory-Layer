@@ -382,12 +382,14 @@ species time to c...
 
 warnings.<span style="color:#61afef;">filterwarnings</span>(<span style="color:#98c379;">&quot;ignore&quot;</span>)
 
+<span style="color:#7f848e;font-style:italic;"># downgrade the chattiest loggers so their messages never reach the notebook</span>
 <span style="color:#c678dd;">for</span> noisy <span style="color:#c678dd;">in</span> (<span style="color:#98c379;">&quot;transformers&quot;</span>, <span style="color:#98c379;">&quot;sentence_transformers&quot;</span>, <span style="color:#98c379;">&quot;huggingface_hub&quot;</span>, <span style="color:#98c379;">&quot;httpx&quot;</span>):
     logging.<span style="color:#61afef;">getLogger</span>(noisy).<span style="color:#61afef;">setLevel</span>(logging.ERROR)
 </div></div>
 <p><code>bm25s</code>, the library behind <code>BM25Retriever</code>, needs one extra step. It logs a DEBUG line every time it builds its index, and it attaches its own handler at import time — so it has to be stopped from propagating to the root logger. Setting its level alone leaves the line on screen.</p>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;">bm25_logger = logging.<span style="color:#61afef;">getLogger</span>(<span style="color:#98c379;">&quot;bm25s&quot;</span>)
 bm25_logger.<span style="color:#61afef;">setLevel</span>(logging.ERROR)
+<span style="color:#7f848e;font-style:italic;"># stop these messages from also bubbling up to the root logger (double output)</span>
 bm25_logger.propagate = <span style="color:#c678dd;">False</span>
 </div></div>
 <p>The <code>bm25s</code> block is the one that matters visually. Without it, a stray <code>Building index from IDs objects</code> DEBUG line lands in the middle of Step 2's output, right between the code and the confirmation message.</p>
@@ -402,6 +404,7 @@ OPENROUTER_API_KEY = os.<span style="color:#61afef;">getenv</span>(<span style="
 
 <span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;Key loaded.&quot;</span>)
 
+<span style="color:#7f848e;font-style:italic;"># Settings.* are LlamaIndex globals -- every later component reads them automatically</span>
 <span style="color:#7f848e;font-style:italic;"># Set up the LLM (using OpenRouter)</span>
 Settings.llm = <span style="color:#61afef;">OpenRouter</span>(
     model=<span style="color:#98c379;">&quot;nvidia/nemotron-3-super-120b-a12b:free&quot;</span>,
@@ -430,6 +433,7 @@ documents = reader.<span style="color:#61afef;">load_data</span>(file=<span styl
 <span style="color:#7f848e;font-style:italic;"># Semantic chunking: splits based on meaning, not fixed size</span>
 splitter = <span style="color:#61afef;">SemanticSplitterNodeParser</span>(
     buffer_size=<span style="color:#d19a66;">1</span>, 
+    <span style="color:#7f848e;font-style:italic;"># a new chunk starts wherever sentence similarity dips below the 95th percentile</span>
     breakpoint_percentile_threshold=<span style="color:#d19a66;">95</span>, 
     embed_model=Settings.embed_model
 )
@@ -459,6 +463,7 @@ hybrid_retriever = <span style="color:#61afef;">QueryFusionRetriever</span>(
     [vector_retriever, bm25_retriever],
     similarity_top_k=<span style="color:#d19a66;">3</span>,
     num_queries=<span style="color:#d19a66;">1</span>, 
+    <span style="color:#7f848e;font-style:italic;"># reciprocal rank fusion blends the two lists without needing comparable scores</span>
     mode=<span style="color:#98c379;">&quot;reciprocal_rerank&quot;</span>, 
 )
 
@@ -484,6 +489,7 @@ response = query_engine.<span style="color:#61afef;">query</span>(QUERY)
 <p>This step doesn't generate anything new — it just reveals what actually went into the answer above.</p>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#7f848e;font-style:italic;"># Show the source nodes (retrieved chunks)</span>
 <span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;Source nodes used (Post-Fusion):&quot;</span>)
+<span style="color:#7f848e;font-style:italic;"># fusion scores are small rrf fractions (rank-based), not cosine similarities</span>
 <span style="color:#c678dd;">for</span> i, node <span style="color:#c678dd;">in</span> <span style="color:#61afef;">enumerate</span>(response.source_nodes):
     <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;\n--- Source {</span>i + <span style="color:#d19a66;">1</span><span style="color:#98c379;">} (score: {</span>node.score<span style="color:#98c379;">:.4f}) ---&quot;</span>)
     <span style="color:#61afef;">print</span>(node.text[:<span style="color:#d19a66;">200</span>] + <span style="color:#98c379;">&quot;...&quot;</span>)

@@ -572,6 +572,7 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
+# downgrade the chattiest loggers so their messages never reach the notebook
 for noisy in ("transformers", "sentence_transformers", "huggingface_hub", "httpx"):
     logging.getLogger(noisy).setLevel(logging.ERROR)
 ```
@@ -581,6 +582,7 @@ for noisy in ("transformers", "sentence_transformers", "huggingface_hub", "httpx
 ```python
 bm25_logger = logging.getLogger("bm25s")
 bm25_logger.setLevel(logging.ERROR)
+# stop these messages from also bubbling up to the root logger (double output)
 bm25_logger.propagate = False
 ```
 
@@ -600,6 +602,7 @@ if not OPENROUTER_API_KEY:
 
 print("Key loaded.")
 
+# Settings.* are LlamaIndex globals -- every later component reads them automatically
 # Set up the LLM (using OpenRouter)
 Settings.llm = OpenRouter(
     model="nvidia/nemotron-3-super-120b-a12b:free",
@@ -635,6 +638,7 @@ print(f"Loaded {len(documents)} document(s)")
 # Semantic chunking: splits based on meaning, not fixed size
 splitter = SemanticSplitterNodeParser(
     buffer_size=1, 
+    # a new chunk starts wherever sentence similarity dips below the 95th percentile
     breakpoint_percentile_threshold=95, 
     embed_model=Settings.embed_model
 )
@@ -684,6 +688,7 @@ hybrid_retriever = QueryFusionRetriever(
     [vector_retriever, bm25_retriever],
     similarity_top_k=3,
     num_queries=1, 
+    # reciprocal rank fusion blends the two lists without needing comparable scores
     mode="reciprocal_rerank", 
 )
 
@@ -726,6 +731,7 @@ This step doesn't generate anything new — it just reveals what actually went i
 ```python
 # Show the source nodes (retrieved chunks)
 print("Source nodes used (Post-Fusion):")
+# fusion scores are small rrf fractions (rank-based), not cosine similarities
 for i, node in enumerate(response.source_nodes):
     print(f"\n--- Source {i + 1} (score: {node.score:.4f}) ---")
     print(node.text[:200] + "...")

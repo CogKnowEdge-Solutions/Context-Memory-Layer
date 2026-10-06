@@ -509,6 +509,7 @@ Each document is short, so the whole thing becomes one vector. The `embed` helpe
 ```python
 def embed(texts):
     """Turn a list of texts into a 2D array of unit-length vectors, one row per text."""
+    # unit-length vectors, so a dot product later equals cosine similarity
     return embedder.encode(texts, normalize_embeddings=True)
 
 doc_names = list(document_texts)
@@ -546,6 +547,7 @@ Two functions that both parts use. `ask_llm` labels each retrieved source and te
 ```python
 def ask_llm(query, hits):
     """Send the retrieved sources to the LLM and return its tagged answer."""
+    # tag each block with its source so the model can copy the tag into its answer
     context = "\n\n".join(f"[Source: {hit['source']}]\n{hit['text']}" for hit in hits)
     prompt = f"""You answer questions using ONLY the context below.
 Every fact you state must be followed by its source tag, copied exactly, like [Source: name].
@@ -628,6 +630,7 @@ def render_pages(pdf_path, dpi=200):
     with fitz.open(pdf_path) as doc:
         for page in doc:
             pix = page.get_pixmap(matrix=matrix)
+            # raw page pixels -> RGB image -> numpy array for the OCR engine
             image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
             pages.append(np.array(image))
     return pages
@@ -663,6 +666,7 @@ Each chunk is up to 500 characters, and the next chunk starts 450 characters lat
 ```python
 CHUNK_SIZE = 500
 OVERLAP = 50
+# step by CHUNK_SIZE - OVERLAP so consecutive chunks share OVERLAP characters
 STEP = CHUNK_SIZE - OVERLAP
 
 chunks = []
@@ -705,6 +709,7 @@ Because the vectors have length 1, the inner product FAISS computes is exactly t
 def search_chunks(query, top_k=3):
     """Return the top_k closest chunks as {source, text, score}, best first."""
     query_vector = embed([query]).astype("float32")
+    # faiss returns the rows already sorted by score, best first
     scores, positions = index.search(query_vector, top_k)
     return [
         {**chunks[i], "score": float(score)}
@@ -755,6 +760,7 @@ chunk_tokens = [count_tokens(chunk["text"]) for chunk in chunks]
 print(f"\nPart 2 units (chunks): {len(chunks)} chunks, longest = {max(chunk_tokens)} tokens")
 
 whole_pdf = "\n".join(page_texts)
+# how much of the PDF falls outside the model window and is never embedded
 print(f"\nThe whole PDF as ONE unit would be {count_tokens(whole_pdf)} tokens, "
       f"so about {100 - 100 * embedder.max_seq_length // count_tokens(whole_pdf)}% of it would never be seen by the embedding model.")
 ```

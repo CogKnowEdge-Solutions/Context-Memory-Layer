@@ -140,6 +140,7 @@ The direct answer, built from the facts in the cited files.
 OPENROUTER_API_KEY = os.<span style="color:#61afef;">getenv</span>(<span style="color:#98c379;">&quot;OPENROUTER_API_KEY&quot;</span>)
 
 <span style="color:#c678dd;">if</span> <span style="color:#c678dd;">not</span> OPENROUTER_API_KEY:
+    <span style="color:#7f848e;font-style:italic;"># fall back to an interactive prompt when .env does not provide a key</span>
     OPENROUTER_API_KEY = <span style="color:#61afef;">input</span>(<span style="color:#98c379;">&quot;Enter your OpenRouter API key (get one at https://openrouter.ai): &quot;</span>).<span style="color:#61afef;">strip</span>()
 
 <span style="color:#61afef;">print</span>(<span style="color:#98c379;">&quot;OpenRouter key loaded.&quot;</span>)
@@ -151,6 +152,7 @@ OPENROUTER_API_KEY = os.<span style="color:#61afef;">getenv</span>(<span style="
     openai_api_base=<span style="color:#98c379;">&quot;https://openrouter.ai/api/v1&quot;</span>,
     temperature=<span style="color:#d19a66;">0.0</span>,
     max_tokens=<span style="color:#d19a66;">8000</span>,
+    <span style="color:#7f848e;font-style:italic;"># openrouter-specific flag: disable the model&#39;s reasoning output</span>
     extra_body={<span style="color:#98c379;">&quot;reasoning&quot;</span>: {<span style="color:#98c379;">&quot;enabled&quot;</span>: <span style="color:#c678dd;">False</span>}},
 )
 </div></div>
@@ -230,6 +232,7 @@ raw_json = response.content.<span style="color:#61afef;">strip</span>()
 
 <span style="color:#7f848e;font-style:italic;"># Clean up potential markdown formatting wrapping the JSON</span>
 <span style="color:#c678dd;">if</span> raw_json.<span style="color:#61afef;">startswith</span>(<span style="color:#98c379;">&quot;```&quot;</span>):
+    <span style="color:#7f848e;font-style:italic;"># [1] grabs the text between the first pair of backticks; [4:] drops the json tag</span>
     raw_json = raw_json.<span style="color:#61afef;">split</span>(<span style="color:#98c379;">&quot;```&quot;</span>)[<span style="color:#d19a66;">1</span>]
     <span style="color:#c678dd;">if</span> raw_json.<span style="color:#61afef;">startswith</span>(<span style="color:#98c379;">&quot;json&quot;</span>):
         raw_json = raw_json[<span style="color:#d19a66;">4</span>:]
@@ -267,12 +270,14 @@ index_path = os.path.<span style="color:#61afef;">join</span>(output_dir, <span 
 <p>This makes sure the <code>output_wiki</code> folder exists, and starts the master index file if one doesn't already exist — without overwriting one from a previous run.</p>
 <p><strong>Part 2 — Writing the files:</strong></p>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;"><span style="color:#c678dd;">for</span> concept <span style="color:#c678dd;">in</span> concepts:
+    <span style="color:#7f848e;font-style:italic;"># normalize the llm-provided name into a safe filename</span>
     filename = concept[<span style="color:#98c379;">&#39;filename&#39;</span>].<span style="color:#61afef;">replace</span>(<span style="color:#98c379;">&quot; &quot;</span>, <span style="color:#98c379;">&quot;_&quot;</span>).<span style="color:#61afef;">lower</span>()
     <span style="color:#c678dd;">if</span> <span style="color:#c678dd;">not</span> filename.<span style="color:#61afef;">endswith</span>(<span style="color:#98c379;">&#39;.md&#39;</span>):
         filename += <span style="color:#98c379;">&#39;.md&#39;</span>
 
     file_path = os.path.<span style="color:#61afef;">join</span>(output_dir, filename)
 
+    <span style="color:#7f848e;font-style:italic;"># frontmatter metadata above the --- line, markdown body below it</span>
     okf_content = <span style="color:#98c379;">f&quot;&quot;&quot;type: {</span>concept[<span style="color:#98c379;">&#39;type&#39;</span>]<span style="color:#98c379;">}</span>
 <span style="color:#98c379;">title: {</span>concept[<span style="color:#98c379;">&#39;title&#39;</span>]<span style="color:#98c379;">}</span>
 <span style="color:#98c379;">tags: {</span>concept[<span style="color:#98c379;">&#39;tags&#39;</span>]<span style="color:#98c379;">}</span>
@@ -340,6 +345,7 @@ raw_content_1 = response_1.content.<span style="color:#61afef;">strip</span>()
 </div></div>
 <p>Then read the file list off the reply. Nothing has been opened or read in full yet — these are just the names the librarian pointed at.</p>
 <div style="margin:18px 0;border-radius:8px;overflow:hidden;border:1px solid #2d3139;box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="background:#21252b;padding:8px 14px;border-radius:8px 8px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:block;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ff5f56;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffbd2e;margin-right:6px;"></span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#27c93f;margin-right:6px;"></span><span style="float:right;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:11px;color:#9aa0ab;text-transform:uppercase;letter-spacing:0.06em;">python</span></div><div style="background:#282c34;margin:0;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 0 8px 8px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;color:#dcdfe4;">retrieval_data = json.<span style="color:#61afef;">loads</span>(raw_content_1)
+<span style="color:#7f848e;font-style:italic;"># .get with a default survives an unexpected schema from the model</span>
 selected_files = retrieval_data.<span style="color:#61afef;">get</span>(<span style="color:#98c379;">&quot;files_to_read&quot;</span>, [])
 
 <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;Success! The LLM requested {</span><span style="color:#61afef;">len</span>(selected_files)<span style="color:#98c379;">} file(s):&quot;</span>)
@@ -359,6 +365,7 @@ loaded_context = <span style="color:#98c379;">&quot;&quot;</span>
     file_path = os.path.<span style="color:#61afef;">join</span>(output_dir, filename)
     <span style="color:#c678dd;">if</span> os.path.<span style="color:#61afef;">exists</span>(file_path):
         <span style="color:#c678dd;">with</span> <span style="color:#61afef;">open</span>(file_path, <span style="color:#98c379;">&quot;r&quot;</span>, encoding=<span style="color:#98c379;">&quot;utf-8&quot;</span>) <span style="color:#c678dd;">as</span> f:
+            <span style="color:#7f848e;font-style:italic;"># delimit each file so the model knows where one source ends</span>
             loaded_context += <span style="color:#98c379;">f&quot;--- START OF {</span>filename<span style="color:#98c379;">} ---\n{</span>f.<span style="color:#61afef;">read</span>()<span style="color:#98c379;">}\n--- END OF {</span>filename<span style="color:#98c379;">} ---\n\n&quot;</span>
     <span style="color:#c678dd;">else</span>:
         <span style="color:#61afef;">print</span>(<span style="color:#98c379;">f&quot;Warning: {</span>filename<span style="color:#98c379;">} not found on disk.&quot;</span>)

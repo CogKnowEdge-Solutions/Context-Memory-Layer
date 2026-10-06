@@ -281,9 +281,18 @@ The pipeline needs three values to connect to Neo4j: a **URI**, a **username**, 
    neo4j+s://xxxxxxxx.databases.neo4j.io
    ```
 6. The **username** is `neo4j` by default unless it was changed during setup.
-7. Store all three values — URI, username, password — as environment variables (`NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`) rather than pasting them directly into the notebook, so they aren't exposed if the file is shared.
+7. Save all three values — URI, username, password — in the `.env` file next to this notebook (alongside the OpenRouter key), rather than pasting them directly into the notebook, so they aren't exposed if the file is shared.
 
-Once these three values are set, the driver connection shown in the next section will pick them up automatically.
+The `.env` file should look like this:
+
+```bash
+OPENROUTER_API_KEY=<your OpenRouter API key>
+NEO4J_URI=neo4j+s://xxxxxxxx.databases.neo4j.io
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=<your instance password>
+```
+
+Once the `.env` file is in place, `load_dotenv(".env")` in the next section loads all of it, and the cells pick the values up automatically with `os.getenv(...)`.
 
 ---
 
@@ -299,11 +308,12 @@ The cell below installs all required Python packages:
 | `langchain-huggingface` | Wraps the embedding model in a simple `embed_query()` interface |
 | `langchain-openai` | Wraps the LLM in LangChain's `ChatOpenAI` interface |
 | `yfiles-jupyter-graphs-for-neo4j` | Renders the Neo4j graph as an interactive widget in the notebook |
+| `python-dotenv` | Loads the secrets from the `.env` file into the notebook |
 
 > **Note:** Run this cell first — it only needs to be run once per session.
 
 ```python
-!pip install -qU pypdf neo4j sentence-transformers "torch>=2.5" langchain-huggingface langchain-openai yfiles-jupyter-graphs-for-neo4j
+!pip install -qU pypdf neo4j sentence-transformers "torch>=2.5" langchain-huggingface langchain-openai yfiles-jupyter-graphs-for-neo4j python-dotenv
 ```
 
 ## Import Libraries
@@ -312,16 +322,21 @@ The cell below installs all required Python packages:
 import os
 import json
 import requests
+from dotenv import load_dotenv
 from pypdf import PdfReader
 from neo4j import GraphDatabase
 from langchain_openai import ChatOpenAI
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.prompts import PromptTemplate
+
+# Load the secrets (OPENROUTER_API_KEY, NEO4J_*) from the .env file next to this notebook
+load_dotenv(".env")
 ```
 
 | Import | Purpose |
 |---|---|
-| `os` | Used for file paths and folders |
+| `os` | Used for file paths and folders, and for reading secrets with `os.getenv(...)` |
+| `load_dotenv` | Loads the `.env` file sitting next to the notebook into the environment |
 | `json` | Parses the LLM's JSON reply into Python objects |
 | `requests` | Downloads the PDF |
 | `PdfReader` | Extracts raw text from the PDF |
@@ -333,24 +348,25 @@ from langchain_core.prompts import PromptTemplate
 ## Connect to Neo4j
 
 ```python
-# --- Neo4j Aura Configuration ---
-NEO4J_URI = "YOUR-NEO4J_URI"
-NEO4J_USER = "YOUR-NEO4J_USER"
-NEO4J_PASSWORD = "YOUR-NEO4J_PASSWORD"
+# --- Neo4j Aura Configuration (values come from the .env file) ---
+NEO4J_URI = os.getenv("NEO4J_URI")
+NEO4J_USER = os.getenv("NEO4J_USERNAME")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
 
 # Open a persistent connection to the database
 driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+# fails fast here if the uri or credentials are wrong
 driver.verify_connectivity()
 print("Success: Connected to Neo4j Database!")
 ```
 
-> **Note:** Replace `"YOUR-NEO4J_URI"`, `"YOUR-NEO4J_USER"`, and `"YOUR-NEO4J_PASSWORD"` with the actual values from the Neo4j Aura instance created above. To avoid pasting these directly into the notebook, they can instead be loaded with `os.getenv("VARIABLE_NAME")` after setting them as environment variables — for example, `NEO4J_URI = os.getenv("NEO4J_URI")` — which keeps the actual credentials out of the file itself. `verify_connectivity()` immediately checks that the connection details are correct.
+> **Note:** `NEO4J_URI`, `NEO4J_USERNAME` and `NEO4J_PASSWORD` are read from the `.env` file loaded in the previous cell — make sure they match the Neo4j Aura instance created above. `verify_connectivity()` immediately checks that the connection details are correct.
 
 ## Configure the LLM
 
 ```python
 llm = ChatOpenAI(
-    openai_api_key="your-api-key",
+    openai_api_key=os.getenv("OPENROUTER_API_KEY"),
     openai_api_base="https://openrouter.ai/api/v1",
     model_name="nvidia/nemotron-3-super-120b-a12b:free",
     temperature=0.0
@@ -358,7 +374,7 @@ llm = ChatOpenAI(
 print("LangChain LLM configured successfully!")
 ```
 
-> **Note:** Replace `"your-api-key"` with the actual LLM provider key, or load it the same way with `os.getenv("OPENROUTER_API_KEY")`. `temperature=0.0` keeps answers consistent and factual, which matters when the reply needs to be parsed as JSON later.
+> **Note:** The key is read from `OPENROUTER_API_KEY` in the same `.env` file, so it never appears in the notebook. `temperature=0.0` keeps answers consistent and factual, which matters when the reply needs to be parsed as JSON later.
 
 ---
 
@@ -430,6 +446,7 @@ response = llm.invoke(prompt)
 
 raw_output = response.content.strip()
 if raw_output.startswith("```json"):
+    # slice off the markdown fence: 7 chars in front, 3 at the end
     raw_output = raw_output[7:-3].strip()
 elif raw_output.startswith("```"):
     raw_output = raw_output[3:-3].strip()
@@ -448,6 +465,7 @@ Nodes are written first, then relationships, since a relationship can only be cr
 
 ```python
 # Save nodes to Neo4j
+# merge creates the concept only if that name does not exist yet, reruns stay safe
 node_query = """
 UNWIND $nodes AS node
 MERGE (c:Concept {name: node.name})
@@ -547,6 +565,7 @@ def execute_hybrid_retrieval(driver, question, top_k=3):
 
     question_vector = embeddings.embed_query(question)
 
+    # vector search finds the seed nodes, then the match expands to their neighbors
     hybrid_query = """
     CALL db.index.vector.queryNodes('concept_embeddings', $top_k, $question_vector)
     YIELD node AS seed, score
@@ -604,6 +623,7 @@ def generate_hybrid_answer(question, retrieved_facts):
 
     facts_block = "\n".join([f"- {f}" for f in retrieved_facts])
     prompt = PromptTemplate(template=ANSWER_TEMPLATE, input_variables=["facts_block", "question"])
+    # | pipes the filled template into the model, langchain chain syntax
     chain = prompt | llm
 
     response = chain.invoke({"facts_block": facts_block, "question": question})

@@ -146,8 +146,8 @@ Qdrant is an open-source vector database — a database built specifically for s
 
 The connection is made in Step 3, where `QdrantVectorStore.from_texts(...)` takes three pieces of information:
 
-- `url` — the address of your Qdrant Cloud cluster, i.e. where the vectors live.
-- `api_key` — the secret key that authorizes your code to read from and write to that cluster.
+- `url` — the address of your Qdrant Cloud cluster, i.e. where the vectors live (loaded from `QDRANT_URL` in `.env`).
+- `api_key` — the secret key that authorizes your code to read from and write to that cluster (loaded from `QDRANT_API_KEY` in `.env`).
 - `collection_name` — the name of the "collection" (a Qdrant collection is roughly a table of vectors) that stores the children and summaries.
 
 ---
@@ -251,10 +251,18 @@ Notice the explainability trace references a specific table from the source docu
 1. Go to [cloud.qdrant.io](https://cloud.qdrant.io) and sign up, or log in if you already have an account.
 2. Click **Create Cluster** to set up a new cluster. A free tier is available for testing and is enough for this lab.
 3. Choose a cloud provider and region, give the cluster a name, and confirm. Creating it takes a minute or two while the cluster provisions.
-4. Once the cluster is ready, open its **Overview** page and copy the **Cluster URL** — it looks like `https://<cluster-id>.cloud.qdrant.io:6333`. This value replaces the `"your-endpoint"` placeholder in Step 3.
-5. Open the cluster's **Access Control** (or **API Keys**) tab. Copy the existing API key, or create a new one. This value replaces the `"your-api-key"` placeholder in Step 3.
+4. Once the cluster is ready, open its **Overview** page and copy the **Cluster URL** — it looks like `https://<cluster-id>.cloud.qdrant.io:6333`. Save it as `QDRANT_URL` in the `.env` file next to this notebook.
+5. Open the cluster's **Access Control** (or **API Keys**) tab. Copy the existing API key, or create a new one. Save it as `QDRANT_API_KEY` in the same `.env` file.
 
-> **Tip:** Keep the key out of the notebook itself by loading it from an environment variable, e.g. `api_key=os.getenv("QDRANT_API_KEY")`, so it isn't exposed if the file is shared.
+The `.env` file holds all three secrets the notebook needs:
+
+```bash
+QDRANT_URL=https://<cluster-id>.cloud.qdrant.io:6333
+QDRANT_API_KEY=<your Qdrant cluster API key>
+OPENROUTER_API_KEY=<your OpenRouter API key>
+```
+
+> **Tip:** Keep the credentials out of the notebook itself — the code calls `load_dotenv(".env")` and reads everything with `os.getenv(...)`, so nothing sensitive is exposed if the file is shared.
 
 ---
 
@@ -272,12 +280,13 @@ The cell below installs all required Python packages:
 | `tiktoken` | Token counting, used internally by some LangChain components |
 | `flask`, `numpy`, `scipy`, `scikit-learn` | Supporting libraries used by the retrieval and embedding stack |
 | `sentence-transformers` | Backs the local embedding model |
+| `python-dotenv` | Loads the secrets from the `.env` file into the notebook |
 | `ipython` | Provides `IPython.display` (`Markdown`, `display`) for rendering answers in the notebook |
 
 > **Note:** Run this cell first — it only needs to be run once per session.
 
 ```python
-!pip install -qU langchain langchain-classic langchain-community langchain-openai langchain-huggingface langchain-qdrant qdrant-client pypdf tiktoken flask numpy scipy scikit-learn sentence-transformers "torch>=2.5" ipython
+!pip install -qU langchain langchain-classic langchain-community langchain-openai langchain-huggingface langchain-qdrant qdrant-client pypdf tiktoken flask numpy scipy scikit-learn sentence-transformers python-dotenv "torch>=2.5" ipython
 ```
 
 ---
@@ -289,9 +298,11 @@ The cell below installs all required Python packages:
 ### Step 1 — Imports
 
 ```python
+import os
 import uuid
 
 import requests
+from dotenv import load_dotenv
 from IPython.display import Markdown, display
 from langchain_classic.retrievers.multi_vector import MultiVectorRetriever
 from langchain_core.documents import Document
@@ -308,6 +319,8 @@ from pypdf import PdfReader
 
 | Import | Purpose |
 |---|---|
+| `os` | Reads the secrets loaded from `.env` via `os.getenv(...)` |
+| `load_dotenv` | Loads the `.env` file sitting next to the notebook into the environment |
 | `uuid` | Generates a unique ID linking each parent to its children and summary |
 | `requests` | Downloads the PDF |
 | `PdfReader` | Extracts raw text from the PDF |
@@ -328,9 +341,13 @@ from pypdf import PdfReader
 ### Step 2 — Configure Models
 
 ```python
+# Load the secrets (QDRANT_URL, QDRANT_API_KEY, OPENROUTER_API_KEY) from .env
+load_dotenv(".env")
+
 # Initialize Chat Model
 llm = ChatOpenAI(
-    openai_api_key="your-api-key",
+    openai_api_key=os.getenv("OPENROUTER_API_KEY"),
+    # openai-compatible client, but routed to OpenRouter's servers
     openai_api_base="https://openrouter.ai/api/v1",
     model_name="nvidia/nemotron-3-super-120b-a12b:free",
     temperature=0.0
@@ -340,7 +357,7 @@ llm = ChatOpenAI(
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 ```
 
-> **Note:** Replace `"your-api-key"` with the actual key from OpenRouter, or load it with `os.getenv("OPENROUTER_API_KEY")` after setting it as an environment variable, which keeps the actual key out of the file itself. `temperature=0.0` keeps the summaries and final answers consistent. This one LLM connection is reused for both summarizing parents and generating the final answer.
+> **Note:** `load_dotenv(".env")` reads the key–value pairs from the `.env` file in the lab folder, so `os.getenv("OPENROUTER_API_KEY")` returns your real key without it ever appearing in the notebook. `temperature=0.0` keeps the summaries and final answers consistent. This one LLM connection is reused for both summarizing parents and generating the final answer.
 
 ---
 
@@ -349,10 +366,11 @@ embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 ```python
 # Qdrant Cloud holds the child & summary VECTORS (the semantic search index)
 vectorstore = QdrantVectorStore.from_texts(
+    # throwaway seed text: from_texts needs at least one string to create the collection
     texts=["Initialize"], 
     embedding=embeddings, 
-    url="your-endpoint",
-    api_key="your-api-key",
+    url=os.getenv("QDRANT_URL"),
+    api_key=os.getenv("QDRANT_API_KEY"),
     collection_name="multi_vector_collection"
 )
 
@@ -365,8 +383,8 @@ id_key = "doc_id"
 # Use this instead of the cell above ONLY if you already ran this notebook before and the vectors already exist in Qdrant. Comment out the cell above and uncomment this one.
 # vectorstore = QdrantVectorStore.from_existing_collection(
 #     embedding=embeddings,
-#     url="your-endpoint",
-#     api_key="your-api-key",
+#     url=os.getenv("QDRANT_URL"),
+#     api_key=os.getenv("QDRANT_API_KEY"),
 #     collection_name="multi_vector_collection"
 # )
 #
@@ -374,7 +392,7 @@ id_key = "doc_id"
 # id_key = "doc_id"
 ```
 
-This cell connects the pipeline to Qdrant Cloud and sets up the storage that backs the multi-vector retriever. `QdrantVectorStore.from_texts(...)` opens — or creates, if it doesn't already exist — a Qdrant collection named `multi_vector_collection` on the cluster at the given `url`, authenticating with the cluster's `api_key`. The `texts=["Initialize"]` argument seeds the collection with one throwaway vector, purely so the collection is created before the real documents are added later. The `embedding=embeddings` argument tells Qdrant which embedding model produced the vectors being stored. `store` is an `InMemoryByteStore` that will hold the full parent documents, and `id_key = "doc_id"` names the metadata field that will link every vector back to its parent.
+This cell connects the pipeline to Qdrant Cloud and sets up the storage that backs the multi-vector retriever. `QdrantVectorStore.from_texts(...)` opens — or creates, if it doesn't already exist — a Qdrant collection named `multi_vector_collection` on the cluster at `os.getenv("QDRANT_URL")`, authenticating with `os.getenv("QDRANT_API_KEY")`; both values come from the `.env` file loaded in Step 2. The `texts=["Initialize"]` argument seeds the collection with one throwaway vector, purely so the collection is created before the real documents are added later. The `embedding=embeddings` argument tells Qdrant which embedding model produced the vectors being stored. `store` is an `InMemoryByteStore` that will hold the full parent documents, and `id_key = "doc_id"` names the metadata field that will link every vector back to its parent.
 
 The second cell is the alternative for when the collection is **already stored in the cloud** — for example, from a previous run of this notebook. `QdrantVectorStore.from_existing_collection(...)` connects to that existing `multi_vector_collection` using the same `url` and `api_key`, without creating a new one or re-seeding it. It sets up the exact same `store` and `id_key`, so nothing downstream changes. This cell is **commented out by default** because the first-time setup needs to create the collection; only use it if you already ran the notebook before, in which case you comment out the cell above and uncomment this one.
 
@@ -444,10 +462,12 @@ child_docs = []
 
 for doc in parent_docs:
     _id = stable_id(doc.page_content)
+    # the parent carries its own id, which every child below will inherit
     doc.metadata["doc_id"] = _id
 
     child_splits = child_splitter.split_documents([doc])
     for child in child_splits:
+        # stamp the parent id so retrieval can jump from child chunk back to parent
         child.metadata["doc_id"] = _id
 
     child_docs.extend(child_splits)
@@ -564,6 +584,7 @@ retrieval_chain = RunnableParallel(
     {"context": retriever, "question": RunnablePassthrough()}
 )
 
+# assign() reformats context in place while keeping the question key alongside
 generation_chain = (
     RunnablePassthrough.assign(context=(lambda x: format_docs(x["context"])))
     | qa_prompt
@@ -571,6 +592,7 @@ generation_chain = (
     | StrOutputParser()
 )
 
+# .assign attaches the generated answer without dropping the retrieved context
 rag_chain = retrieval_chain.assign(answer=generation_chain)
 ```
 

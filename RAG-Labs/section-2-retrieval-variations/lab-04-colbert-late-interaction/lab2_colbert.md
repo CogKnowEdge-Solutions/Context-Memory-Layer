@@ -287,10 +287,18 @@ Notice the trace says only Source 1 really answered the question. That is exactl
 1. Go to [cloud.qdrant.io](https://cloud.qdrant.io) and sign up, or log in if you already have an account.
 2. Click **Create Cluster** to set up a new cluster. A free tier is available for testing and is enough for this lab.
 3. Choose a cloud provider and region, give the cluster a name, and confirm. Creating it takes a minute or two while the cluster provisions.
-4. Once the cluster is ready, open its **Overview** page and copy the **Cluster URL** — it looks like `https://<cluster-id>.cloud.qdrant.io`. This value replaces the `"your-endpoint"` placeholder in Step 3.
-5. Open the cluster's **Access Control** (or **API Keys**) tab. Copy the existing API key, or create a new one. This value replaces the `"your-api-key"` placeholder in Step 3.
+4. Once the cluster is ready, open its **Overview** page and copy the **Cluster URL** — it looks like `https://<cluster-id>.cloud.qdrant.io`. Save it as `QDRANT_URL` in the `.env` file next to this notebook.
+5. Open the cluster's **Access Control** (or **API Keys**) tab. Copy the existing API key, or create a new one. Save it as `QDRANT_API_KEY` in the same `.env` file.
 
-> **Tip:** Keep the key out of the notebook itself by loading it from an environment variable, e.g. `api_key=os.getenv("QDRANT_API_KEY")`, so it isn't exposed if the file is shared.
+The `.env` file holds all three secrets the notebook needs:
+
+```bash
+QDRANT_URL=https://<cluster-id>.cloud.qdrant.io
+QDRANT_API_KEY=<your Qdrant cluster API key>
+OPENROUTER_API_KEY=<your OpenRouter API key>
+```
+
+> **Tip:** Keep the credentials out of the notebook itself — the code calls `load_dotenv(".env")` and reads everything with `os.getenv(...)`, so nothing sensitive is exposed if the file is shared.
 
 ---
 
@@ -306,12 +314,13 @@ The cell below installs all required Python packages:
 | `langchain-text-splitters` | Splits the document into chunks with `RecursiveCharacterTextSplitter` |
 | `pypdf` | **PDF text extraction** |
 | `requests` | **Downloads the PDF** |
+| `python-dotenv` | Loads the secrets from the `.env` file into the notebook |
 | `ipython` | Provides `IPython.display` (`Markdown`, `display`) for rendering answers in the notebook |
 
 > **Note:** Run this cell first — it only needs to be run once per session.
 
 ```python
-!pip install -qU qdrant-client fastembed langchain-openai langchain-text-splitters pypdf requests ipython
+!pip install -qU qdrant-client fastembed langchain-openai langchain-text-splitters pypdf requests python-dotenv ipython
 ```
 
 ---
@@ -324,9 +333,11 @@ The cell below installs all required Python packages:
 
 ```python
 import hashlib
+import os
 import uuid
 
 import requests
+from dotenv import load_dotenv
 from fastembed import LateInteractionTextEmbedding
 from IPython.display import Markdown, display
 from langchain_core.output_parsers import StrOutputParser
@@ -339,6 +350,8 @@ from qdrant_client import QdrantClient, models
 
 | Import | Purpose |
 |---|---|
+| `os` | Reads the secrets loaded from `.env` via `os.getenv(...)` |
+| `load_dotenv` | Loads the `.env` file sitting next to the notebook into the environment |
 | `uuid` | Generates deterministic chunk IDs with `uuid5` |
 | `hashlib` | Hashing helpers for stable IDs |
 | `requests` | Downloads the PDF |
@@ -357,9 +370,13 @@ from qdrant_client import QdrantClient, models
 ### Step 2 — Configure Models
 
 ```python
+# Load the secrets (QDRANT_URL, QDRANT_API_KEY, OPENROUTER_API_KEY) from .env
+load_dotenv(".env")
+
 # Initialize Chat Model
 llm = ChatOpenAI(
-    openai_api_key="your-api-key",
+    openai_api_key=os.getenv("OPENROUTER_API_KEY"),
+    # openai-compatible client, but routed to OpenRouter's servers
     openai_api_base="https://openrouter.ai/api/v1",
     model_name="nvidia/nemotron-3-super-120b-a12b:free",
     temperature=0.0
@@ -371,7 +388,7 @@ llm = ChatOpenAI(
 colbert = LateInteractionTextEmbedding("colbert-ir/colbertv2.0")
 ```
 
-> **Note:** Replace `"your-api-key"` with the actual key from OpenRouter, or load it with `os.getenv("OPENROUTER_API_KEY")` after setting it as an environment variable, which keeps the actual key out of the file itself. `temperature=0.0` keeps the final answers consistent. `LateInteractionTextEmbedding` downloads the `colbert-ir/colbertv2.0` model locally the first time it runs — no API key is needed for it.
+> **Note:** `load_dotenv(".env")` reads the key–value pairs from the `.env` file in the lab folder, so `os.getenv("OPENROUTER_API_KEY")` returns your real key without it ever appearing in the notebook. `temperature=0.0` keeps the final answers consistent. `LateInteractionTextEmbedding` downloads the `colbert-ir/colbertv2.0` model locally the first time it runs — no API key is needed for it.
 
 ---
 
@@ -379,8 +396,8 @@ colbert = LateInteractionTextEmbedding("colbert-ir/colbertv2.0")
 
 ```python
 client = QdrantClient(
-    url="your-endpoint", 
-    api_key="your-api-key",
+    url=os.getenv("QDRANT_URL"), 
+    api_key=os.getenv("QDRANT_API_KEY"),
     timeout=300,
 )
 COLLECTION_NAME = "colbert_late_interaction"
@@ -405,15 +422,15 @@ client.recreate_collection(
 # made the DB (collection) / uploaded data, then run it instead of Cell A
 # (Cell A wipes and recreates the collection, so only use it the first time).
 # client = QdrantClient(
-#     url="your-endpoint", 
-#     api_key="your-api-key",
+#     url=os.getenv("QDRANT_URL"), 
+#     api_key=os.getenv("QDRANT_API_KEY"),
 #     timeout=300,
 # )
 # COLLECTION_NAME = "colbert_late_interaction"
 # No recreate_collection here — the collection already exists.
 ```
 
-This is where the special multivector collection is born. `QdrantClient(...)` connects to your Qdrant Cloud cluster using the `url` and `api_key`. Then `recreate_collection` builds a collection called `colbert_late_interaction`. The key part is `multivector_config`: because ColBERT produces one vector per token, Qdrant must allow each point to hold a whole matrix. `size=128` matches ColBERT's vector size, `COSINE` is the per-token similarity measure, and `comparator=MAX_SIM` tells Qdrant to score whole chunks using MaxSim. `recreate_collection` wipes any old data with the same name and builds it fresh, so it is only meant for the first run.
+This is where the special multivector collection is born. `QdrantClient(...)` connects to your Qdrant Cloud cluster using `os.getenv("QDRANT_URL")` and `os.getenv("QDRANT_API_KEY")`, both read from the `.env` file loaded in Step 2. Then `recreate_collection` builds a collection called `colbert_late_interaction`. The key part is `multivector_config`: because ColBERT produces one vector per token, Qdrant must allow each point to hold a whole matrix. `size=128` matches ColBERT's vector size, `COSINE` is the per-token similarity measure, and `comparator=MAX_SIM` tells Qdrant to score whole chunks using MaxSim. `recreate_collection` wipes any old data with the same name and builds it fresh, so it is only meant for the first run.
 
 The second cell is for when the collection **already exists in the cloud** — for example, from a previous run. It connects to the same cluster and collection name, but never wipes or recreates anything, so your data is preserved. This cell is **commented out by default**; only use it if you already ran the notebook before, in which case you comment out the cell above and uncomment this one.
 
@@ -494,8 +511,10 @@ This is the heart of ColBERT. `colbert.embed(chunks)` processes every chunk and,
 ### Step 8 — Ingest Matrices into Qdrant
 
 ```python
+# one qdrant point per chunk: stable id + token matrix + raw text payload
 points = [
     models.PointStruct(
+        # stable id means re-running this overwrites a chunk instead of duplicating it
         id=stable_id(chunk),
         vector=embedding.tolist(),
         payload={"text": chunk},
@@ -518,6 +537,7 @@ Each chunk is wrapped in a `PointStruct`: its stable ID, its full token matrix a
 ```python
 def retrieve(query, top_k=3):
     """Embed the query as a token matrix and run a MaxSim (late interaction) search."""
+    # query_embed yields a generator; [0] takes the single query token matrix
     query_matrix = list(colbert.query_embed(query))[0]
     hits = client.query_points(
         collection_name=COLLECTION_NAME,

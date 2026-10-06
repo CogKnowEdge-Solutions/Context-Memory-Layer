@@ -2,3 +2,4 @@ pageindex
 langchain-openai
 langchain-core
 pymupdf
+python-dotenv

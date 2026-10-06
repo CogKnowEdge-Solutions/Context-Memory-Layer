@@ -116,7 +116,7 @@ followed by a short report saying which tables were retrieved, which page each c
 | **Page text** | PyMuPDF — pulls raw text from the PDF pages |
 | **LLM** | `nvidia/nemotron-3-super-120b-a12b:free` via OpenRouter — picks sections, writes answers, explains sources |
 | **LLM client** | LangChain (`langchain-openai`, `langchain-core`) — `ChatOpenAI` pointed at OpenRouter |
-| **Keys** | Environment variables read with `os.getenv`, with an `input()` fallback |
+| **Keys** | Loaded from the `.env` file next to the notebook with `load_dotenv` / `os.getenv`, with an `input()` fallback |
 
 ---
 
@@ -151,9 +151,10 @@ followed by a short report saying which tables were retrieved, which page each c
 | `pymupdf` | Extracts raw text from PDF pages |
 | `langchain-openai` | `ChatOpenAI`, an OpenAI-compatible client we point at OpenRouter |
 | `langchain-core` | The `HumanMessage` type |
+| `python-dotenv` | Loads the secrets from the `.env` file into the notebook |
 
 ```python
-!pip install -q pageindex pymupdf langchain-core langchain-openai
+!pip install -q pageindex pymupdf langchain-core langchain-openai python-dotenv
 ```
 
 ## Import Libraries
@@ -165,6 +166,7 @@ import re
 import time
 
 import pymupdf
+from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
 from pageindex import PageIndexClient, utils
@@ -172,9 +174,19 @@ from pageindex import PageIndexClient, utils
 
 ## Add Your Keys
 
-Each cell reads the key from an environment variable if it exists and otherwise asks you to paste it.
+This notebook reads its keys from the `.env` file sitting next to it. Put them in a file named `.env` in this folder:
+
+```
+OPENROUTER_API_KEY=<your OpenRouter API key>
+PAGEINDEX_API_KEY=<your PageIndex API key>
+```
+
+Each cell below first loads that file, then reads the key from it, and only asks you to paste it if it isn't there.
 
 ```python
+# Load the secrets from the .env file next to this notebook
+load_dotenv(".env")
+
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 if not OPENROUTER_API_KEY:
     OPENROUTER_API_KEY = input("Enter your OpenRouter API key (get one at https://openrouter.ai): ").strip()
@@ -262,6 +274,7 @@ def parse_json(reply):
     try:
         return json.loads(reply)
     except json.JSONDecodeError:
+        # DOTALL lets .* cross lines so a pretty-printed JSON object is still found
         match = re.search(r"\{.*\}", reply, re.DOTALL)
         return json.loads(match.group()) if match else {"thinking": "", "node_list": []}
 
@@ -287,6 +300,7 @@ Next, turn the chosen `node_id`s into page text. `node_map` looks up each node's
 node_map = utils.create_node_mapping(tree, include_page_ranges=True)
 
 doc = pymupdf.open(PDF_PATH)
+# pymupdf pages are 0-indexed but PageIndex page numbers are 1-indexed
 page_texts = {i + 1: doc.load_page(i).get_text() for i in range(len(doc))}
 doc.close()
 
@@ -296,6 +310,7 @@ def build_context(node_ids, max_pages=3):
         if nid in node_map:
             info = node_map[nid]
             span = range(info["start_index"], info["end_index"] + 1)
+            # cap at max_pages per node and skip pages an earlier node already added
             pages += [p for p in list(span)[:max_pages] if p not in pages]
     context = "\n\n".join(f"--- Page {p} ---\n{page_texts[p]}" for p in pages)
     return context, pages
@@ -360,6 +375,7 @@ def retrieve(query, top_k=5):
         return []
 
     nodes = []
+    # poll every 3s, up to 60 tries (~3 minutes), while PageIndex runs the search
     for _ in range(60):
         try:
             result = pi_client.get_retrieval(retrieval_id)

@@ -384,9 +384,11 @@ import logging
 import os
 import warnings
 
+# read by the hugging face libs to hide their download progress bars
 os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
 warnings.filterwarnings("ignore")
 
+# downgrade the four chattiest loggers so their messages never reach the notebook
 for noisy in ("transformers", "sentence_transformers", "huggingface_hub", "httpx"):
     logging.getLogger(noisy).setLevel(logging.ERROR)
 ```
@@ -422,9 +424,11 @@ from dotenv import load_dotenv
 This cell authenticates the LLM and loads the embedding model once, so every later step reuses the same objects instead of reloading them.
 
 ```python
+# pull the key-value pairs from the .env file sitting next to the notebook
 load_dotenv(".env")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
+# fall back to a manual paste so the lab still works without a .env file
 if not OPENROUTER_API_KEY:
     OPENROUTER_API_KEY = input("Paste your OpenRouter API key: ").strip()
 
@@ -451,6 +455,7 @@ Then the embedding model. It runs on your own machine, so it costs nothing and n
 ```python
 embedding_model = HuggingFaceEmbeddings(
     model_name="all-MiniLM-L6-v2",
+    # unit-length vectors make the inner product the same as cosine similarity
     encode_kwargs={"normalize_embeddings": True},
 )
 
@@ -676,8 +681,10 @@ Step 4 gave us three chunks that all looked fine. This step finds out what "not 
 OFF_TOPIC_QUESTION = "Who won the 1998 FIFA World Cup?"
 
 off_topic_matches = vector_store.similarity_search_with_score(OFF_TOPIC_QUESTION, k=1)
+# [0][1] pulls the score out of the single best (chunk, score) pair
 off_topic_score = off_topic_matches[0][1]
 
+# a large gap between the two scores shows retrieval separates relevant from irrelevant
 print(f"off-topic best match: {off_topic_score:.3f}")
 print(f"on-topic best match:  {matches[0][1]:.3f}")
 ```

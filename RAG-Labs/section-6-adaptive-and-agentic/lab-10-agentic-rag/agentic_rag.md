@@ -260,13 +260,22 @@ The document does not cover it.
 2. Open the **Keys** section of the dashboard.
 3. Click **Create Key**, name it, and confirm.
 4. **Copy the key immediately** — it is shown in full only once.
-5. Store it as an environment variable (`OPENROUTER_API_KEY`) rather than pasting it into the notebook. If it isn't set, the lab asks for it when you run it.
+5. Save it in the `.env` file next to this notebook as `OPENROUTER_API_KEY` rather than pasting it into the notebook. If it isn't set, the lab asks for it when you run it.
 
 ## Getting Neo4j Aura Credentials (for Part 2)
 
 1. Go to [console.neo4j.io](https://console.neo4j.io) and create a free **AuraDB Free** instance.
 2. Download or copy the connection details shown once at creation: the **URI** (starts with `neo4j+s://`), the **username** and the **password**.
-3. Paste them into the credentials cell in Part 2 (`NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`), or keep them in a `.env` file next to the notebook.
+3. Put them in the same `.env` file next to the notebook (`NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`), and the Part 2 cells pick them up automatically with `os.getenv(...)`.
+
+The `.env` file should look like this:
+
+```bash
+OPENROUTER_API_KEY=<your OpenRouter API key>
+NEO4J_URI=neo4j+s://xxxxxxxx.databases.neo4j.io
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=<your instance password>
+```
 
 ---
 
@@ -285,11 +294,12 @@ The cell below installs every package the lab needs:
 | `scikit-learn` | Provides `cosine_similarity` |
 | `neo4j` | Python driver for the Neo4j database (Part 2) |
 | `yfiles-jupyter-graphs` | Draws the Neo4j graph inside the notebook (Part 2) |
+| `python-dotenv` | Loads the secrets from the `.env` file into the notebook |
 
 > **Note:** Run this cell first — it only needs to be run once per session.
 
 ```python
-!pip install -qU langgraph langchain-openai langchain-huggingface langchain-text-splitters pypdf requests scikit-learn neo4j yfiles-jupyter-graphs
+!pip install -qU langgraph langchain-openai langchain-huggingface langchain-text-splitters pypdf requests scikit-learn neo4j yfiles-jupyter-graphs python-dotenv
 ```
 
 ---
@@ -307,6 +317,7 @@ import os
 import json
 import requests
 from typing import TypedDict, List
+from dotenv import load_dotenv
 from pypdf import PdfReader
 from neo4j import GraphDatabase
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -315,6 +326,9 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from sklearn.metrics.pairwise import cosine_similarity
 from langgraph.graph import StateGraph, START, END
 from IPython.display import Image, display
+
+# Load the secrets (OPENROUTER_API_KEY, NEO4J_*) from the .env file next to this notebook
+load_dotenv(".env")
 ```
 
 All the imports for both parts sit here, so later steps only contain the new ideas.
@@ -532,6 +546,7 @@ builder.add_node("generate", generate_node)
 
 builder.add_edge(START, "retrieve")
 builder.add_edge("retrieve", "grade")
+# keys are the labels route_after_grading returns, values are the nodes they jump to
 builder.add_conditional_edges("grade", route_after_grading, {
     "generate": "generate",
     "rewrite": "rewrite",
@@ -587,16 +602,17 @@ The paper says nothing about liquid nitrogen, so the chunks cannot help. The gra
 ### Step 13 — Connect to Neo4j
 
 ```python
-NEO4J_URI = "YOUR-NEO4J_URI"
-NEO4J_USERNAME = "YOUR-NEO4J_USER"
-NEO4J_PASSWORD = "YOUR-NEO4J_PASSWORD"
+# Values come from the .env file loaded in Step 1
+NEO4J_URI = os.getenv("NEO4J_URI")
+NEO4J_USERNAME = os.getenv("NEO4J_USERNAME")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
 
 driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
 driver.verify_connectivity()
 print("Connected to Neo4j successfully!")
 ```
 
-Replace the three placeholders with the values from your Aura instance. `verify_connectivity()` fails right here if they are wrong, instead of later in the middle of the agent.
+`NEO4J_URI`, `NEO4J_USERNAME` and `NEO4J_PASSWORD` come from the `.env` file loaded in Step 1. `verify_connectivity()` fails right here if they are wrong, instead of later in the middle of the agent.
 
 ---
 
@@ -650,6 +666,7 @@ print("Graph written into Neo4j.")
 
 ```python
 with driver.session() as session:
+    # 384 must match the embedding model's output size (all-MiniLM-L6-v2)
     session.run("""
     CREATE VECTOR INDEX concept_embeddings IF NOT EXISTS
     FOR (c:Concept) ON (c.embedding)
@@ -672,6 +689,7 @@ print(f"Neo4j now holds {len(names)} concepts, {n_rels} relationships, and a vec
 ### Step 15 — The Graph Tool
 
 ```python
+# the vector index seeds 2 concepts, then -[r]- follows their links in either direction
 CYPHER_GRAPH = """
 CALL db.index.vector.queryNodes('concept_embeddings', 2, $vector)
 YIELD node AS seed, score
@@ -763,6 +781,7 @@ builder.add_node("generate", generate_node)
 builder.add_edge(START, "router")
 builder.add_edge("router", "retrieve")
 builder.add_edge("retrieve", "grade")
+# same grading function as Part 1, but its "rewrite" label now targets the fallback node
 builder.add_conditional_edges("grade", route_after_grading, {
     "generate": "generate",
     "rewrite": "fallback",
@@ -794,6 +813,7 @@ questions = [
 
 for q in questions:
     print("=" * 70)
+    # current_tool must be present in the state; the router overwrites it immediately
     result = routed_agent.invoke(new_state(q, current_tool=""))
     print(f"Tool at the end: {result['current_tool']} | Retries used: {result['retry_count']}")
     print(result["final_answer"])

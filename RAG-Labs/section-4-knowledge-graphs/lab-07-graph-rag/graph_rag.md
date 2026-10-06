@@ -227,7 +227,16 @@ MERGE (s)-[:RELIES_ON]->(t)
 3. Aura shows a generated password **once**: download or copy it immediately (if missed, reset it from the instance settings).
 4. When provisioning finishes (about a minute), the **Connection URI** is on the instance's overview page. It looks like `neo4j+s://xxxxxxxx.databases.neo4j.io`.
 5. The **username** is `neo4j` by default.
-6. Keep all three values out of the notebook file if you share it. Store them as environment variables and read them with `os.getenv`.
+6. Save the OpenRouter key and the three Neo4j values in the `.env` file next to this notebook, rather than pasting them into the notebook itself:
+
+   ```bash
+   OPENROUTER_API_KEY=<your OpenRouter API key>
+   NEO4J_URI=neo4j+s://xxxxxxxx.databases.neo4j.io
+   NEO4J_USERNAME=neo4j
+   NEO4J_PASSWORD=<your instance password>
+   ```
+
+   The cells read them with `load_dotenv(".env")` + `os.getenv(...)`, so nothing sensitive ends up in the shared file.
 
 ---
 
@@ -240,11 +249,12 @@ MERGE (s)-[:RELIES_ON]->(t)
 | `requests` | **File download** and calls to the LLM API |
 | `PyPDF2` | **PDF text extraction** |
 | `yfiles-jupyter-graphs-for-neo4j` | **Graph visualization** widget (Part 2) |
+| `python-dotenv` | Loads the secrets from the `.env` file into the notebook |
 
 > **Note:** Run this cell first. It only needs to run once per session.
 
 ```python
-!pip install networkx neo4j requests PyPDF2 yfiles-jupyter-graphs-for-neo4j
+!pip install networkx neo4j requests PyPDF2 yfiles-jupyter-graphs-for-neo4j python-dotenv
 ```
 
 ## Import Libraries
@@ -255,12 +265,17 @@ import json
 import requests
 import PyPDF2
 import networkx as nx
+from dotenv import load_dotenv
 from neo4j import GraphDatabase
+
+# Load the secrets (OPENROUTER_API_KEY, NEO4J_*) from the .env file next to this notebook
+load_dotenv(".env")
 ```
 
 | Import | Purpose |
 |---|---|
-| `os`, `json` | File paths, and parsing the LLM's JSON reply |
+| `os`, `json` | File paths, reading secrets with `os.getenv(...)`, and parsing the LLM's JSON reply |
+| `load_dotenv` | Loads the `.env` file into the environment |
 | `requests` | Downloads the PDF and calls the LLM API |
 | `PyPDF2` | Reads the PDF |
 | `networkx` | The in-memory graph (Part 1) |
@@ -293,10 +308,11 @@ def ask_llm(prompt):
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}"}
     resp = requests.post(OPENROUTER_URL, headers=headers, json=payload)
     resp.raise_for_status()
+    # the reply text sits on the usual OpenAI path: choices[0] -> message -> content
     return resp.json()["choices"][0]["message"]["content"].strip()
 ```
 
-The key is read from the environment, or typed in when the notebook asks. `ask_llm` is written once here and reused for extraction (Step 3) and for answering (Steps 6 and 11). `temperature=0.0` keeps replies consistent, which matters when the reply must parse as exact JSON.
+The key is read from the `.env` file (loaded in the imports step), falling back to a prompt if it isn't there. `ask_llm` is written once here and reused for extraction (Step 3) and for answering (Steps 6 and 11). `temperature=0.0` keeps replies consistent, which matters when the reply must parse as exact JSON.
 
 ---
 
@@ -550,16 +566,17 @@ New idea: write the *same* `extracted_relationships` into Neo4j and read them ba
 ### Step 8 — Connect to Neo4j
 
 ```python
-NEO4J_URI = "YOUR-NEO4J_URI"
-NEO4J_USER = "YOUR-NEO4J_USER"
-NEO4J_PASSWORD = "YOUR-NEO4J_PASSWORD"
+# Values come from the .env file loaded in the imports step
+NEO4J_URI = os.getenv("NEO4J_URI")
+NEO4J_USER = os.getenv("NEO4J_USERNAME")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
 
 driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 driver.verify_connectivity()
 print("Success: Connected to Neo4j Database!")
 ```
 
-> **Note:** Replace the three placeholders with the values from your Aura instance, or load them with `os.getenv("NEO4J_URI")` and so on to keep them out of the file. `verify_connectivity()` checks the URI, username, and password immediately, so a connection problem shows up here and not three steps later.
+> **Note:** `NEO4J_URI`, `NEO4J_USERNAME` and `NEO4J_PASSWORD` are read from the `.env` file — make sure they match the Aura instance from the credentials section above. `verify_connectivity()` checks the URI, username, and password immediately, so a connection problem shows up here and not several steps later.
 
 ---
 
@@ -598,6 +615,7 @@ Check that the data really arrived by counting what is stored:
 
 ```python
 with driver.session() as session:
+    # .single() returns the one row; ["c"] reads the column aliased AS c
     n_nodes = session.run("MATCH (n:Concept) RETURN count(n) AS c").single()["c"]
     n_edges = session.run("MATCH ()-[r]->() RETURN count(r) AS c").single()["c"]
 print(f"Neo4j now holds {n_nodes} nodes and {n_edges} relationships.")
