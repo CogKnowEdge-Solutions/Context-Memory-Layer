@@ -209,7 +209,7 @@ Notice the explainability trace references a specific table from the source docu
 | **PDF Text Extraction** | `pypdf` — pulls raw text out of every page of the PDF |
 | **File Downloading** | `requests` — grabs the PDF from a link |
 | **Text Splitting** | `langchain-text-splitters` (`RecursiveCharacterTextSplitter`) — used twice, once for large parent chunks and once for small child chunks |
-| **Summarization** | LLM (`openai/gpt-oss-20b:free`), via an LCEL chain built with `langchain-core` |
+| **Summarization** | LLM (`nvidia/nemotron-3-super-120b-a12b:free`), via an LCEL chain built with `langchain-core` |
 | **Embedding Model** | `sentence-transformers` / `all-MiniLM-L6-v2`, via `langchain-huggingface` — runs locally |
 | **Vector Store** | `Qdrant` Cloud, via `langchain-qdrant` — a hosted vector database holding only the children and summaries, accessed with a cluster `url` and `api_key` |
 | **Document Store** | `InMemoryByteStore` — holds the full parent documents, keyed by ID |
@@ -277,7 +277,7 @@ The cell below installs all required Python packages:
 > **Note:** Run this cell first — it only needs to be run once per session.
 
 ```python
-!pip install -qU langchain langchain-classic langchain-community langchain-openai langchain-huggingface langchain-qdrant qdrant-client pypdf tiktoken flask numpy scipy scikit-learn sentence-transformers ipython
+!pip install -qU langchain langchain-classic langchain-community langchain-openai langchain-huggingface langchain-qdrant qdrant-client pypdf tiktoken flask numpy scipy scikit-learn sentence-transformers "torch>=2.5" ipython
 ```
 
 ---
@@ -332,7 +332,7 @@ from pypdf import PdfReader
 llm = ChatOpenAI(
     openai_api_key="your-api-key",
     openai_api_base="https://openrouter.ai/api/v1",
-    model_name="openai/gpt-oss-20b:free",
+    model_name="nvidia/nemotron-3-super-120b-a12b:free",
     temperature=0.0
 )
 

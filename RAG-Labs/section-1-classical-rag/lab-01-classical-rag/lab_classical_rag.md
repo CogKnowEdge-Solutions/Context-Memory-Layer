@@ -155,7 +155,7 @@ The setup cells print what they loaded as each piece comes up:
 
 ```
 API key loaded.
-LLM ready: nvidia/nemotron-3-ultra-550b-a55b:free
+LLM ready: nvidia/nemotron-3-super-120b-a12b:free
 Embedding model ready: 384 numbers per chunk
 ```
 
@@ -272,7 +272,7 @@ on-topic best match:  0.771
 | **Chunking** | `langchain-text-splitters` (`RecursiveCharacterTextSplitter`) | 1.1.3 |
 | **Embedding Model** | `langchain-huggingface` + `sentence-transformers`, running `all-MiniLM-L6-v2` locally — 384 dimensions | 1.2.2 / 6.1.0 |
 | **Vector Index** | `faiss-cpu` via `langchain-community` (`FAISS`, `IndexFlatIP`) — exact inner-product search | 1.15.1 |
-| **LLM (Answering)** | `nvidia/nemotron-3-ultra-550b-a55b:free` via `langchain-openai`, pointed at OpenRouter — a free-tier model, so a full run costs nothing | 1.6.7 |
+| **LLM (Answering)** | `nvidia/nemotron-3-super-120b-a12b:free` via `langchain-openai`, pointed at OpenRouter — a free-tier model, so a full run costs nothing | 1.6.7 |
 | **Secrets** | `python-dotenv` — reads `OPENROUTER_API_KEY` from a `.env` file | 1.2.4 |
 
 Versions above are the ones the Section 9 command installs in a clean virtual environment, and the run in Section 5 was verified against them. They are deliberately **not** pinned in the install line, so this lab shares one environment with the rest of the module instead of forcing a downgrade on it.
@@ -346,7 +346,7 @@ Nothing in that list reads the document. `pathlib` ships with Python itself, so 
 > **Note:** Run this cell first — it only needs to run once per session. Expect it to take a few minutes, because `sentence-transformers` pulls in PyTorch.
 
 ```python
-!pip install -qU langchain langchain-community langchain-openai langchain-huggingface sentence-transformers langchain-text-splitters faiss-cpu python-dotenv
+!pip install -qU langchain langchain-community langchain-openai langchain-huggingface sentence-transformers "torch>=2.5" langchain-text-splitters faiss-cpu python-dotenv
 ```
 
 The `-q` flag means "quiet" (no long progress log) and `-U` means "upgrade if an older version is already installed". Versions are verified against the run in Section 5 rather than pinned, so this lab shares one environment with the rest of the module without fighting over pins.
@@ -437,7 +437,7 @@ Now build the LLM. `base_url` is what sends the request to OpenRouter rather tha
 
 ```python
 llm = ChatOpenAI(
-    model="nvidia/nemotron-3-ultra-550b-a55b:free",  # a free model on OpenRouter
+    model="nvidia/nemotron-3-super-120b-a12b:free",  # a free model on OpenRouter
     base_url="https://openrouter.ai/api/v1",
     api_key=OPENROUTER_API_KEY,
     temperature=0,  # 0 = as repeatable as the model allows

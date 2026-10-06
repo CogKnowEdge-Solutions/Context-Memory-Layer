@@ -1,6 +1,6 @@
 # RAG Labs -- From First Principles to Production Patterns
 
-This module teaches Retrieval-Augmented Generation (RAG) from first principles through fifteen hands-on labs, organized into six sections. Each section tackles a different family of RAG techniques -- from the canonical RAG pipeline, through chunking, fusion, and late interaction, OCR and multimodal documents, and knowledge graphs, all the way to vectorless and agentic retrieval. No single lab assumes you've done all the others, but each section builds on concepts introduced earlier in its own sequence.
+This module teaches Retrieval-Augmented Generation (RAG) from first principles through ten hands-on labs, organized into six sections. Each section tackles a different family of RAG techniques -- from the canonical RAG pipeline, through chunking, fusion, and late interaction, OCR and multimodal documents, and knowledge graphs, all the way to vectorless and agentic retrieval. No single lab assumes you've done all the others, but each section builds on concepts introduced earlier in its own sequence.
 
 Most labs download a PDF automatically at runtime, so you don't need to supply your own documents to get started. A few labs require a free cloud account (Qdrant, Neo4j Aura, or MongoDB Atlas) -- those steps are covered in Section 8. This README first explains what RAG is and how it works, then walks through the environment setup, and finally lays out how the labs are organized. Read it fully before opening Lab 1.
 
@@ -180,8 +180,8 @@ The practical guidance: RAG is a strong default when your LLM needs to answer qu
 
 Different labs require different external services, so set up only what you actually plan to run. There are only two credential families to worry about:
 
-- **OpenRouter** — the LLM used by every lab in this module. One key covers all fifteen labs, and each lab uses a `:free` model, so running them costs nothing.
-- **A managed service** — needed only by specific labs: Neo4j Aura (Labs 9, 10, 15), Qdrant Cloud (Labs 3, 4), or PageIndex (Labs 11, 12, 13).
+- **OpenRouter** — the LLM used by every lab in this module. One key covers all ten labs, and each lab uses a `:free` model, so running them costs nothing.
+- **A managed service** — needed only by specific labs: Neo4j Aura (Labs 7, 8, 10), Qdrant Cloud (Labs 3, 4), or PageIndex (Lab 9).
 
 ### 8.1 OpenRouter API Key — needed by every lab
 
@@ -199,7 +199,7 @@ OPENROUTER_API_KEY=sk-or-v1-...
 
 Each lab reads `.env` from its own directory, so a key in `RAG-Labs/` root is not picked up. Every lab's `.gitignore` already excludes `.env`, so your key will not be committed by accident.
 
-### 8.2 Neo4j Aura Free — Labs 9, 10, 15
+### 8.2 Neo4j Aura Free — Labs 7, 8, 10
 
 Neo4j Aura gives you a free cloud graph database with a browser UI you can use to see the graph your lab builds.
 
@@ -250,7 +250,7 @@ QDRANT_API_KEY=...
 - Name the key after its lab (e.g. `lab-04`) so you can revoke it independently later.
 - Both labs **recreate their collections on every run**, which means anything already in that cluster for those collection names is deleted. Use a dedicated cluster or dedicated collection names if you share one across labs.
 
-### 8.4 PageIndex API Key — Labs 11, 12, 13
+### 8.4 PageIndex API Key — Lab 9
 
 PageIndex parses a document into a tree structure, which is what the vectorless labs retrieve over instead of embeddings.
 
@@ -263,7 +263,7 @@ PageIndex parses a document into a tree structure, which is what the vectorless 
 PAGEINDEX_API_KEY=...
 ```
 
-Labs 11, 12 and 13 also need the OpenRouter key from 8.1, so their `.env` files contain both lines.
+Lab 9 also needs the OpenRouter key from 8.1, so its `.env` file contains both lines.
 
 ### 8.5 What each lab needs
 
@@ -273,17 +273,12 @@ Labs 11, 12 and 13 also need the OpenRouter key from 8.1, so their `.env` files 
 | 2. Hybrid RAG | yes | | | |
 | 3. Parent-Child Multi-Vector | yes | | yes | |
 | 4. ColBERT Late Interaction | yes | | yes | |
-| 5. Structured OCR | yes | | | |
-| 6. OCR Scanned PDF | yes | | | |
-| 7. LLM Wiki | yes | | | |
-| 8. Graph RAG (NetworkX) | yes | | | |
-| 9. Graph RAG (Neo4j) | yes | yes | | |
-| 10. Graph + Vector Hybrid | yes | yes | | |
-| 11. Vectorless Reasoning | yes | | | yes |
-| 12. Vectorless Multi-Hop | yes | | | yes |
-| 13. Vectorless Table Retrieval | yes | | | yes |
-| 14. Agentic Self-Correction | yes | | | |
-| 15. Agentic Hybrid Routing | yes | yes | | |
+| 5. OCR + RAG (scanned documents) | yes | | | |
+| 6. LLM Wiki | yes | | | |
+| 7. Graph RAG (NetworkX to Neo4j) | yes | yes | | |
+| 8. Graph + Vector Hybrid | yes | yes | | |
+| 9. Vectorless RAG (reasoning, multi-hop, tables) | yes | | | yes |
+| 10. Agentic RAG (self-correction + routing) | yes | yes | | |
 
 ### 8.6 Troubleshooting
 
@@ -309,15 +304,15 @@ Most embedding models (Sentence Transformers, ColBERT) and OCR libraries (RapidO
 
 ### 9.1 Lab Sequence
 
-The fifteen labs are organized into six sections. Within each section, labs progress from foundational to advanced.
+The ten labs are organized into six sections, followed by a capstone. Within each section, labs progress from foundational to advanced.
 
 ```mermaid
 flowchart LR
     C["Classical-RAG<br/>Lab 1<br/>Load, chunk, embed, retrieve, generate"] --> R["Retrieval-Variations<br/>Labs 2-4<br/>Chunking, fusion &amp; late interaction"]
-    R --> S["Structure-and-Multimodal<br/>Labs 5-7<br/>OCR, scanned PDFs &amp; knowledge bases"]
-    S --> K["Knowledge-Graphs<br/>Labs 8-10<br/>NetworkX, Neo4j &amp; vector+graph"]
-    K --> VL["Vectorless<br/>Labs 11-13<br/>Tree-based reasoning"]
-    VL --> A["Adaptive-and-Agentic<br/>Labs 14-15<br/>Self-correction &amp; routing"]
+    R --> S["Structure-and-Multimodal<br/>Labs 5-6<br/>OCR, scanned documents &amp; knowledge bases"]
+    S --> K["Knowledge-Graphs<br/>Labs 7-8<br/>NetworkX, Neo4j &amp; vector+graph"]
+    K --> VL["Vectorless<br/>Lab 9<br/>Tree-based reasoning"]
+    VL --> A["Adaptive-and-Agentic<br/>Lab 10<br/>Self-correction &amp; routing"]
 
     classDef defaultStyle fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
     class C,R,S,K,VL,A defaultStyle
@@ -329,17 +324,12 @@ flowchart LR
 | 2 | Retrieval-Variations | HybridRAG | Hybrid RAG (Dense + Sparse) with Semantic Chunking | Beginner | Dense vs. sparse retrieval, reciprocal rerank fusion, semantic chunking, BM25, FAISS |
 | 3 | Retrieval-Variations | MultiVector Lab 1 | Parent-Child & Summary-Based Multi-Vector RAG | Intermediate | Parent/child chunk architecture, LLM-generated summaries, Qdrant multi-collection indexing |
 | 4 | Retrieval-Variations | MultiVector Lab 2 | ColBERT & Late Interaction RAG | Advanced | Token-level embeddings, MaxSim scoring, late interaction search, Qdrant multivector collections |
-| 5 | Structure-and-Multimodal | OCR-RAG Lab 1 | Structured OCR + RAG Chatbot with RapidOCR and Gemini | Beginner | Layout-preserving OCR, document-level embeddings, source-tagged answers |
-| 6 | Structure-and-Multimodal | OCR-RAG Lab 2 | Automated Document Q&A with OCR + RAG (OpenRouter) | Intermediate | Scanned PDF chunking, FAISS vector database, multi-chunk retrieval with explainability |
-| 7 | Structure-and-Multimodal | LLM-Wiki | Automated Ingestion: Structured Knowledge Base (LLM Wiki + OKF) | Advanced | LLM-driven PDF-to-file ingestion, index-based retrieval, structured knowledge base building |
-| 8 | Knowledge-Graphs | Graph-RAG Lab 1 | End-to-End Generalized Graph RAG | Intermediate | LLM-based entity extraction, NetworkX knowledge graphs, graph traversal, explainability traces |
-| 9 | Knowledge-Graphs | Graph-RAG Lab 2 | End-to-End Graph RAG with Neo4j | Intermediate | Neo4j database, Cypher queries, persistent knowledge graphs, visual graph exploration |
-| 10 | Knowledge-Graphs | Graph-and-Vector | Hybrid RAG: Vector Search + Graph Traversal on Neo4j | Advanced | Vector-indexed graph nodes, dual-mode retrieval (vector + Cypher), combined scoring |
-| 11 | Vectorless | Vectorless-RAG Lab 1 | Vectorless RAG: Reasoning-Based Retrieval without Embeddings | Intermediate | PageIndex tree-based parsing, LLM-driven section selection, no-vector retrieval |
-| 12 | Vectorless | Vectorless-RAG Lab 2 | Vectorless RAG: Multi-Hop Retrieval with Explainability | Advanced | Multi-section traversal, cumulative fact gathering, explainability tracking per section |
-| 13 | Vectorless | Vectorless-RAG Lab 3 | Vectorless RAG: Structured Table Retrieval with Explainability | Intermediate | Table-preserving PageIndex parsing, per-figure citation tags, explainability checks |
-| 14 | Adaptive-and-Agentic | Agentic-RAG Lab 1 | Agentic RAG with Self-Correction | Advanced | LangGraph agent loops, retrieval grading, question rewriting, retry logic |
-| 15 | Adaptive-and-Agentic | Agentic-RAG Lab 2 | Agentic Hybrid RAG with Dynamic Routing | Advanced | Multi-tool routing, tool-swap fallback, combined graph + vector agent pipeline |
+| 5 | Structure-and-Multimodal | OCR-RAG | OCR + RAG: Chatting with Scanned Documents | Intermediate | Layout-preserving OCR (RapidOCR), whole-document retrieval, chunking a scanned PDF, FAISS retrieval, source-tagged answers with explainability |
+| 6 | Structure-and-Multimodal | LLM-Wiki | Automated Ingestion: Structured Knowledge Base (LLM Wiki + OKF) | Advanced | LLM-driven PDF-to-file ingestion, index-based retrieval, structured knowledge base building |
+| 7 | Knowledge-Graphs | Graph-RAG | End-to-End Graph RAG: From NetworkX to Neo4j | Intermediate | LLM-based entity extraction, NetworkX knowledge graphs, graph traversal, moving the graph to Neo4j, Cypher queries, visual exploration |
+| 8 | Knowledge-Graphs | Graph-and-Vector | Hybrid RAG: Vector Search + Graph Traversal | Advanced | Vector-indexed graph nodes, dual-mode retrieval (vector + Cypher), combined scoring |
+| 9 | Vectorless | Vectorless-RAG | Vectorless RAG | Advanced | PageIndex tree-based parsing, LLM-driven section selection, multi-hop retrieval, table-preserving retrieval with citation tags |
+| 10 | Adaptive-and-Agentic | Agentic-RAG | Agentic RAG | Advanced | LangGraph agent loops, retrieval grading, question rewriting, multi-tool routing, tool-swap fallback |
 
 ### 9.2 Repository Structure
 
@@ -354,29 +344,24 @@ RAG-Labs/
 │   ├── lab-03-multivector-parent-child/    # Lab 3: parent-child + summary multi-vector
 │   └── lab-04-colbert-late-interaction/    # Lab 4: ColBERT / MaxSim
 ├── section-3-structure-and-multimodal/
-│   ├── lab-05-structured-ocr-rag/          # Lab 5: RapidOCR + Gemini chatbot
-│   ├── lab-06-ocr-scanned-pdf-rag/         # Lab 6: scanned PDF + FAISS
-│   └── lab-07-llm-wiki/                    # Lab 7: LLM Wiki + OKF knowledge base
+│   ├── lab-05-ocr-rag/                     # Lab 5: OCR + RAG on scanned documents
+│   └── lab-06-llm-wiki/                    # Lab 6: LLM Wiki + OKF knowledge base
 ├── section-4-knowledge-graphs/
-│   ├── lab-08-graph-rag-networkx/          # Lab 8: generalized Graph RAG
-│   ├── lab-09-graph-rag-neo4j/             # Lab 9: Graph RAG on Neo4j
-│   └── lab-10-graph-vector-hybrid/         # Lab 10: vector + graph on Neo4j
+│   ├── lab-07-graph-rag/                   # Lab 7: Graph RAG, NetworkX to Neo4j
+│   └── lab-08-graph-vector-hybrid/         # Lab 8: vector + graph hybrid
 ├── section-5-vectorless/
-│   ├── lab-11-vectorless-reasoning-retrieval/   # Lab 11
-│   ├── lab-12-vectorless-multihop/              # Lab 12
-│   └── lab-13-vectorless-table-retrieval/       # Lab 13
+│   └── lab-09-vectorless-rag/              # Lab 9: vectorless RAG
 ├── section-6-adaptive-and-agentic/
-│   ├── lab-14-agentic-rag-self-correction/ # Lab 14: LangGraph self-correction
-│   └── lab-15-agentic-hybrid-routing/      # Lab 15: dynamic routing
+│   └── lab-10-agentic-rag/                 # Lab 10: agentic RAG
 ├── section-7-capstone/
-│   └── lab-16-agentic-research-assistant/  # Capstone: 8-document design-and-build spec
+│   └── lab-11-agentic-research-assistant/  # Capstone: 8-document design-and-build spec
 ├── learnyst-html/                          # publish-ready bundle, grouped by section (NN-lab.html / NN-assignment.html)
 ├── RAG-Labs-Table-of-Contents.html         # course table of contents
 ├── MOVE_MAP.md                             # old -> new path for every moved lab
 └── README.md                               # this file
 ```
 
-Open the `.ipynb` inside a lab folder to run it; read the matching `.md` for the full explanation. Section folders are numbered 1-6 (plus 7 for the capstone) in the same order as the TOC, and `learnyst-html/` uses the same section names, numbered sequentially 01-15. Some labs (Vectorless) include a `requirements.txt` -- run `pip install -r requirements.txt` before the notebook if present.
+Open the `.ipynb` inside a lab folder to run it; read the matching `.md` for the full explanation. Section folders are numbered 1-6 (plus 7 for the capstone) in the same order as the TOC, and `learnyst-html/` uses the same section names, numbered sequentially 01-10. Some labs (Vectorless) include a `requirements.txt` -- run `pip install -r requirements.txt` before the notebook if present.
 
 ---
 

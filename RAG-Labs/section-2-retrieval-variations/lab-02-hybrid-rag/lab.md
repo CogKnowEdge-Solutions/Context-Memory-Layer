@@ -471,7 +471,7 @@ The scores are worth pausing on. `0.0333` and `0.0328` are close together, which
 | **Sparse Retrieval** | `llama-index-retrievers-bm25` + `rank_bm25` — keyword scoring |
 | **Fusion** | `llama-index-core` (`QueryFusionRetriever`, `mode="reciprocal_rerank"`) — blends both rankings |
 | **Embedding Model** | `all-MiniLM-L6-v2`, via `llama-index-embeddings-huggingface` — runs locally, 384 dimensions |
-| **LLM (Answering)** | `nvidia/nemotron-3-ultra-550b-a55b:free`, via `llama-index-llms-openrouter` — a free tier model, so a full run costs nothing |
+| **LLM (Answering)** | `nvidia/nemotron-3-super-120b-a12b:free`, via `llama-index-llms-openrouter` — a free tier model, so a full run costs nothing |
 | **Secrets** | `python-dotenv` — reads `OPENROUTER_API_KEY` from a `.env` file |
 
 ---
@@ -519,7 +519,7 @@ The cell below installs all required Python packages:
 > **Note:** Run this cell first — it only needs to be run once per session.
 
 ```python
-!pip install -q llama-index-core llama-index-llms-openrouter llama-index-embeddings-huggingface llama-index-readers-file llama-index-retrievers-bm25 python-dotenv pymupdf rank_bm25
+!pip install -q llama-index-core llama-index-llms-openrouter llama-index-embeddings-huggingface "torch>=2.5" llama-index-readers-file llama-index-retrievers-bm25 python-dotenv pymupdf rank_bm25
 ```
 
 **Getting an OpenRouter API key**
@@ -556,6 +556,7 @@ from llama_index.core import VectorStoreIndex, Settings
 from llama_index.core.node_parser import SemanticSplitterNodeParser
 from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.retrievers import QueryFusionRetriever
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.llms.openrouter import OpenRouter
 from llama_index.readers.file import PDFReader
 from llama_index.retrievers.bm25 import BM25Retriever
@@ -601,7 +602,7 @@ print("Key loaded.")
 
 # Set up the LLM (using OpenRouter)
 Settings.llm = OpenRouter(
-    model="nvidia/nemotron-3-ultra-550b-a55b:free",
+    model="nvidia/nemotron-3-super-120b-a12b:free",
     api_key=OPENROUTER_API_KEY,
     temperature=0,
     max_tokens=512

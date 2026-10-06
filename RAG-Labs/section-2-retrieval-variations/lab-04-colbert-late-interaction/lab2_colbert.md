@@ -361,7 +361,7 @@ from qdrant_client import QdrantClient, models
 llm = ChatOpenAI(
     openai_api_key="your-api-key",
     openai_api_base="https://openrouter.ai/api/v1",
-    model_name="nvidia/nemotron-3-ultra-550b-a55b:free",
+    model_name="nvidia/nemotron-3-super-120b-a12b:free",
     temperature=0.0
 )
 ```

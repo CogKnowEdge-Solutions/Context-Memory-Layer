@@ -1,4 +1,0 @@
-pageindex
-openai
-python-dotenv
-pymupdf
