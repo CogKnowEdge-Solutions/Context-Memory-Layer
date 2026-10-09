@@ -1,11 +1,5 @@
 # MongoDB Basics: How to Write, Update & Delete Data
 
-## Student Enrollment Tracker
-
-**Difficulty: Beginner | ~35 min | Requires Lab 1**
-
-*Lab 2 of 7 in the MongoDB Mastery series.*
-
 ---
 
 # Problem Statement / Use Case Overview
@@ -13,44 +7,6 @@
 A university needs to actively manage student enrollment records — updating grades when exam results come in, adding new fields like scholarships as policies change, re-enrolling students who withdrew, and removing records for students who have graduated. These are the **write** operations that Lab 1's read-only queries didn't cover.
 
 This lab walks you through the full **CRUD write lifecycle** in MongoDB. You will learn how to update individual and multiple documents using different update operators (`$set`, `$unset`, `$inc`), perform upserts to handle re-enrollments, delete documents, and use atomic `find_one_and_update` / `find_one_and_delete` operations. The same 25-student dataset from Lab 1 is your starting point.
-
-### Update Operators
-
-MongoDB update operations always use an **update document** that tells MongoDB *what* to change. The most common operators are:
-
-- **`$set`** — sets a field to a specific value, or creates it if it doesn't exist
-- **`$unset`** — removes a field entirely from a document
-- **`$inc`** — increments a numeric field by a given amount (useful for counters, scores, balances)
-
-```python
-# $set adds or overwrites a field
-students.update_one({"name": "Alice"}, {"$set": {"scholarship": "Dean's Award"}})
-
-# $inc raises a numeric field
-students.update_one({"name": "Alice"}, {"$inc": {"grade": 5}})
-
-# $unset removes a field
-students.update_one({"name": "Alice"}, {"$unset": {"scholarship": ""}})
-```
-
-### Upserts
-
-An **upsert** is a combined update-or-insert operation. If the filter matches a document, it updates it. If nothing matches, it inserts a new document with the filter fields and the update fields combined. This is useful for re-enrolling a student who previously withdrew — the record may or may not already exist.
-
-```python
-# upsert=True: update if exists, insert if not
-students.update_one(
-    {"student_id": "STU006"},
-    {"$set": {"status": "active"}},
-    upsert=True
-)
-```
-
-### Atomic Find-and-Modify Operations
-
-`find_one_and_update` and `find_one_and_delete` combine a query and a write in a single atomic operation — they find a document, apply a change, and return the document (before or after the change). This avoids the race condition of finding a document in one call and modifying it in another.
-
-> **Why this matters:** Understanding the full CRUD write lifecycle — update, delete, and upsert — is what makes MongoDB practical for real applications. Lab 1 showed you how to read data; this lab shows you how to change it. Lab 3 builds on both by introducing aggregation pipelines and indexing for analytics at scale.
 
 ---
 
@@ -175,7 +131,51 @@ Students with scholarship field: 1
 
 ---
 
-# Prerequisites
+# Underlying Concepts (Summarized)
+
+This lab builds on the write side of MongoDB. Here are the concepts it uses in brief.
+
+### Update Operators
+
+MongoDB update operations always use an **update document** that tells MongoDB *what* to change. The most common operators are:
+
+- **`$set`** — sets a field to a specific value, or creates it if it doesn't exist
+- **`$unset`** — removes a field entirely from a document
+- **`$inc`** — increments a numeric field by a given amount (useful for counters, scores, balances)
+
+```python
+# $set adds or overwrites a field
+students.update_one({"name": "Alice"}, {"$set": {"scholarship": "Dean's Award"}})
+
+# $inc raises a numeric field
+students.update_one({"name": "Alice"}, {"$inc": {"grade": 5}})
+
+# $unset removes a field
+students.update_one({"name": "Alice"}, {"$unset": {"scholarship": ""}})
+```
+
+### Upserts
+
+An **upsert** is a combined update-or-insert operation. If the filter matches a document, it updates it. If nothing matches, it inserts a new document with the filter fields and the update fields combined. This is useful for re-enrolling a student who previously withdrew — the record may or may not already exist.
+
+```python
+# upsert=True: update if exists, insert if not
+students.update_one(
+    {"student_id": "STU006"},
+    {"$set": {"status": "active"}},
+    upsert=True
+)
+```
+
+### Atomic Find-and-Modify Operations
+
+`find_one_and_update` and `find_one_and_delete` combine a query and a write in a single atomic operation — they find a document, apply a change, and return the document (before or after the change). This avoids the race condition of finding a document in one call and modifying it in another.
+
+> **Why this matters:** Understanding the full CRUD write lifecycle — update, delete, and upsert — is what makes MongoDB practical for real applications. Lab 1 showed you how to read data; this lab shows you how to change it. Lab 3 builds on both by introducing aggregation pipelines and indexing for analytics at scale.
+
+---
+
+# Pre-requisites
 
 - **Lab 1 completed** — you should be familiar with connecting to MongoDB, inserting documents, and running basic queries.
 - **Basic Python knowledge** — variables, lists, dictionaries, loops, and `import` statements.
@@ -197,7 +197,7 @@ pip install -qU "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi
 
 ---
 
-# Step-wise Development Instructions
+# Step-wise Instructions — Development
 
 ---
 
@@ -417,7 +417,7 @@ Re-collects the key metrics from each step and prints a formatted summary — th
 
 ---
 
-# Optional Exercise
+### Optional Exercise
 
 Write a sequence of operations that does the following: (1) uses `$unset` to remove the `scholarship` field from all students in Mathematics, (2) uses `$set` to change every "inactive" student's status to "active", and (3) uses `delete_one` to remove exactly one student with the lowest grade in the collection. Print the final total count and status distribution after each step to verify your changes.
 

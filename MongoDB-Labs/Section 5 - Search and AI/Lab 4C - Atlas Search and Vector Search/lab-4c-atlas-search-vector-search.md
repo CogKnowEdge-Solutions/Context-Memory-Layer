@@ -1,11 +1,5 @@
 # MongoDB Intermediate: How to Search by Keywords and by Meaning
 
-## Atlas Search and Vector Search
-
-**Difficulty: Intermediate to Advanced | ~60 min | Requires Lab 4**
-
-*Lab 4C in the MongoDB Mastery series — the bridge between the data labs and the AI Agent Memory capstone (Lab 7).*
-
 ---
 
 # Problem Statement / Use Case Overview
@@ -14,7 +8,7 @@ The university has a catalog of 22 courses and a search box that does exact matc
 
 Two different problems need two different tools. **Keyword search** (Atlas Search, built on Apache Lucene) finds documents that contain the words you typed, ranks them by relevance, and forgives typos. **Vector search** finds documents that *mean* the same thing, even with no words in common, by comparing embeddings (lists of numbers that capture meaning). Each is strong where the other is weak, so production systems often use both and merge the rankings.
 
-This lab builds all three on one collection, and ends by formatting the top results as the context block of a RAG prompt, which is the retrieval half of the agent memory service you will build in the capstone.
+This lab builds all three on one collection, and ends by formatting the top results as the context block of a RAG prompt, which is the retrieval half of a RAG system.
 
 ---
 
@@ -127,7 +121,7 @@ Store dialogue history and learned facts across sessions ...
 
 ---
 
-# Underlying Concepts
+# Underlying Concepts (Summarized)
 
 ### Atlas Search
 
@@ -176,13 +170,24 @@ Retrieval-Augmented Generation takes the top search results, pastes them into th
 
 ---
 
-# Step-wise Instructions — Development
+# Environment / Dependencies Setup
 
-```python
-!pip install -qU "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi fastembed
+| Package | Purpose |
+|---------|---------|
+| `pymongo[srv,tls]` | Python driver for MongoDB with SRV and TLS support, including `SearchIndexModel` |
+| `python-dotenv` | Loads `.env` files so credentials stay out of the notebook |
+| `certifi` | Provides up-to-date CA certificates for reliable SSL/TLS on all platforms |
+| `fastembed` | Runs a small embedding model locally, so this lab needs **no API key** |
+
+```bash
+pip install -qU "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi fastembed
 ```
 
 This installs the MongoDB driver, `python-dotenv`, `certifi`, and `fastembed` — a small library that runs an embedding model on your own machine, so this lab needs **no API key** for embeddings. The first run downloads the model (about 130 MB).
+
+---
+
+# Step-wise Instructions — Development
 
 
 ### Step 1 — Connect and Load the Catalog
@@ -479,7 +484,7 @@ Answer:"""
 print(prompt)
 ```
 
-This is the retrieval half of RAG: search finds the most relevant documents, and the prompt template constrains the model to answer only from them and to cite numbered sources. Sending `prompt` to any LLM would complete the pipeline, but the part you built here (the search) is where answer quality is won or lost. In the capstone, the same idea powers an agent's memory: instead of course descriptions, the documents are past conversation snippets and facts.
+This is the retrieval half of RAG: search finds the most relevant documents, and the prompt template constrains the model to answer only from them and to cite numbered sources. Sending `prompt` to any LLM would complete the pipeline, but the part you built here (the search) is where answer quality is won or lost. The Lab 7 capstone reuses the keyword half of this idea (Atlas Search) on a course catalog.
 
 ---
 
@@ -498,7 +503,7 @@ The free M0 tier allows only three search/vector indexes per cluster, so droppin
 
 ---
 
-# Optional Exercise
+### Optional Exercise
 
 Experiment with the knobs:
 
@@ -520,4 +525,4 @@ Experiment with the knobs:
 - **RAG retrieval is search plus a prompt template** that restricts the model to the retrieved context and asks for citations.
 - **The free M0 tier allows three search indexes** — drop indexes you are finished with.
 
-You can now find documents by words and by meaning. The next section covers reliability and scale (transactions, replication, security), and the capstone (Lab 7, AI Agent Memory Service) puts search, schema patterns and transactions together into a memory layer for an AI agent.
+You can now find documents by words and by meaning. The next section covers reliability and scale (transactions, replication, security), and the capstone (Lab 7, University Registration Database) puts search, schema patterns, indexing and transactions together into one working registration system.

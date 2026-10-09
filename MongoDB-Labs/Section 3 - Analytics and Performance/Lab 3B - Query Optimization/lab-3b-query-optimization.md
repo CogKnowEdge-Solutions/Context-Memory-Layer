@@ -1,11 +1,5 @@
 # MongoDB Intermediate: How to Make Queries Fast
 
-## Query Optimization
-
-**Difficulty: Intermediate | ~50 min | Requires Lab 3**
-
-*Lab 3B in the MongoDB Mastery series — the performance deep-dive that follows Lab 3.*
-
 ---
 
 # Problem Statement / Use Case Overview
@@ -133,7 +127,7 @@ Aggregation (one slice)    100000 -> ~6250
 
 ---
 
-# Underlying Concepts
+# Underlying Concepts (Summarized)
 
 ### The Explain Report
 
@@ -186,13 +180,23 @@ Only the **first stages** of a pipeline can use an index. A `$match` (and a `$so
 
 ---
 
-# Step-wise Instructions — Development
+# Environment / Dependencies Setup
 
-```python
-!pip install -qU "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi
+| Package | Purpose |
+|---------|---------|
+| `pymongo[srv,tls]` | Python driver for MongoDB with SRV and TLS support |
+| `python-dotenv` | Loads `.env` files so credentials stay out of the notebook |
+| `certifi` | Provides up-to-date CA certificates for reliable SSL/TLS on all platforms |
+
+```bash
+pip install -qU "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi
 ```
 
 This installs the MongoDB Python driver (`pymongo`), `python-dotenv` for loading credentials, and `certifi` for trusted CA certificates — the same packages as Labs 1-3.
+
+---
+
+# Step-wise Instructions — Development
 
 
 ### Step 1 — Connect to MongoDB
@@ -543,7 +547,7 @@ This collects every experiment into one table. The pattern to remember is the lo
 
 ---
 
-# Optional Exercise
+### Optional Exercise
 
 Prefix versus suffix searches on `student_id`:
 

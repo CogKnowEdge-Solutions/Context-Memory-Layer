@@ -1,11 +1,5 @@
 # MongoDB Intermediate: How to Analyze Data at Scale
 
-## Academic Performance Analytics
-
-**Difficulty: Intermediate | ~40 min | Requires Labs 1 and 2**
-
-*Lab 3 of 7 in the MongoDB Mastery series.*
-
 ---
 
 # Problem Statement / Use Case Overview
@@ -137,7 +131,7 @@ Bottom course: Biology (avg 72.2)
 
 ---
 
-# Underlying Concepts
+# Underlying Concepts (Summarized)
 
 ### Aggregation Pipelines
 
@@ -180,7 +174,7 @@ The `.explain()` method returns the **query execution plan** — a detailed brea
 
 ---
 
-# Prerequisites
+# Pre-requisites
 
 - **Labs 1 and 2 completed** — you should be familiar with connecting to MongoDB, inserting documents, and running basic queries and updates.
 - **Basic Python knowledge** — variables, lists, dictionaries, loops, and `import` statements.
@@ -202,7 +196,7 @@ pip install -qU "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi
 
 ---
 
-# Step-wise Development Instructions
+# Step-wise Instructions — Development
 
 ---
 
@@ -401,7 +395,7 @@ Collects the key metrics from each aggregation step into one formatted summary �
 
 ---
 
-# Optional Exercise
+### Optional Exercise
 
 Add a new field `"midterm_score"` (random integer between 50 and 100) to every student document using `update_many()` with `$set`. Then write an aggregation pipeline that groups by `course` and computes the average of both `grade` and `midterm_score` per course, sorting by average `grade` descending. Print the results. Finally, drop the `course` index you created in Step 6 and re-run `.explain()` on the same query to confirm the stage changes from `IXSCAN` back to `COLLSCAN`.
 

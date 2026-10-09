@@ -1,6 +1,6 @@
 # MongoDB Labs — Foundations to Production
 
-This module teaches MongoDB from first principles through ten hands-on labs grouped into seven sections, all built around one simple, consistent domain — a student/university management system — so every lab reinforces the same story instead of jumping between unrelated examples. The final section is a capstone, where the module's real end goal — the MongoDB skills needed for the storage/memory layer of an AI agent harness — comes together.
+This module teaches MongoDB from first principles through ten hands-on labs grouped into seven sections, all built around one simple, consistent domain — a student/university management system — so every lab reinforces the same story instead of jumping between unrelated examples. The final section is a short, database-focused capstone that puts the skills from every section together.
 
 All labs run against a real, cloud-hosted **MongoDB Atlas** cluster rather than a local install or a mock database. This README first explains what MongoDB is and how it works, then walks through setting up the Atlas environment, and finally lays out how the labs are organized. Read it fully before opening Lab 1.
 
@@ -242,9 +242,9 @@ flowchart LR
 | 5 Search and AI | **Lab 4C - Atlas Search and Vector Search** | MongoDB Intermediate: How to Search by Keywords and by Meaning | Intermediate to Advanced | `$search`, embeddings, `$vectorSearch`, hybrid fusion, RAG context |
 | 6 Reliability and Scale | Lab 5 - Enrollment Transactions | MongoDB Advanced: How to Guarantee Data Consistency | Advanced | Transactions, change streams, backup/restore |
 | 6 Reliability and Scale | Lab 6 - Scaling the University Database | MongoDB Advanced: How to Scale & Secure a Database | Advanced | Replica sets, RBAC, TLS *(sharding stays conceptual — Atlas's free tier can't shard)* |
-| 7 Capstone | Lab 7 - AI Agent Memory Service | MongoDB Capstone: Building a Real Agent Memory Layer | Capstone | Everything above, applied to an AI agent's memory layer |
+| 7 Capstone | Lab 7 - University Registration Database | MongoDB Capstone: Build the Database Behind a Course Registration System | Capstone | One short project (~90 min) reusing every earlier lab: seed, CRUD, transactions, aggregation, indexing, search, deployment check |
 
-Recommended order: follow the sections top to bottom; inside a section, do the numbered lab first and its letter lab second. Lab 4C's catalog search is the direct preparation for the Lab 7 capstone.
+Recommended order: follow the sections top to bottom; inside a section, do the numbered lab first and its letter lab second. The Lab 7 capstone is a single-sitting project that reuses one skill from each section, with a starter notebook, a solution notebook and self-checking cells.
 
 > **Numbering note.** The original labs keep numbers 1-7 because their database names, tests and cross-references use them. The added labs use letters so nothing already built had to change. If you later want strictly sequential numbering (1-10), rename the folders and update the cross-references together.
 
@@ -270,7 +270,8 @@ MongoDB-Labs/
 │   ├── Lab 5 - Enrollment Transactions/
 │   └── Lab 6 - Scaling the University Database/
 ├── Section 7 - Capstone/
-│   └── Lab 7 - AI Agent Memory Service/
+│   └── Lab 7 - University Registration Database/   (starter + solution notebooks)
+├── _archive/                   (the earlier, longer AI Agent Memory capstone, kept for reference)
 ├── test-results/
 ├── MongoDB_Labs_Overview.pptx
 ├── .env.example

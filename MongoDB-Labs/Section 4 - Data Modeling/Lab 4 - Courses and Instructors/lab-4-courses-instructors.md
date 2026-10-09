@@ -1,11 +1,5 @@
 # MongoDB Intermediate: How to Design Schemas & Search Data
 
-## Courses & Instructors
-
-**Difficulty: Intermediate | ~40 min | Requires Labs 1–3**
-
-*Lab 4 of 7 in the MongoDB Mastery series.*
-
 ---
 
 # Problem Statement / Use Case Overview
@@ -130,7 +124,7 @@ Note: all three instructors teach exactly 2 courses each — the tie is broken a
 
 ---
 
-# Underlying Concepts
+# Underlying Concepts (Summarized)
 
 ### Embedding vs. Referencing
 
@@ -169,7 +163,7 @@ A **text index** lets MongoDB search the *content* of string fields by keyword, 
 
 ---
 
-# Prerequisites
+# Pre-requisites
 
 - **Labs 1–3 completed** — you should be familiar with connecting to MongoDB, inserting documents, running queries, and using aggregation pipelines.
 - **Basic Python knowledge** — variables, lists, dictionaries, loops, and `import` statements.
@@ -191,7 +185,7 @@ pip install -qU "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi
 
 ---
 
-# Step-wise Development Instructions
+# Step-wise Instructions — Development
 
 ---
 
@@ -379,7 +373,7 @@ Collects the key metrics from both collections into one formatted report — cou
 
 ---
 
-# Optional Exercise
+### Optional Exercise
 
 Add a new instructor — `{"instructor_id": "INS004", "name": "Dr. Alan Turing", "department": "Computer Science", "bio": "Pioneer of theoretical computer science and artificial intelligence."}` — to the instructors collection. Then add a new course — `{"course_id": "CS401", "title": "Artificial Intelligence", "description": "Machine learning, search algorithms, and intelligent agents", "instructor_id": "INS004", "seats": 60, "schedule": {"meeting_times": "MWF 3:00-3:50", "location": "Science Building Room 210"}}` — to the courses collection. Re-run the `$lookup` pipeline from Step 4 and verify that CS401 appears in the results with Dr. Alan Turing as the instructor. Then search for "intelligent" using the text index.
 

@@ -1,11 +1,5 @@
 # MongoDB Advanced: How to Guarantee Data Consistency
 
-## Enrollment Transactions
-
-**Difficulty: Advanced | ~40 min | Requires Labs 1–4**
-
-*Lab 5 of 7 in the MongoDB Mastery series.*
-
 ---
 
 # Problem Statement / Use Case Overview
@@ -178,7 +172,7 @@ Seats remaining per course:
 
 ---
 
-# Underlying Concepts
+# Underlying Concepts (Summarized)
 
 ### Multi-Document ACID Transactions
 
@@ -223,7 +217,7 @@ For production databases, use MongoDB Atlas's built-in `mongodump` / `mongoresto
 
 ---
 
-# Prerequisites
+# Pre-requisites
 
 - **Labs 1–4 completed** — you should be familiar with connecting to MongoDB, inserting documents, running queries, using aggregation pipelines, and understanding schema design.
 - **Basic Python knowledge** — variables, lists, dictionaries, loops, `import` statements, and exception handling with `try`/`except`.
@@ -245,7 +239,7 @@ pip install -qU "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi
 
 ---
 
-# Step-wise Development Instructions
+# Step-wise Instructions — Development
 
 ---
 
@@ -507,7 +501,7 @@ Collects the key metrics from both collections into one formatted report — cou
 
 ---
 
-# Optional Exercise
+### Optional Exercise
 
 Modify `enroll_student` to also accept an `overwrite` flag. When `overwrite=True` and the student already has an enrollment in the target course, the function should first delete the old enrollment, then insert the new one — all inside the same transaction. Test this by re-enrolling STU001 (Alice Johnson) into CS101 with `overwrite=True` and verifying that she still appears exactly once in the enrollments collection for CS101.
 

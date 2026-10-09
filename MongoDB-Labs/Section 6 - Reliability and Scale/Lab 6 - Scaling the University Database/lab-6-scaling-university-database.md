@@ -1,11 +1,5 @@
 # MongoDB Advanced: How to Inspect a Replica Set and Secure Access
 
-## Scaling the University Database
-
-**Difficulty: Advanced | ~40 min | Requires Labs 1–5**
-
-*Lab 6 of 7 in the MongoDB Mastery series.*
-
 ---
 
 # Problem Statement / Use Case Overview
@@ -188,7 +182,7 @@ Current user's roles:   atlasAdmin
 
 ---
 
-# Underlying Concepts
+# Underlying Concepts (Summarized)
 
 ### Replica Sets
 
@@ -234,7 +228,7 @@ You reach for sharding when a single node can no longer hold the working set or 
 
 ---
 
-# Prerequisites
+# Pre-requisites
 
 - **Labs 1–5 completed** — you should be comfortable connecting to MongoDB and running reads and writes against `school_db`.
 - **Basic Python knowledge** — variables, dictionaries, loops, `import` statements, and string formatting.
@@ -256,7 +250,7 @@ pip install -qU "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi
 
 ---
 
-# Step-wise Development Instructions
+# Step-wise Instructions — Development
 
 ---
 
@@ -433,7 +427,7 @@ First we delete every tagged document (`lab6_marker: True`) so `school_db` is re
 
 ---
 
-# Optional Exercise
+### Optional Exercise
 
 Modify the notebook's Step 6 to *also* print, for each of the current user's roles, a short one-line answer to "could a user holding **only** this role insert into `school_db`?" For the role you actually hold, say why the answer is what it is based on the role name alone. Next, describe (in a markdown cell, not code) the exact Atlas UI steps you would take to create a user with the least privilege needed for a read-only reporting dashboard on `school_db` — and state which single built-in role that is.
 
@@ -450,4 +444,4 @@ Modify the notebook's Step 6 to *also* print, for each of the current user's rol
 - **Sharding scales past one machine** — conceptually, shards + a router + a shard key spread a collection across servers, but it is not available on the free M0 tier.
 - **The shared cluster is left clean** — the only document this lab seeded was tagged and deleted in Step 8, so `school_db` is exactly as the earlier labs left it.
 
-These are the very properties a production database needs — and they are the same properties the module's end goal, the **AI agent harness's memory service**, depends on. A memory layer that records conversation context must be highly available (so it is never the reason an agent stalls) and tightly access-controlled (so only the harness can read and write it). You now know how those guarantees are built and how to verify them on a real cluster.
+These are the very properties a production database needs — and they are the same properties the Lab 7 capstone, a **university registration database**, depends on. A registration system that takes seats and records enrollments must be highly available (so students can always register) and tightly access-controlled (so only the registrar's application can read and write it). You now know how those guarantees are built and how to verify them on a real cluster.

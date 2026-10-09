@@ -1,11 +1,5 @@
 # MongoDB Intermediate: How to Recognize Schema Patterns and Anti-patterns
 
-## Schema Patterns and Anti-patterns
-
-**Difficulty: Intermediate | ~45 min | Requires Lab 4**
-
-*Lab 4B in the MongoDB Mastery series — builds on the embed-or-reference decision from Lab 4.*
-
 ---
 
 # Problem Statement / Use Case Overview
@@ -132,7 +126,7 @@ Copies still stale: 0
 
 ---
 
-# Underlying Concepts
+# Underlying Concepts (Summarized)
 
 ### The 16 MB Document Limit
 
@@ -178,13 +172,23 @@ A `$lookup` joins collections at read time. If a page always needs the same two 
 
 ---
 
-# Step-wise Instructions — Development
+# Environment / Dependencies Setup
 
-```python
-!pip install -qU "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi
+| Package | Purpose |
+|---------|---------|
+| `pymongo[srv,tls]` | Python driver for MongoDB with SRV and TLS support (also provides the `bson` module) |
+| `python-dotenv` | Loads `.env` files so credentials stay out of the notebook |
+| `certifi` | Provides up-to-date CA certificates for reliable SSL/TLS on all platforms |
+
+```bash
+pip install -qU "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi
 ```
 
 This installs the MongoDB Python driver (`pymongo`, which also provides the `bson` module used to measure document sizes), `python-dotenv`, and `certifi`.
+
+---
+
+# Step-wise Instructions — Development
 
 
 ### Step 1 — Connect and Prepare Clean Collections
@@ -498,7 +502,7 @@ One line per idea: the symptom you can observe, and the pattern that fixes it. T
 
 ---
 
-# Optional Exercise
+### Optional Exercise
 
 Design exercise:
 

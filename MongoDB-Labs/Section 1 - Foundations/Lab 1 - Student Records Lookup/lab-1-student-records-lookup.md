@@ -1,11 +1,5 @@
 # MongoDB Basics: How to Query Data
 
-## Student Records Lookup
-
-**Difficulty: Beginner | ~35 min | No prerequisites**
-
-*Lab 1 of 7 in the MongoDB Mastery series.*
-
 ---
 
 # Problem Statement / Use Case Overview
@@ -15,55 +9,6 @@ A university administrator needs to manage and query a growing collection of stu
 This lab walks you through building a queryable mini student database using MongoDB. You will learn how to connect to a real MongoDB Atlas cluster, design a flexible document schema, insert a realistic dataset of 25 student records, and then use MongoDB's built-in query operators to filter, sort, and project the data — finishing with a printed summary report that answers real administrative questions.
 
 This is the read-heavy lab. You will focus on inserting data once, then querying it in different ways. Lab 2 covers the write side — updating, deleting, and changing data over time.
-
-Before diving into the code, it helps to understand the core MongoDB concepts this lab uses.
-
-### Document Databases vs. Relational Databases
-
-Traditional relational databases (MySQL, PostgreSQL) store data in **tables** with fixed columns and rows. Every row must conform to the same schema — if you want to add a new field, you must alter the table first. MongoDB is a **document database**: it stores data as **documents** (JSON-like objects) inside **collections** (roughly equivalent to tables). Each document can have a different structure, so adding a new field to one student record doesn't require changing any others.
-
-### Documents and Collections
-
-A **document** is a key-value pair structure — think of it as a Python dictionary. For example:
-
-```python
-{"name": "Alice", "course": "CS", "grade": 92}
-```
-
-A **collection** is a group of documents, like a table of rows. In this lab, the `students` collection holds 25 documents, each representing one student.
-
-### CRUD Operations
-
-MongoDB supports four core operations:
-
-- **Create** — `insert_one()` or `insert_many()` to add documents
-- **Read** — `find()` with a filter to query documents
-- **Update** — `update_one()` or `update_many()` to modify documents
-- **Delete** — `delete_one()` or `delete_many()` to remove documents
-
-This lab focuses on **Create** (inserting students) and **Read** (filtering, sorting, aggregating).
-
-### Query Filters and Sorting
-
-MongoDB uses Python dictionaries as query filters. For example, `{"grade": {"$lt": 60}}` means "find all documents where the grade field is less than 60." Sorting is done with `.sort("field_name", 1)` for ascending or `-1` for descending.
-
-### Aggregation Pipelines
-
-An **aggregation pipeline** is a sequence of stages that transform data step by step. Each stage takes input, processes it, and passes the result to the next stage. The `$group` stage groups documents by a field (e.g., course), and `$sum` tallies how many documents are in each group.
-
-```mermaid
-graph LR
-    A["All Documents"] -->|"$match"| B["Filtered Docs"]
-    B -->|"$group"| C["Grouped by Course"]
-    C -->|"$sort"| D["Sorted Results"]
-
-    style A fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
-    style B fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
-    style C fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
-    style D fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
-```
-
-> **Why this matters:** Understanding the difference between a document database and a relational database is the first step to deciding which tool fits your project. MongoDB's flexible schema makes it a natural choice for applications where the data shape evolves over time — user profiles, product catalogs, or, as in this lab, student records. In Lab 2, you will learn how to update, delete, and change this data once it is in the database.
 
 ---
 
@@ -178,7 +123,60 @@ Biology              | 4 students
 
 ---
 
-# Prerequisites
+# Underlying Concepts (Summarized)
+
+This lab builds on a handful of core MongoDB concepts. Here they are in brief.
+
+### Document Databases vs. Relational Databases
+
+Traditional relational databases (MySQL, PostgreSQL) store data in **tables** with fixed columns and rows. Every row must conform to the same schema — if you want to add a new field, you must alter the table first. MongoDB is a **document database**: it stores data as **documents** (JSON-like objects) inside **collections** (roughly equivalent to tables). Each document can have a different structure, so adding a new field to one student record doesn't require changing any others.
+
+### Documents and Collections
+
+A **document** is a key-value pair structure — think of it as a Python dictionary. For example:
+
+```python
+{"name": "Alice", "course": "CS", "grade": 92}
+```
+
+A **collection** is a group of documents, like a table of rows. In this lab, the `students` collection holds 25 documents, each representing one student.
+
+### CRUD Operations
+
+MongoDB supports four core operations:
+
+- **Create** — `insert_one()` or `insert_many()` to add documents
+- **Read** — `find()` with a filter to query documents
+- **Update** — `update_one()` or `update_many()` to modify documents
+- **Delete** — `delete_one()` or `delete_many()` to remove documents
+
+This lab focuses on **Create** (inserting students) and **Read** (filtering, sorting, aggregating).
+
+### Query Filters and Sorting
+
+MongoDB uses Python dictionaries as query filters. For example, `{"grade": {"$lt": 60}}` means "find all documents where the grade field is less than 60." Sorting is done with `.sort("field_name", 1)` for ascending or `-1` for descending.
+
+### Aggregation Pipelines
+
+An **aggregation pipeline** is a sequence of stages that transform data step by step. Each stage takes input, processes it, and passes the result to the next stage. The `$group` stage groups documents by a field (e.g., course), and `$sum` tallies how many documents are in each group.
+
+```mermaid
+graph LR
+    A["All Documents"] -->|"$match"| B["Filtered Docs"]
+    B -->|"$group"| C["Grouped by Course"]
+    C -->|"$sort"| D["Sorted Results"]
+
+    style A fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style B fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style C fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style D fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+```
+
+> **Why this matters:** Understanding the difference between a document database and a relational database is the first step to deciding which tool fits your project. MongoDB's flexible schema makes it a natural choice for applications where the data shape evolves over time — user profiles, product catalogs, or, as in this lab, student records. In Lab 2, you will learn how to update, delete, and change this data once it is in the database.
+
+---
+
+# Pre-requisites
 
 - **Basic Python knowledge** — variables, lists, dictionaries, loops, and `import` statements.
 - **No MongoDB experience required** — this lab teaches you from scratch.
@@ -202,7 +200,7 @@ pip install -qU "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi
 
 ---
 
-# Step-wise Development Instructions
+# Step-wise Instructions — Development
 
 ---
 
@@ -371,7 +369,7 @@ Re-runs the queries from Steps 3–5 and collects all results into a single form
 
 ---
 
-# Optional Exercise
+### Optional Exercise
 
 Connect to a different MongoDB deployment. If you have a local MongoDB instance running, change the connection line from loading `MONGODB_URI` via `.env` to `pymongo.MongoClient("mongodb://localhost:27017/")` and re-run the entire notebook. Verify that the same 25 records are inserted and the same queries return the same results.
 
