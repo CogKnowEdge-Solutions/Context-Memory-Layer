@@ -17,7 +17,7 @@ ASSIGNMENT_PATH = LAB_DIR / "lab-6-scaling-university-database-assignment.md"
 ENV_PATH = LAB_DIR.parent / ".env"
 
 INSTALL_LINE = (
-    '!pip install -qU "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi'
+    '!pip install -q "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi'
 )
 
 LAB6_MARKER = "lab6_marker"

@@ -1,4 +1,4 @@
-# MongoDB Basics: How to Query Data
+# How to Query Data
 
 ---
 
@@ -6,9 +6,112 @@
 
 A university administrator needs to manage and query a growing collection of student records. They want to quickly answer questions like "which students are currently failing?", "list all Computer Science students sorted by grade", and "how many students are enrolled in each course?" — all without writing complex SQL joins or managing rigid table schemas.
 
+## What Is MongoDB, and Why Use It?
+
+**In one sentence:** MongoDB is a *document database* — it stores each record (here, one student) as a single self-contained **document**, instead of splitting it across several rigid tables.
+
+Think of the difference like this: a relational database is a **spreadsheet** where every row must fill the same columns. MongoDB is a **folder of ID cards** — each card holds everything about one student, and a card can carry an extra field (like `scholarship`) without forcing every other card to change.
+
+### Same student, two shapes
+
+```mermaid
+flowchart TB
+    subgraph REL["Relational database (SQL tables)"]
+        T1["students table<br/>id, name, course_id"]
+        T2["courses table<br/>id, title"]
+        T3["grades table<br/>student_id, grade"]
+        T1 -->|"JOIN"| T2
+        T1 -->|"JOIN"| T3
+    end
+    subgraph DOC["MongoDB (documents)"]
+        D1["students collection<br/>one document per student:<br/>name, course, grade, status<br/>(everything together)"]
+    end
+    REL ~~~ DOC
+
+    style T1 fill:#fff3cd,stroke:#333333,stroke-width:1px,color:#111111
+    style T2 fill:#fff3cd,stroke:#333333,stroke-width:1px,color:#111111
+    style T3 fill:#fff3cd,stroke:#333333,stroke-width:1px,color:#111111
+    style D1 fill:#d3f9d8,stroke:#333333,stroke-width:1px,color:#111111
+```
+
+In SQL, one student's data is spread over three tables and stitched back together with `JOIN`s every time you ask a question. In MongoDB, the same student is one document, so a single read returns everything you need.
+
+Here is what one student looks like in this lab. It is just JSON-style key–value pairs:
+
+```json
+{
+  "name": "Charlie Brown",
+  "student_id": "STU003",
+  "course": "Physics",
+  "grade": 55,
+  "enrollment_date": "2024-09-02",
+  "status": "active"
+}
+```
+
+### Vocabulary: SQL terms vs MongoDB terms
+
+| In a relational database | In MongoDB | What it means in this lab |
+|--------------------------|------------|---------------------------|
+| Database | **Database** | `school_db` — the whole project's data |
+| Table | **Collection** | `students` — a group of similar documents |
+| Row | **Document** | One student record |
+| Column | **Field** | `name`, `grade`, `course`, ... |
+| `JOIN` | Embedding / `$lookup` | Usually not needed for simple lookups |
+| `SELECT ... WHERE` | `find({...})` | Filter documents by a condition |
+
+### Where everything lives
+
+```mermaid
+flowchart TB
+    A["MongoDB Atlas cluster<br/>(the cloud server)"] --> B["Database<br/>school_db"]
+    B --> C["Collection<br/>students"]
+    C --> D1["Document: Alice Johnson"]
+    C --> D2["Document: Charlie Brown"]
+    C --> D3["Document: ... 23 more"]
+
+    style A fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style B fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style C fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style D1 fill:#d3f9d8,stroke:#333333,stroke-width:1px,color:#111111
+    style D2 fill:#d3f9d8,stroke:#333333,stroke-width:1px,color:#111111
+    style D3 fill:#d3f9d8,stroke:#333333,stroke-width:1px,color:#111111
+```
+
+**MongoDB Atlas** is MongoDB's hosted cloud service. You do not install or run a database server yourself — the lab simply connects to it with a connection string.
+
+### Why MongoDB fits this problem
+
+| Question the administrator asks | Relational approach | MongoDB approach |
+|---------------------------------|---------------------|------------------|
+| Which students are failing? | Design tables first, then `SELECT ... WHERE grade < 60` | `find({"grade": {"$lt": 60}})` |
+| List Computer Science students by grade | Query + `ORDER BY`, possibly joining a courses table | `find({"course": "Computer Science"}).sort("grade", -1)` |
+| How many students per course? | `GROUP BY` over joined tables | Aggregation pipeline with `$group` |
+| We now also track `scholarship` | `ALTER TABLE` — change the structure for *every* row | Just add the field to the documents that need it |
+
+### MongoDB compared with other kinds of databases
+
+| | Relational (MySQL, PostgreSQL) | **MongoDB** (document) | Key–value (Redis) |
+|---|---|---|---|
+| **Data shape** | Rows in fixed tables | JSON-like documents | Simple key → value |
+| **Schema changes** | Migrations needed | Flexible; fields can differ per document | No schema |
+| **Nested / related data** | Split across tables, joined at query time | Can be stored together in one document | Limited |
+| **Rich queries** (filter, sort, group) | Excellent (SQL) | Strong (`find`, aggregation pipeline) | Mostly lookup by key |
+| **Scaling out** | Possible, often more effort | Built-in sharding for horizontal scaling | Built for speed, simple data |
+| **Best for** | Strict structure, many cross-table relationships | Evolving data, nested records, fast development | Caches, sessions, counters |
+
+> **Honest note:** MongoDB is not "better" for everything. If your data is highly relational and needs strict rules across many tables (for example, accounting ledgers), a relational database can be the better choice. MongoDB shines when records are self-contained, the shape changes over time, and you want to start building quickly.
+
+**Learn more (official MongoDB documentation):**
+
+- [What is MongoDB? — Database Manual](https://www.mongodb.com/docs/manual/introduction/)
+- [Documents — Database Manual](https://www.mongodb.com/docs/manual/core/document/)
+- [Databases and Collections](https://www.mongodb.com/docs/manual/core/databases-and-collections/)
+- [NoSQL vs SQL databases](https://www.mongodb.com/resources/basics/databases/nosql-explained/nosql-vs-sql) (published by MongoDB, so read it as the vendor's view)
+
 This lab walks you through building a queryable mini student database using MongoDB. You will learn how to connect to a real MongoDB Atlas cluster, design a flexible document schema, insert a realistic dataset of 25 student records, and then use MongoDB's built-in query operators to filter, sort, and project the data — finishing with a printed summary report that answers real administrative questions.
 
-This is the read-heavy lab. You will focus on inserting data once, then querying it in different ways. Lab 2 covers the write side — updating, deleting, and changing data over time.
+This is the read-heavy lab. You will focus on inserting data once, then querying it in different ways.
 
 ---
 
@@ -29,7 +132,7 @@ This is the read-heavy lab. You will focus on inserting data once, then querying
 ### Part A — Building the Database
 
 ```mermaid
-flowchart LR
+flowchart TB
     PY["Python script"] --> CON["Connect to MongoDB Atlas<br/>(via .env credentials)"]
     CON --> INS["Insert 25 student<br/>documents"]
     INS --> COL[("students collection")]
@@ -119,7 +222,7 @@ Biology              | 4 students
 | **Credential loader** | `python-dotenv==1.0.1` — loads `.env` files for credentials |
 | **CA certificates** | `certifi` — provides up-to-date CA bundles for reliable SSL/TLS on all platforms |
 
-> **Note:** This lab connects to a real MongoDB Atlas cluster. The connection string is stored in the `.env` file (see README Section 8) and loaded at runtime — credentials never appear in the notebook itself.
+> **Note:** This lab connects to a real MongoDB Atlas cluster. The connection string is stored in a `.env` file (as `MONGODB_URI`) and loaded at runtime — credentials never appear in the notebook itself.
 
 ---
 
@@ -161,7 +264,7 @@ MongoDB uses Python dictionaries as query filters. For example, `{"grade": {"$lt
 An **aggregation pipeline** is a sequence of stages that transform data step by step. Each stage takes input, processes it, and passes the result to the next stage. The `$group` stage groups documents by a field (e.g., course), and `$sum` tallies how many documents are in each group.
 
 ```mermaid
-graph LR
+graph TB
     A["All Documents"] -->|"$match"| B["Filtered Docs"]
     B -->|"$group"| C["Grouped by Course"]
     C -->|"$sort"| D["Sorted Results"]
@@ -172,7 +275,7 @@ graph LR
     style D fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
 ```
 
-> **Why this matters:** Understanding the difference between a document database and a relational database is the first step to deciding which tool fits your project. MongoDB's flexible schema makes it a natural choice for applications where the data shape evolves over time — user profiles, product catalogs, or, as in this lab, student records. In Lab 2, you will learn how to update, delete, and change this data once it is in the database.
+> **Why this matters:** Understanding the difference between a document database and a relational database is the first step to deciding which tool fits your project. MongoDB's flexible schema makes it a natural choice for applications where the data shape evolves over time — user profiles, product catalogs, or, as in this lab, student records.
 
 ---
 
@@ -180,7 +283,7 @@ graph LR
 
 - **Basic Python knowledge** — variables, lists, dictionaries, loops, and `import` statements.
 - **No MongoDB experience required** — this lab teaches you from scratch.
-- **MongoDB Atlas cluster set up** — the shared Atlas cluster and `.env` file are already configured (see README Section 8). No additional database installation is needed.
+- **MongoDB Atlas cluster set up** — you need a MongoDB Atlas cluster and a `.env` file holding your connection string (`MONGODB_URI`) — set these up before you start. No additional database installation is needed.
 
 ---
 
@@ -193,7 +296,7 @@ graph LR
 | `certifi` | Provides up-to-date CA certificates for reliable SSL/TLS on all platforms |
 
 ```bash
-pip install -qU "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi
+pip install -q "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi
 ```
 
 > **Note:** The `srv` extra is required for `mongodb+srv://` connection strings. The `tls` extra and `certifi` ensure SSL/TLS works reliably on all platforms (especially Windows). Run this command once in your terminal before opening the notebook, or run the first code cell in the notebook which does the same thing.
@@ -212,8 +315,8 @@ import certifi
 from dotenv import load_dotenv
 import pymongo
 
-# Load the Atlas connection string from the .env file one directory up
-load_dotenv("../../.env")
+# Load the Atlas connection string from the .env file
+load_dotenv()
 uri = os.environ["MONGODB_URI"]
 
 # Connect to the real MongoDB Atlas cluster
@@ -227,7 +330,10 @@ students = db["students"]
 print("Connected to MongoDB Atlas")
 ```
 
-`load_dotenv("../../.env")` reads the `.env` file in the `MongoDB-Labs` folder and loads `MONGODB_URI` into the environment. `certifi.where()` points pymongo to a trusted CA certificate bundle, which ensures SSL works reliably on all platforms. The database and collection are created automatically on first insert.
+> **Where does the `.env` file go?** `load_dotenv()` looks for a file named `.env` in the folder you run from and then in each parent folder above it. Save it next to your notebook, or once in the root folder of your course project, with a single line: `MONGODB_URI=mongodb+srv://<user>:<password>@<cluster-host>/` (use your own Atlas connection string, and never commit this file to Git).
+
+
+`load_dotenv()` finds your `.env` file, reads it, and loads `MONGODB_URI` into the environment. `certifi.where()` points pymongo to a trusted CA certificate bundle, which ensures SSL works reliably on all platforms. The database and collection are created automatically on first insert.
 
 ---
 
@@ -275,6 +381,39 @@ print(f"Inserted {len(result.inserted_ids)} student records.")
 
 `students.drop()` clears the collection before inserting so the notebook is safe to re-run without duplicating data. Each dictionary is a **document** — MongoDB's equivalent of a row. Unlike SQL, there's no table definition needed; you simply insert documents and MongoDB stores them as-is.
 
+**Colour key used in the table snapshots:** 🟩 inserted &nbsp;·&nbsp; 🟨 updated &nbsp;·&nbsp; 🟥 deleted &nbsp;·&nbsp; 🟦 matched / returned by a query &nbsp;·&nbsp; ⬜ not touched
+
+**What the `students` collection looks like after Step 2** — `drop()` emptied it, then `insert_many()` added 25 new documents (every row is 🟩 new). MongoDB also adds a hidden `_id` field to each document automatically.
+
+| | # | name | student_id | course | grade | enrollment_date | status |
+|---|---|---|---|---|---|---|---|
+| 🟩 | 1 | Alice Johnson | STU001 | Computer Science | 95 | 2024-09-01 | active |
+| 🟩 | 2 | Bob Smith | STU002 | Mathematics | 78 | 2024-09-01 | active |
+| 🟩 | 3 | Charlie Brown | STU003 | Physics | 55 | 2024-09-02 | active |
+| 🟩 | 4 | Diana Prince | STU004 | English | 48 | 2024-09-01 | active |
+| 🟩 | 5 | Eve Torres | STU005 | Biology | 88 | 2024-09-03 | active |
+| 🟩 | 6 | Frank Castle | STU006 | Mathematics | 52 | 2024-09-01 | inactive |
+| 🟩 | 7 | Grace Hopper | STU007 | Computer Science | 91 | 2024-09-02 | active |
+| 🟩 | 8 | Hank Pym | STU008 | Physics | 73 | 2024-09-01 | active |
+| 🟩 | 9 | Ivan Petrov | STU009 | Computer Science | 84 | 2024-09-03 | active |
+| 🟩 | 10 | Julia Child | STU010 | English | 90 | 2024-09-02 | graduated |
+| 🟩 | 11 | Karl Marx | STU011 | Mathematics | 67 | 2024-09-01 | active |
+| 🟩 | 12 | Laura Palmer | STU012 | Biology | 45 | 2024-09-02 | active |
+| 🟩 | 13 | Marco Polo | STU013 | Physics | 82 | 2024-09-03 | active |
+| 🟩 | 14 | Nina Simone | STU014 | English | 76 | 2024-09-01 | active |
+| 🟩 | 15 | Oscar Wilde | STU015 | Mathematics | 93 | 2024-09-02 | active |
+| 🟩 | 16 | Pia Zadora | STU016 | Biology | 71 | 2024-09-01 | active |
+| 🟩 | 17 | Quincy Adams | STU017 | Computer Science | 87 | 2024-09-03 | active |
+| 🟩 | 18 | Rosa Parks | STU018 | English | 58 | 2024-09-02 | inactive |
+| 🟩 | 19 | Sam Wilson | STU019 | Physics | 98 | 2024-09-01 | active |
+| 🟩 | 20 | Tina Turner | STU020 | Mathematics | 79 | 2024-09-03 | active |
+| 🟩 | 21 | Uma Thurman | STU021 | Computer Science | 62 | 2024-09-02 | active |
+| 🟩 | 22 | Vera Wang | STU022 | Biology | 85 | 2024-09-01 | graduated |
+| 🟩 | 23 | Walt Disney | STU023 | Physics | 56 | 2024-09-02 | active |
+| 🟩 | 24 | Xena Warrior | STU024 | English | 94 | 2024-09-03 | active |
+| 🟩 | 25 | Yusuf Islam | STU025 | Computer Science | 70 | 2024-09-01 | active |
+
+
 ---
 
 ### Step 3 — Query: Find Failing Students
@@ -295,6 +434,37 @@ for s in failing_students:
 
 `$lt` is the "less than" comparison operator. The second argument `{"_id": 0}` is a **projection** — it hides the auto-generated `_id` field so the output stays clean.
 
+**Snapshot — which documents does the filter pick?** Nothing is changed by a `find()`; the query only *selects*. The 6 documents with `grade < 60` are 🟦 matched, the other 19 are ⬜ left alone:
+
+| | # | name | student_id | course | grade | enrollment_date | status |
+|---|---|---|---|---|---|---|---|
+| ⬜ | 1 | Alice Johnson | STU001 | Computer Science | 95 | 2024-09-01 | active |
+| ⬜ | 2 | Bob Smith | STU002 | Mathematics | 78 | 2024-09-01 | active |
+| 🟦 | 3 | Charlie Brown | STU003 | Physics | 55 | 2024-09-02 | active |
+| 🟦 | 4 | Diana Prince | STU004 | English | 48 | 2024-09-01 | active |
+| ⬜ | 5 | Eve Torres | STU005 | Biology | 88 | 2024-09-03 | active |
+| 🟦 | 6 | Frank Castle | STU006 | Mathematics | 52 | 2024-09-01 | inactive |
+| ⬜ | 7 | Grace Hopper | STU007 | Computer Science | 91 | 2024-09-02 | active |
+| ⬜ | 8 | Hank Pym | STU008 | Physics | 73 | 2024-09-01 | active |
+| ⬜ | 9 | Ivan Petrov | STU009 | Computer Science | 84 | 2024-09-03 | active |
+| ⬜ | 10 | Julia Child | STU010 | English | 90 | 2024-09-02 | graduated |
+| ⬜ | 11 | Karl Marx | STU011 | Mathematics | 67 | 2024-09-01 | active |
+| 🟦 | 12 | Laura Palmer | STU012 | Biology | 45 | 2024-09-02 | active |
+| ⬜ | 13 | Marco Polo | STU013 | Physics | 82 | 2024-09-03 | active |
+| ⬜ | 14 | Nina Simone | STU014 | English | 76 | 2024-09-01 | active |
+| ⬜ | 15 | Oscar Wilde | STU015 | Mathematics | 93 | 2024-09-02 | active |
+| ⬜ | 16 | Pia Zadora | STU016 | Biology | 71 | 2024-09-01 | active |
+| ⬜ | 17 | Quincy Adams | STU017 | Computer Science | 87 | 2024-09-03 | active |
+| 🟦 | 18 | Rosa Parks | STU018 | English | 58 | 2024-09-02 | inactive |
+| ⬜ | 19 | Sam Wilson | STU019 | Physics | 98 | 2024-09-01 | active |
+| ⬜ | 20 | Tina Turner | STU020 | Mathematics | 79 | 2024-09-03 | active |
+| ⬜ | 21 | Uma Thurman | STU021 | Computer Science | 62 | 2024-09-02 | active |
+| ⬜ | 22 | Vera Wang | STU022 | Biology | 85 | 2024-09-01 | graduated |
+| 🟦 | 23 | Walt Disney | STU023 | Physics | 56 | 2024-09-02 | active |
+| ⬜ | 24 | Xena Warrior | STU024 | English | 94 | 2024-09-03 | active |
+| ⬜ | 25 | Yusuf Islam | STU025 | Computer Science | 70 | 2024-09-01 | active |
+
+
 ---
 
 ### Step 4 — Query: List CS Students Sorted by Grade
@@ -312,6 +482,18 @@ for s in cs_students:
 ```
 
 Chains a **filter** (course = "Computer Science") with a **sort** on grade. Use `1` for ascending (lowest first), `-1` for descending (highest first).
+
+**Snapshot — the filter keeps only Computer Science, then the sort orders the matches.** 6 documents are 🟦 matched and listed from highest grade to lowest; the other 19 documents are ignored:
+
+| | rank | name | student_id | course | grade | status |
+|---|---|---|---|---|---|---|
+| 🟦 | 1 | Alice Johnson | STU001 | Computer Science | 95 | active |
+| 🟦 | 2 | Grace Hopper | STU007 | Computer Science | 91 | active |
+| 🟦 | 3 | Quincy Adams | STU017 | Computer Science | 87 | active |
+| 🟦 | 4 | Ivan Petrov | STU009 | Computer Science | 84 | active |
+| 🟦 | 5 | Yusuf Islam | STU025 | Computer Science | 70 | active |
+| 🟦 | 6 | Uma Thurman | STU021 | Computer Science | 62 | active |
+
 
 ---
 
@@ -332,6 +514,17 @@ for doc in course_counts:
 ```
 
 `$group` groups documents by `course` and counts each group with `$sum: 1`. `$sort` orders first by count descending, then by `_id` ascending as a tiebreaker so courses with the same count appear in alphabetical order. This is MongoDB's equivalent of SQL's `GROUP BY course ORDER BY count DESC, course ASC`.
+
+**Snapshot — how `$group` builds its result.** Each course becomes one new result row (🟦), listed in the pipeline's `$sort` order (count high to low, then A–Z), and `$sum: 1` adds 1 for every student in that group. The original 25 documents are not modified:
+
+| | _id (course) | students grouped into it | count |
+|---|---|---|---|
+| 🟦 | Computer Science | Alice Johnson, Grace Hopper, Ivan Petrov, Quincy Adams, Uma Thurman, Yusuf Islam | 6 |
+| 🟦 | English | Diana Prince, Julia Child, Nina Simone, Rosa Parks, Xena Warrior | 5 |
+| 🟦 | Mathematics | Bob Smith, Frank Castle, Karl Marx, Oscar Wilde, Tina Turner | 5 |
+| 🟦 | Physics | Charlie Brown, Hank Pym, Marco Polo, Sam Wilson, Walt Disney | 5 |
+| 🟦 | Biology | Eve Torres, Laura Palmer, Pia Zadora, Vera Wang | 4 |
+
 
 ---
 
@@ -369,12 +562,6 @@ Re-runs the queries from Steps 3–5 and collects all results into a single form
 
 ---
 
-### Optional Exercise
-
-Connect to a different MongoDB deployment. If you have a local MongoDB instance running, change the connection line from loading `MONGODB_URI` via `.env` to `pymongo.MongoClient("mongodb://localhost:27017/")` and re-run the entire notebook. Verify that the same 25 records are inserted and the same queries return the same results.
-
----
-
 # What We Learnt
 
 - **Document databases store flexible, JSON-like documents** instead of rigid table rows — each record can have different fields without requiring schema changes.
@@ -388,4 +575,4 @@ Connect to a different MongoDB deployment. If you have a local MongoDB instance 
 - **`.sort("field", -1)` orders results** — `1` for ascending, `-1` for descending, and it chains naturally with `.find()`.
 - **Aggregation pipelines transform data in stages** — `$group` groups by a field, `$sum` counts, and `$sort` orders — MongoDB's equivalent of SQL's `GROUP BY`.
 
-With Lab 1 done, you know how to put data into MongoDB and query it. Lab 2 builds on this by covering updates, deletes, and upserts — the full write lifecycle.
+You can now connect to MongoDB Atlas, insert a set of documents in bulk, and query them with filters, sorts, projections, and aggregation pipelines.

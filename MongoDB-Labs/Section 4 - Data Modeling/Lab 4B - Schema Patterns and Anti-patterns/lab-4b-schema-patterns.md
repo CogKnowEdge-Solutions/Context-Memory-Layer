@@ -1,10 +1,80 @@
-# MongoDB Intermediate: How to Recognize Schema Patterns and Anti-patterns
+# How to Recognize Schema Patterns
 
 ---
 
 # Problem Statement / Use Case Overview
 
 A document database lets you shape data any way you like, which is exactly why teams get it wrong. The university's student portal started simple: one course document with every submission pushed into an array, one student document holding every grade ever recorded, one record per attendance tick. A year later, pages load slowly, documents are megabytes in size, and one popular course is close to a hard limit: **a single MongoDB document cannot exceed 16 MB**.
+
+## What Are Schema Patterns and Anti-patterns, and Why Do They Matter?
+
+**In one sentence:** A *schema pattern* is a proven, reusable way to shape your documents for a particular workload, and an *anti-pattern* is a shape that works fine at first and then hurts as the data grows.
+
+Think of packing for trips. Stuffing every item you own into one suitcase works for a weekend. After a year of collecting things, the suitcase is heavy, slow to carry, and hard to close. A good packer keeps a small bag for what you use every day and stores the rest in a cupboard. Schema patterns are those packing habits for your data.
+
+### Design for how the data is read
+
+In a relational database you usually design tables around the *facts*, then write queries to match. In MongoDB you do the reverse. You ask, **"What will my application read most often?"** and then shape documents so that one read returns what a page needs. This is why the same data can have a good shape for one app and a bad shape for another.
+
+| Idea | What it means in plain words |
+|------|------------------------------|
+| Schema pattern | A named, tested way to shape documents for a common problem |
+| Anti-pattern | A shape that looks fine on day one but causes pain at scale |
+| Workload | How often you read, write, and which fields you ask for |
+| Hot data | The small part of the data that is read most often |
+| Reference | Storing only an `_id` that points to a document in another collection |
+| Embedding | Storing related data inside the parent document |
+
+### A document that grows without bound
+
+```mermaid
+flowchart LR
+    subgraph BAD["Anti-pattern: one growing document"]
+        A1["Course document<br/>title + ALL submissions<br/>(array never stops growing)"]
+    end
+    subgraph GOOD["Pattern: split the data"]
+        G1["Course document<br/>title only<br/>(stays tiny)"]
+        G2["Submissions collection<br/>one small document each<br/>with the course _id"]
+        G1 -->|"course _id"| G2
+    end
+    BAD ~~~ GOOD
+
+    style A1 fill:#ffe3e3,stroke:#333333,stroke-width:1px,color:#111111
+    style G1 fill:#d3f9d8,stroke:#333333,stroke-width:1px,color:#111111
+    style G2 fill:#d3f9d8,stroke:#333333,stroke-width:1px,color:#111111
+```
+
+In the first shape, every new submission makes the course document bigger. Every read moves the whole document, even if you only wanted the title. Eventually it nears the **16 MB** document limit. In the second shape, each submission is its own small document, so the course document stays the same size forever.
+
+### The problems this lab covers, and their fixes
+
+| Anti-pattern (the problem) | What goes wrong | Pattern that fixes it |
+|----------------------------|-----------------|-----------------------|
+| Unbounded array | Document keeps growing toward the 16 MB limit and every read gets slower | Referencing: each item in its own collection |
+| Bloated document | A page that needs a few fields reads the whole history | Subset pattern: keep recent items inside, full history outside |
+| Totals recomputed on every read | The same average or sum is calculated again and again | Computed pattern: update the stored total when data is written |
+| Millions of tiny documents | Many documents and index entries for small records | Bucket pattern: group records into one document per time window |
+| `$lookup` for the same few fields everywhere | Extra work on every read to join collections | Extended reference: copy the few fields you always show |
+
+### Symptoms you notice, and likely causes
+
+| Symptom you notice | Likely cause |
+|--------------------|--------------|
+| A simple page loads slowly, but the query is fine | A large document is read for a small page (bloated document) |
+| Document size keeps climbing after each insert | An unbounded array inside the document |
+| Collection has a huge document count and large indexes | One document per tiny record (needs bucketing) |
+| The same average is calculated in every request | Computed value is not stored |
+| Reads are slow only when joining collections | `$lookup` on every read (extended reference may help) |
+| Two places show different names for the same person | A copied field went stale after an update |
+
+> **Honest note:** Every pattern trades something. Subset and extended reference **duplicate** data, so copies can go stale. The computed pattern makes each **write** do a little more work. Buckets add **complexity** to your updates and queries. Do not apply a pattern because it has a nice name. **Measure first** (document size, number of documents, operations per request), then change the shape only where the numbers show a real problem. Small, bounded data can stay simple.
+
+**Learn more (official MongoDB documentation):**
+
+- [Schema Design Patterns — Database Manual](https://www.mongodb.com/docs/manual/data-modeling/design-patterns/)
+- [Schema Design Anti-Patterns — Database Manual](https://www.mongodb.com/docs/manual/data-modeling/design-antipatterns/)
+- [Avoid Unbounded Arrays — Database Manual](https://www.mongodb.com/docs/manual/data-modeling/design-antipatterns/unbounded-arrays/)
+- [Building With Patterns: A Summary](https://www.mongodb.com/company/blog/building-with-patterns-a-summary) (MongoDB blog)
 
 This lab walks through the five most common schema problems in the same university domain. For each one you first build the problematic design and *measure* what it costs (bytes, document counts, operations needed), then apply the matching **schema design pattern** and measure again. You finish with a decision table you can reuse on your own projects.
 
@@ -16,12 +86,12 @@ The data sets are small enough to run in seconds on the free Atlas M0 tier. The 
 
 | Item | Detail |
 |------|--------|
-| **Collections** | All prefixed `pat_` and dropped at the start and end of the notebook, so your Lab 1-4 data is untouched |
+| **Collections** | All prefixed `pat_` and dropped at the start and end of the notebook, so any other collections in your database are untouched |
 | **Submissions** | 2,000 generated assignment submissions for one popular course |
 | **Grades** | 1,500 generated grades for one student |
 | **Attendance** | 50 students x 30 days = 1,500 attendance ticks |
 | **Courses and enrollments** | 4 courses with instructors, 200 generated enrollments |
-| **Database** | `school_db`, same as the other labs |
+| **Database** | `school_db` |
 
 ---
 
@@ -122,7 +192,7 @@ Copies still stale: 0
 | **CA certificates** | `certifi` |
 | **Document measuring** | `bson.BSON.encode()` — the exact bytes MongoDB would store or send |
 
-> **Note:** This lab connects to a real MongoDB Atlas cluster using the shared `.env` file two folders above this notebook. It only creates collections prefixed `pat_`.
+> **Note:** This lab connects to a real MongoDB Atlas cluster using the connection string in your `.env` file. It only creates collections prefixed `pat_`.
 
 ---
 
@@ -166,9 +236,9 @@ A `$lookup` joins collections at read time. If a page always needs the same two 
 
 # Pre-requisites
 
-- Lab 4 completed (embedding versus referencing, `$lookup`)
-- A working Atlas cluster and `.env` file (README Section 8)
-- Basic update operators from Lab 2 (`$set`, `$inc`, `$push`)
+- Basic understanding of embedding versus referencing and `$lookup`
+- A working MongoDB Atlas cluster and a `.env` file holding your connection string
+- Basic familiarity with update operators (`$set`, `$inc`, `$push`)
 
 ---
 
@@ -181,7 +251,7 @@ A `$lookup` joins collections at read time. If a page always needs the same two 
 | `certifi` | Provides up-to-date CA certificates for reliable SSL/TLS on all platforms |
 
 ```bash
-pip install -qU "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi
+pip install -q "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi
 ```
 
 This installs the MongoDB Python driver (`pymongo`, which also provides the `bson` module used to measure document sizes), `python-dotenv`, and `certifi`.
@@ -201,7 +271,7 @@ from dotenv import load_dotenv
 import pymongo
 from bson import BSON
 
-load_dotenv("../../.env")
+load_dotenv()
 client = pymongo.MongoClient(os.environ["MONGODB_URI"], tlsCAFile=certifi.where())
 db = client["school_db"]
 
@@ -221,6 +291,9 @@ def doc_size(document):
 random.seed(7)
 print("Connected. Clean pat_ collections ready.")
 ```
+
+> **Where does the `.env` file go?** `load_dotenv()` looks for a file named `.env` in the folder you run from and then in each parent folder above it. Save it next to your notebook, or once in the root folder of your course project, with a single line: `MONGODB_URI=mongodb+srv://<user>:<password>@<cluster-host>/` (use your own Atlas connection string, and never commit this file to Git).
+
 
 All collections created by this lab start with `pat_`, and are dropped at the beginning so the notebook can be re-run safely. `doc_size` uses the driver's own BSON encoder, so the number it returns is the number of bytes MongoDB would actually store for that document.
 
@@ -256,6 +329,14 @@ print(f"\nShowing the course title alone still transfers {doc_size(fetched):,} b
 
 The size of the course document grows linearly with every submission, and a page that only wants the course title still pays for the whole array. At roughly 104 bytes per submission the 16 MB cap is about 160,000 submissions away, which is well within reach for a large course over several years. This is the **unbounded array** anti-pattern: the growth is limited only by the 16 MB wall, and by then performance has been bad for a long time.
 
+**Colour key used in the table snapshots:** 🟩 inserted &nbsp;·&nbsp; 🟨 updated &nbsp;·&nbsp; 🟥 deleted &nbsp;·&nbsp; 🟦 matched / returned by a query &nbsp;·&nbsp; ⬜ not touched
+
+**Snapshot — `pat_courses_embedded` now holds 1 document. It is 🟩 inserted: the single course document carries all 2,000 submissions inside one array (the `find_one` that follows is only a read and changes nothing).**
+
+| | _id | title | submissions (embedded array) |
+|---|---|---|---|
+| 🟩 | CS101 | Introduction to Programming | 2,000 entries, about 207,000 bytes in total: {STU00001, A2, score 51}, {STU00002, A3, score 52}, {STU00003, A4, score 53}, … {STU00000, A1, score 50} |
+
 ---
 
 ### Step 3 — Fix 1: Reference Submissions in Their Own Collection
@@ -281,6 +362,18 @@ print("Total submissions stored:", subs.count_documents({"course_id": "CS101"}))
 ```
 
 Each submission is now its own small document that points back to the course, with an index on `course_id` so lookups are fast. The course document never grows, the 16 MB limit disappears as a concern, and a query for recent submissions reads only the ten it needs. The trade-off is that fetching a course *and* all its submissions now takes a second query (or a `$lookup`).
+
+**Snapshot — `pat_submissions` now holds 2,001 documents, all 🟩 newly inserted (2,000 from `insert_many` plus 1 from the last `insert_one`); 6 are shown. MongoDB adds the hidden `_id` to each one automatically, so it is left out. The course document in `pat_courses_embedded` is not changed by this step: the small course document is only measured in Python, so that row stays ⬜ as it was.**
+
+| | student_id | assignment | score | course_id |
+|---|---|---|---|---|
+| 🟩 | STU00001 | A2 | 51 | CS101 |
+| 🟩 | STU00002 | A3 | 52 | CS101 |
+| 🟩 | STU00003 | A4 | 53 | CS101 |
+| 🟩 | STU00004 | A5 | 54 | CS101 |
+| 🟩 | STU00005 | A6 | 55 | CS101 |
+| 🟩 | STU00001 | A2 | 51 | CS101 |
+| 🟩 | … 1,995 more documents | | | CS101 |
 
 ---
 
@@ -316,6 +409,30 @@ print(f"\nFull history still available on demand: {full} grade documents")
 ```
 
 A student's profile page needs the name, major and a handful of recent grades, but the first design drags 1,500 grades through the database and the network on every page view. With the **subset pattern** the hot document holds only what is read most often, and the long tail lives in a separate collection that is queried only when someone clicks "full transcript". The duplicated `recent_grades` is intentional: it is a small copy of data that also exists in `pat_grade_history`.
+
+**Snapshot — `pat_students_fat` (the anti-pattern) now holds 1 document, 🟩 inserted, with all 1,500 grades inside it (about 184,585 bytes in the lab's illustrative output).**
+
+| | _id | name | major | grade_history (embedded array) |
+|---|---|---|---|---|
+| 🟩 | STU00001 | Alice Johnson | Computer Science | 1,500 entries: {Math, 50, T0}, … {CS, 93, T14} |
+
+**Snapshot — `pat_students` (the subset pattern) now holds 1 document, 🟩 inserted, with only the 5 most recent grades inside it (about 702 bytes in the lab's illustrative output).**
+
+| | _id | name | major | recent_grades (embedded array) |
+|---|---|---|---|---|
+| 🟩 | STU00001 | Alice Johnson | Computer Science | 5 entries: {Math, 65, T14}, {Physics, 72, T14}, {English, 79, T14}, {Biology, 86, T14}, {CS, 93, T14} |
+
+**Snapshot — `pat_grade_history` now holds 1,500 documents, all 🟩 inserted (the full history, one document per grade); 6 are shown. The `comment` field is left out to keep the table narrow.**
+
+| | student_id | seq | course | grade | term |
+|---|---|---|---|---|---|
+| 🟩 | STU00001 | 0 | Math | 50 | T0 |
+| 🟩 | STU00001 | 1 | Physics | 57 | T0 |
+| 🟩 | STU00001 | 2 | English | 64 | T0 |
+| 🟩 | STU00001 | 3 | Biology | 71 | T0 |
+| 🟩 | STU00001 | 4 | CS | 78 | T0 |
+| 🟩 | STU00001 | 1499 | CS | 93 | T14 |
+| 🟩 | … 1,494 more documents | | | | |
 
 ---
 
@@ -361,6 +478,21 @@ print("Recent grades kept:", len(student["recent_grades"]), "(always 5 or fewer)
 
 Reading the average now costs one document read and a division, instead of scanning 1,500 history documents. The write path pays a little extra, one `$inc` on two counters, and because `$inc` is atomic the counters cannot drift apart even if many grades arrive at once. `$push` with `$each` and `$slice: -5` keeps `recent_grades` at five entries automatically, so the subset maintains itself. The first block backfills the counters once for data that already existed; in a real system you would do that in a migration.
 
+**Snapshot — `pat_students` still has 1 document, and it is 🟨 updated twice in this step (the counters are first set by the backfill, then each of the 3 new grades adds to them): `grade_count` and `grade_sum` are new fields, and `recent_grades` slides forward so it still holds only 5 entries.**
+
+| | _id | name | major | recent_grades | grade_count | grade_sum |
+|---|---|---|---|---|---|---|
+| 🟨 | STU00001 | Alice Johnson | Computer Science | {Math, 65, T14}, {Physics, 72, T14}, {English, 79, T14}, {Biology, 86, T14}, {CS, 93, T14} → {Biology, 86, T14}, {CS, 93, T14}, {CS, 88, T-new}, {CS, 92, T-new}, {CS, 79, T-new} | (none) → 1503 | (none) → 112,009 |
+
+**Snapshot — `pat_grade_history` now holds 1,503 documents: 3 are 🟩 newly inserted (seq 1500, 1501, 1502) and the existing history is ⬜ untouched; 4 are shown. The aggregations in this step only read the data, and the average 74.52 matches `grade_sum / grade_count`.**
+
+| | student_id | seq | course | grade | term |
+|---|---|---|---|---|---|
+| ⬜ | … 1,500 older documents (seq 0 to 1499) | | | | |
+| 🟩 | STU00001 | 1500 | Computer Science | 88 | T-new |
+| 🟩 | STU00001 | 1501 | Computer Science | 92 | T-new |
+| 🟩 | STU00001 | 1502 | Computer Science | 79 | T-new |
+
 ---
 
 ### Step 6 — The Bucket Pattern: Fewer, Fuller Documents
@@ -403,6 +535,24 @@ print(f"Attendance rate from bucket counters: {bucket['present_count'] / bucket[
 ```
 
 Thirty ticks per student become one document per student per month, so the collection holds 50 documents instead of 1,500, indexes are 30 times smaller, and "show this student's month" is a single read. The `$inc` counters give instant totals. The array inside a bucket is **bounded by design** (a month has at most 31 days), which is what makes this safe where Step 2's array was not. Choose the bucket window (day, month, hour) so a bucket stays comfortably small.
+
+**Snapshot — `pat_attendance_daily` now holds 1,500 documents (50 students x 30 days), all 🟩 inserted; 3 are shown. The `present` value is random (generated by `random.random() > 0.15`), so exact values are not listed.**
+
+| | student_id | date | present |
+|---|---|---|---|
+| 🟩 | STU00001 | 2026-09-01 | true or false (random, about 85% true) |
+| 🟩 | STU00001 | 2026-09-02 | true or false (random, about 85% true) |
+| 🟩 | STU00001 | 2026-09-03 | true or false (random, about 85% true) |
+| 🟩 | … 1,497 more documents | | |
+
+**Snapshot — `pat_attendance_monthly` now holds 50 documents, all 🟩 created by the upserts (one per student for 2026-09, each holding that student's 30 days); 3 are shown. The `present_count` depends on the random data, so it is not listed.**
+
+| | student_id | month | days (embedded array) | present_count | total_count |
+|---|---|---|---|---|---|
+| 🟩 | STU00001 | 2026-09 | 30 entries, one per day: {2026-09-01, ...} … {2026-09-30, ...} | random: depends on the days present | 30 |
+| 🟩 | STU00002 | 2026-09 | 30 entries, one per day: {2026-09-01, ...} … {2026-09-30, ...} | random: depends on the days present | 30 |
+| 🟩 | STU00003 | 2026-09 | 30 entries, one per day: {2026-09-01, ...} … {2026-09-30, ...} | random: depends on the days present | 30 |
+| 🟩 | … 47 more documents (STU00004 to STU00050) | 2026-09 | | | 30 |
 
 ---
 
@@ -450,6 +600,47 @@ print("Same number of rows:", len(schedule_lookup) == len(schedule_ext))
 
 The schedule page always shows the course title and the instructor's name. Version 1 joins with `$lookup` every time the page loads. Version 2 stores those few display fields inside each enrollment, so one indexed `find()` answers the whole page. Only **display-only, slowly changing** fields are copied; everything else (credits, syllabus, room) remains in `pat_courses` and is fetched only when needed. The copied fields are why this pattern needs the next step.
 
+**Snapshot — `pat_courses` now holds 4 documents, all 🟩 inserted.**
+
+| | _id | title | instructor_id | instructor_name | credits |
+|---|---|---|---|---|---|
+| 🟩 | CS101 | Intro to Programming | I1 | Dr. Rao | 4 |
+| 🟩 | MA101 | Calculus I | I2 | Dr. Singh | 4 |
+| 🟩 | PH101 | Mechanics | I1 | Dr. Rao | 3 |
+| 🟩 | EN101 | Academic Writing | I3 | Dr. Mehta | 2 |
+
+**Snapshot — `pat_enrollments_ref` (plain references) now holds 200 documents, all 🟩 inserted, each with only the student and course ids; 5 are shown.**
+
+| | student_id | course_id |
+|---|---|---|
+| 🟩 | STU00001 | CS101 |
+| 🟩 | STU00002 | MA101 |
+| 🟩 | STU00003 | PH101 |
+| 🟩 | STU00004 | EN101 |
+| 🟩 | STU00005 | CS101 |
+| 🟩 | … 195 more documents | |
+
+**Snapshot — `pat_enrollments_ext` (extended reference) now holds 200 documents, all 🟩 inserted, each carrying a copy of the course title and instructor; 5 are shown.**
+
+| | student_id | course_id | course (copied fields: title, instructor_id, instructor_name) |
+|---|---|---|---|
+| 🟩 | STU00001 | CS101 | {Intro to Programming, I1, Dr. Rao} |
+| 🟩 | STU00002 | MA101 | {Calculus I, I2, Dr. Singh} |
+| 🟩 | STU00003 | PH101 | {Mechanics, I1, Dr. Rao} |
+| 🟩 | STU00004 | EN101 | {Academic Writing, I3, Dr. Mehta} |
+| 🟩 | STU00005 | CS101 | {Intro to Programming, I1, Dr. Rao} |
+| 🟩 | … 195 more documents | | |
+
+**Snapshot — the schedule query for STU00001 returns 5 rows (the 🟦 matched / returned rows). Both versions, `$lookup` and the single `find()`, return the same 5 rows of data; the table shows the `$lookup` version.**
+
+| | course_id | title | instructor |
+|---|---|---|---|
+| 🟦 | CS101 | Intro to Programming | Dr. Rao |
+| 🟦 | CS101 | Intro to Programming | Dr. Rao |
+| 🟦 | CS101 | Intro to Programming | Dr. Rao |
+| 🟦 | CS101 | Intro to Programming | Dr. Rao |
+| 🟦 | CS101 | Intro to Programming | Dr. Rao |
+
 ---
 
 ### Step 8 — The Price of Copies: Propagating a Change
@@ -475,6 +666,27 @@ print("Copies still stale:", fresh)
 ```
 
 Every copy of a field is a place that can go out of date. The fix is to update the source first, then propagate with one `update_many` that targets documents by the instructor's id (which is why the id is copied alongside the name). This is acceptable when the field changes rarely and the update can be a background job. If the copied field changed constantly, the extended reference would be the wrong pattern and a plain reference with `$lookup` would be better.
+
+**Snapshot — `pat_courses`: 2 of the 4 documents are 🟨 updated (the two courses taught by I1, `instructor_name`: Dr. Rao → Dr. Rao-Verma); the other 2 are ⬜ untouched.**
+
+| | _id | title | instructor_id | instructor_name |
+|---|---|---|---|---|
+| 🟨 | CS101 | Intro to Programming | I1 | Dr. Rao → Dr. Rao-Verma |
+| ⬜ | MA101 | Calculus I | I2 | Dr. Singh |
+| 🟨 | PH101 | Mechanics | I1 | Dr. Rao → Dr. Rao-Verma |
+| ⬜ | EN101 | Academic Writing | I3 | Dr. Mehta |
+
+**Snapshot — `pat_enrollments_ext`: still 200 documents. Right after the first update, the 100 copies of I1's name are stale (the `count_documents` check reads them); after `update_many`, those 100 documents are 🟨 updated (`course.instructor_name`: Dr. Rao → Dr. Rao-Verma) and the other 100 are ⬜ untouched. 5 documents are shown plus two summary rows.**
+
+| | student_id | course_id | course.instructor_name |
+|---|---|---|---|
+| 🟨 | STU00001 | CS101 | Dr. Rao → Dr. Rao-Verma |
+| ⬜ | STU00002 | MA101 | Dr. Singh |
+| 🟨 | STU00003 | PH101 | Dr. Rao → Dr. Rao-Verma |
+| ⬜ | STU00004 | EN101 | Dr. Mehta |
+| 🟨 | STU00005 | CS101 | Dr. Rao → Dr. Rao-Verma |
+| 🟨 | … 97 more documents (instructor I1) | CS101 or PH101 | Dr. Rao → Dr. Rao-Verma |
+| ⬜ | … 98 more documents (instructors I2 and I3) | MA101 or EN101 | unchanged |
 
 ---
 
@@ -502,22 +714,6 @@ One line per idea: the symptom you can observe, and the pattern that fixes it. T
 
 ---
 
-### Optional Exercise
-
-Design exercise:
-
-The portal also stores **chat messages** between students and instructors. A popular course channel receives 50,000 messages per semester. Sketch the schema you would use, and say which pattern from this lab you used for each of these decisions:
-
-1. Where the messages live relative to the channel document.
-2. How the channel page shows "the last 20 messages" quickly.
-3. How the channel shows "number of messages sent" without counting 50,000 documents.
-4. How each message shows the sender's display name without a join.
-5. What should happen to those copies when a user changes their display name.
-
-Then implement the "last 20 messages" and "message count" parts with pymongo, using `$push` with `$slice` and `$inc`.
-
----
-
 # What We Learnt
 
 - **A document cannot exceed 16 MB, and large documents are slow long before that** — measure with `bson.BSON.encode()`.
@@ -529,4 +725,4 @@ Then implement the "last 20 messages" and "message count" parts with pymongo, us
 - **Every copy of data must have a plan for staying correct** — update the source first, then propagate with `update_many`.
 - **Patterns are trade-offs, not rules:** each trades a little write work or duplication for much cheaper, smaller reads.
 
-You now have the vocabulary to design schemas on purpose. The next section, **Search and AI**, adds a new way to find documents: Atlas Search for keyword relevance and Atlas Vector Search for meaning (Lab 4C).
+You now have the vocabulary to design schemas on purpose: you can spot the five common anti-patterns, measure what they cost, and apply the matching pattern.

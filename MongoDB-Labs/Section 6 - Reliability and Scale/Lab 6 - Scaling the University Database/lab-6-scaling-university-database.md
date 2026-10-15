@@ -1,12 +1,98 @@
-# MongoDB Advanced: How to Inspect a Replica Set and Secure Access
+# How to Inspect a Replica Set and Secure Access
 
 ---
 
 # Problem Statement / Use Case Overview
 
-Labs 1–5 taught reading, writing, aggregation, schema design, and transactions against a single logical database. But a database used by a real system must do more than store data correctly — it must **stay available** and be **secure**. What happens if a machine hosting the database dies? How do you stop every person with a connection string from rewriting any document? How is the data protected while it travels over the network?
+Storing, querying and updating data correctly is only half of what a database must do. A database used by a real system must also — it must **stay available** and be **secure**. What happens if a machine hosting the database dies? How do you stop every person with a connection string from rewriting any document? How is the data protected while it travels over the network?
 
-This lab answers those questions by inspecting a **real, running Atlas cluster** — the same free M0 cluster from the earlier labs — and verifying the production features that keep a database alive and safe:
+## What Are Replication, Sharding and Security, and Why Do They Matter?
+
+**In one sentence:** *Replication* keeps several copies of your data on different servers so the database survives a failure, *sharding* splits a very large collection across servers so it can keep growing, and *security* controls who can connect, what they can do, and who can read the data on the wire.
+
+Think of a **class register**. If there is only one paper copy and it is lost, the attendance record is gone. So the school keeps backup copies in other rooms, and if the main one disappears, someone picks up a copy and carries on. That is **replication**. Now think of a **library** so big it will not fit in one building. You split it: books A–H in building 1, I–P in building 2, Q–Z in building 3. That is **sharding**. **Security** is the lock on the door, the ID check at the desk, and the rule that a visitor may read books but not rewrite them.
+
+### A replica set: one primary, two secondaries
+
+```mermaid
+flowchart LR
+    APP["Application"] -->|"writes"| P["Primary<br/>(takes all writes)"]
+    P -->|"copies every change"| S1["Secondary 1<br/>(full copy)"]
+    P -->|"copies every change"| S2["Secondary 2<br/>(full copy)"]
+    S1 -.->|"if the primary fails:<br/>an election picks a new primary<br/>(automatic failover)"| P
+
+    style APP fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style P fill:#d3f9d8,stroke:#333333,stroke-width:1px,color:#111111
+    style S1 fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style S2 fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+```
+
+The group of servers is called a **replica set**. The **primary** is the only server that accepts writes. The **secondaries** copy every change and hold a full copy of the data. If the primary stops responding, the secondaries vote and one of them becomes the new primary. You do not have to do anything. This is called **automatic failover**. A free Atlas cluster is already a 3-node replica set like this one.
+
+### Sharding in one picture
+
+```mermaid
+flowchart LR
+    APP["Application"] --> R["Router<br/>(decides where each document lives)"]
+    R --> A["Shard 1<br/>students A-H"]
+    R --> B["Shard 2<br/>students I-P"]
+    R --> C["Shard 3<br/>students Q-Z"]
+
+    style APP fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style R fill:#fff3cd,stroke:#333333,stroke-width:1px,color:#111111
+    style A fill:#d3f9d8,stroke:#333333,stroke-width:1px,color:#111111
+    style B fill:#d3f9d8,stroke:#333333,stroke-width:1px,color:#111111
+    style C fill:#d3f9d8,stroke:#333333,stroke-width:1px,color:#111111
+```
+
+The field used to decide where a document goes is called the **shard key**. Each shard is itself a replica set. The application talks to the router as if it were one database.
+
+### The problem, the feature, and what you check in this lab
+
+| Problem | Feature that solves it | What you do in this lab |
+|---------|------------------------|-------------------------|
+| One machine dies and the data is gone | **Replication** (replica set, automatic failover) | **Inspect it live:** ask the cluster who the primary and secondaries are |
+| Too many reads on one server | **Read preference** (read from a secondary) | **Try it live:** read from a secondary |
+| Someone could listen in on the network | **TLS** encryption in transit | **Verify it live:** confirm the connection is encrypted |
+| Anyone with a connection string can change anything | **Authentication and roles** (least privilege) | **Check it live:** see which roles your user has |
+| One machine cannot hold or serve all the data | **Sharding** (split by shard key) | **Concept only:** the free tier cannot shard |
+
+### Replication vs sharding
+
+| | Replication | Sharding |
+|---|-------------|----------|
+| **Main idea** | Many copies of the *same* data | Different *parts* of the data on different servers |
+| **Protects against** | A server failing (availability) | One server being too small (capacity) |
+| **What it adds** | Failover, and the option to read from secondaries | Room to grow past a single machine |
+| **Every server holds** | All the data | Only its own slice |
+| **When you need it** | Almost always, even for small databases | Only for very large data or very heavy load |
+| **In this lab** | Inspected on a real cluster | Explained, not run |
+
+### Security basics
+
+| Idea | Plain meaning | In this lab |
+|------|---------------|-------------|
+| **TLS** | Encrypts data while it travels between your code and the cluster | Always on in Atlas; you verify it, you do not set it up |
+| **Authentication** | Proves who you are before you can do anything | You connect with a database user |
+| **Roles (RBAC)** | The database decides what each user may do | You check the roles of your current user |
+| **Least privilege** | Give each user only the access they need | Match the role to the job, as in the table below |
+
+| Role | What it lets a user do | Typical user |
+|------|------------------------|--------------|
+| `read` | Read data only | A reporting app |
+| `readWrite` | Read and change data | An enrollment service |
+| `userAdmin` | Manage users and their roles | A database administrator |
+
+> **Honest note:** Replication is **not** a backup. If someone deletes a document by mistake, that delete is copied to every secondary within moments. You still need real backups. Sharding also adds complexity: you must pick a good shard key, and a poor choice is hard to undo. Do not shard until you must. Most databases never need it. Finally, on the free tier you inspect these features. You cannot add servers or shard.
+
+**Learn more (official MongoDB documentation):**
+
+- [Replication — Database Manual](https://www.mongodb.com/docs/manual/replication/)
+- [Sharding — Database Manual](https://www.mongodb.com/docs/manual/sharding/)
+- [Security — Database Manual](https://www.mongodb.com/docs/manual/security/)
+- [Built-In Roles — Database Manual](https://www.mongodb.com/docs/manual/reference/built-in-roles/)
+
+This lab answers those questions by inspecting a **real, running Atlas cluster** — your free M0 Atlas cluster — and verifying the production features that keep a database alive and safe:
 
 - A **replica set** (a live 3-node group with a primary and secondaries) for high availability.
 - **Read preferences** for scaling reads to secondaries.
@@ -22,11 +108,11 @@ The domain stays the same university system (`school_db`). This lab is the step 
 
 | Item | Detail |
 |------|--------|
-| **Database** | `school_db` — the same database used in Labs 1–5 |
-| **Students** | The `students` collection seeded by earlier labs; this lab appends one tagged document (removed before the end) |
+| **Database** | `school_db` — the university database on your Atlas cluster |
+| **Students** | The existing `students` collection; this lab appends one tagged document (removed before the end) |
 | **Reads** | Run against `students` (and conceptually `courses`) |
-| **Cluster** | The shared free **M0** Atlas cluster — already a 3-node replica set |
-| **Domain** | Same student/university management system used throughout the module |
+| **Cluster** | Your free **M0** Atlas cluster — already a 3-node replica set |
+| **Domain** | The student/university management system |
 
 ---
 
@@ -35,10 +121,10 @@ The domain stays the same university system (`school_db`). This lab is the step 
 ### The M0 Framing — Inspect, Do Not Provision
 
 ```mermaid
-flowchart LR
+flowchart TB
     M0["Free M0 cluster<br/>(already a 3-node replica set)"] --> O["OBSERVE it:<br/>hello, topology, read from secondary"]
     M0 --> S["SECURE it:<br/>verify TLS, check RBAC roles"]
-    O -.->|"cannot add / remove nodes"| X["Provisioning = paid / DevOps<br/>(out of module scope)"]
+    O -.->|"cannot add / remove nodes"| X["Provisioning = paid / DevOps<br/>(out of scope)"]
     S -.->|"sharding unavailable on M0"| Y["Sharding = conceptual only"]
 
     style M0 fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
@@ -178,7 +264,7 @@ Current user's roles:   atlasAdmin
 | **Credential loader** | `python-dotenv==1.0.1` — loads `.env` files for credentials |
 | **CA certificates** | `certifi` — provides up-to-date CA bundles for reliable SSL/TLS on all platforms |
 
-> **Note:** This lab connects to a real MongoDB Atlas cluster. The connection string is stored in the `.env` file (see README Section 8) and loaded at runtime — credentials never appear in the notebook itself.
+> **Note:** This lab connects to a real MongoDB Atlas cluster. The connection string is stored in a `.env` file and loaded at runtime — credentials never appear in the notebook itself.
 
 ---
 
@@ -230,9 +316,9 @@ You reach for sharding when a single node can no longer hold the working set or 
 
 # Pre-requisites
 
-- **Labs 1–5 completed** — you should be comfortable connecting to MongoDB and running reads and writes against `school_db`.
+- **Basic MongoDB skills** — you should be comfortable connecting to MongoDB and running reads and writes against a database such as `school_db`.
 - **Basic Python knowledge** — variables, dictionaries, loops, `import` statements, and string formatting.
-- **MongoDB Atlas cluster set up** — the shared M0 cluster and `.env` file are already configured (see README Section 8). This lab was verified against the free M0 tier (a 3-node replica set), which fully supports every command used here.
+- **MongoDB Atlas cluster set up** — a MongoDB Atlas cluster and a `.env` file holding your connection string; set these up before you start. This lab was verified against the free M0 tier (a 3-node replica set), which fully supports every command used here.
 
 ---
 
@@ -245,7 +331,7 @@ You reach for sharding when a single node can no longer hold the working set or 
 | `certifi` | Provides up-to-date CA certificates for reliable SSL/TLS on all platforms |
 
 ```bash
-pip install -qU "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi
+pip install -q "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi
 ```
 
 ---
@@ -262,14 +348,14 @@ import certifi
 from dotenv import load_dotenv
 import pymongo
 
-# Load the Atlas connection string from the .env file one directory up
-load_dotenv("../../.env")
+# Load the Atlas connection string from the .env file
+load_dotenv()
 uri = os.environ["MONGODB_URI"]
 
 # Connect to the real MongoDB Atlas cluster
 client = pymongo.MongoClient(uri, tlsCAFile=certifi.where())
 
-# Access the database and collections used in earlier labs
+# Access the database and collections used in this lab
 db = client["school_db"]
 students = db["students"]
 courses = db["courses"]
@@ -277,7 +363,10 @@ courses = db["courses"]
 print("Connected to MongoDB Atlas")
 ```
 
-The same connection pattern used since Lab 1 — `load_dotenv` reads the shared `.env`, and `certifi.where()` supplies the trusted CA bundle. Passing `tlsCAFile` is our first sign that every Atlas connection is encrypted.
+> **Where does the `.env` file go?** `load_dotenv()` looks for a file named `.env` in the folder you run from and then in each parent folder above it. Save it next to your notebook, or once in the root folder of your course project, with a single line: `MONGODB_URI=mongodb+srv://<user>:<password>@<cluster-host>/` (use your own Atlas connection string, and never commit this file to Git).
+
+
+The standard connection pattern — `load_dotenv` reads your `.env`, and `certifi.where()` supplies the trusted CA bundle. Passing `tlsCAFile` is our first sign that every Atlas connection is encrypted.
 
 ---
 
@@ -299,6 +388,16 @@ print("  ", hello.get("primary"))
 
 The `setName`, `hosts`, and `primary` fields together prove we are connected to a 3-node replica set, and `isWritablePrimary` confirms our connection landed on the node that currently accepts writes.
 
+**Colour key used in the table snapshots:** 🟩 inserted &nbsp;·&nbsp; 🟨 updated &nbsp;·&nbsp; 🟥 deleted &nbsp;·&nbsp; 🟦 matched / returned by a query &nbsp;·&nbsp; ⬜ not touched
+
+**Snapshot — the `hello` command only reads; the three hosts it returned are blue, and the `primary` and `me` fields both point at the same node.**
+
+| | Host (from `hosts`) | Is `me` (node we asked) | Is `primary` |
+|---|---|---|---|
+| 🟦 | `ac-mtwetuu-shard-00-00.rfzvgwe.mongodb.net:27017` | no | no |
+| 🟦 | `ac-mtwetuu-shard-00-01.rfzvgwe.mongodb.net:27017` | no | no |
+| 🟦 | `ac-mtwetuu-shard-00-02.rfzvgwe.mongodb.net:27017` | yes | yes |
+
 ---
 
 ### Step 3 — Primary vs Secondaries, and the Oplog Idea
@@ -319,6 +418,14 @@ for node, role in node_roles:
 ```
 
 We label each node in `client.nodes` by comparing it to the `primary` from Step 2. Writes go only to the primary; secondaries stay in sync by replaying the primary's oplog, and if the primary dies a secondary is automatically elected to replace it (failover).
+
+**Snapshot — the replica set members from `client.nodes`, each labelled by comparing it with the `primary` from Step 2 (read-only, nothing changed).**
+
+| | Member | Role |
+|---|---|---|
+| 🟦 | `ac-mtwetuu-shard-00-00.rfzvgwe.mongodb.net:27017` | SECONDARY |
+| 🟦 | `ac-mtwetuu-shard-00-01.rfzvgwe.mongodb.net:27017` | SECONDARY |
+| 🟦 | `ac-mtwetuu-shard-00-02.rfzvgwe.mongodb.net:27017` | PRIMARY |
 
 ---
 
@@ -350,6 +457,20 @@ print("Read via secondary:    ", secondary_view["name"])
 
 `SECONDARY_PREFERRED` lets reads be served by a secondary, spreading read traffic across the set. The trade-off is eventual consistency — a secondary can momentarily lag behind the primary.
 
+**Snapshot — the `students` collection gains one tagged document (green); the other documents already in the collection are untouched.**
+
+| | student_id | name | lab6_marker |
+|---|---|---|---|
+| ⬜ | (other documents already in the collection) | (unchanged) | (not set) |
+| 🟩 | LAB6TAG001 | Replica Read Test | True |
+
+**Snapshot — the same tagged document is read twice, once through the primary and once through a `SECONDARY_PREFERRED` handle (blue = returned by a query, nothing changed).**
+
+| | Read through | `name` returned |
+|---|---|---|
+| 🟦 | primary (`db`) | Replica Read Test |
+| 🟦 | secondary-preferred (`secondary_db`) | Replica Read Test |
+
 ---
 
 ### Step 5 — Verify the Connection Is Encrypted (TLS)
@@ -369,6 +490,14 @@ print("CA bundle path:", ca_path)
 ```
 
 `mongodb+srv` requires TLS by the driver spec, and `tlsCAFile=certifi.where()` supplies the trusted CA bundle. This is a verify-only step because Atlas enforces TLS on every connection.
+
+**Snapshot — the TLS checks only read values, so every row is blue; nothing was configured or changed.**
+
+| | Check | Result |
+|---|---|---|
+| 🟦 | URI scheme | mongodb+srv |
+| 🟦 | TLS is mandatory for mongodb+srv | True |
+| 🟦 | CA bundle file exists | True |
 
 ---
 
@@ -398,6 +527,17 @@ for r in status["authInfo"]["authenticatedUserRoles"]:
 
 A user holding only `read` on `school_db` **cannot write** to it. If such a user tried to insert a document, MongoDB would respond with an `OperationFailure: not authorized on school_db to execute command ...`. Our current user holds a fully-privileged role, so every write in the code above succeeded — but now you know exactly which role grants that power, and that the database itself enforces the boundary. Custom roles (extra fine-grained combinations) extend this, but built-in roles already cover almost any need, and on M0 they are the right tool.
 
+**Snapshot — what `connectionStatus` returned for the current user (blue = returned by a query), and what a write would do for that user compared with a user holding only `read`.**
+
+| | User | Database | Role | Role's database |
+|---|---|---|---|---|
+| 🟦 | `<your_db_user>` | admin | atlasAdmin | admin |
+
+| | User | Action attempted | Result |
+|---|---|---|---|
+| 🟦 | `<your_db_user>` (role `atlasAdmin`) | insert a document | allowed |
+| 🟥 | a user holding only `read` on `school_db` | insert a document | denied (`OperationFailure: not authorized on school_db ...`) |
+
 ---
 
 ### Step 7 — Sharding (Conceptual Only)
@@ -423,13 +563,25 @@ print("Current user:          ", next((u.get('user') for u in status['authInfo']
 print("Current user's roles:  ", ", ".join(r.get('role') for r in status['authInfo']['authenticatedUserRoles']))
 ```
 
-First we delete every tagged document (`lab6_marker: True`) so `school_db` is returned to the state the earlier labs left it in, then we print a summary of everything verified in this lab.
+First we delete every tagged document (`lab6_marker: True`) so `school_db` is returned to its previous state, then we print a summary of everything verified in this lab.
 
----
+**Snapshot — the tagged document from Step 4 is deleted (red); the summary lines are only read back (blue).**
 
-### Optional Exercise
+| | student_id | name | lab6_marker |
+|---|---|---|---|
+| ⬜ | (other documents already in the collection) | (unchanged) | (not set) |
+| 🟥 | LAB6TAG001 | Replica Read Test | True |
 
-Modify the notebook's Step 6 to *also* print, for each of the current user's roles, a short one-line answer to "could a user holding **only** this role insert into `school_db`?" For the role you actually hold, say why the answer is what it is based on the role name alone. Next, describe (in a markdown cell, not code) the exact Atlas UI steps you would take to create a user with the least privilege needed for a read-only reporting dashboard on `school_db` — and state which single built-in role that is.
+`delete_many` removed 1 document (`Removed 1 lab-6 seeded document(s).`).
+
+| | Checklist item | Value |
+|---|---|---|
+| 🟦 | Replica set name | atlas-jooykf-shard-0 |
+| 🟦 | Member node count | 3 |
+| 🟦 | Primary host | `ac-mtwetuu-shard-00-02.rfzvgwe.mongodb.net:27017` |
+| 🟦 | Connection encrypted | TLS enforced (mongodb+srv + tlsCAFile) |
+| 🟦 | Current user | `<your_db_user>` |
+| 🟦 | Current user's roles | atlasAdmin |
 
 ---
 
@@ -442,6 +594,6 @@ Modify the notebook's Step 6 to *also* print, for each of the current user's rol
 - **TLS protects data in transit** — Atlas enforces TLS on every connection; the `mongodb+srv` scheme requires it and `tlsCAFile` supplies the trusted CA bundle, which we verified rather than configured.
 - **RBAC applies least privilege** — `connectionStatus` shows the current user's roles, and built-in roles (`read`, `readWrite`, `dbAdmin`, `userAdmin`, ...) let you grant each connection only the access it needs.
 - **Sharding scales past one machine** — conceptually, shards + a router + a shard key spread a collection across servers, but it is not available on the free M0 tier.
-- **The shared cluster is left clean** — the only document this lab seeded was tagged and deleted in Step 8, so `school_db` is exactly as the earlier labs left it.
+- **The cluster is left clean** — the only document this lab added was tagged and deleted in Step 8, so `school_db` is exactly as it was before.
 
-These are the very properties a production database needs — and they are the same properties the Lab 7 capstone, a **university registration database**, depends on. A registration system that takes seats and records enrollments must be highly available (so students can always register) and tightly access-controlled (so only the registrar's application can read and write it). You now know how those guarantees are built and how to verify them on a real cluster.
+These are the very properties a production database needs. A system such as a university registration database, which takes seats and records enrollments, must be highly available (so students can always register) and tightly access-controlled (so only the registrar's application can read and write it). You now know how those guarantees are built and how to verify them on a real cluster.

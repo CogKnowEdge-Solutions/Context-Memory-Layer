@@ -1,8 +1,8 @@
-# MongoDB Capstone: University Registration Database
+# University Registration Database
 
 ## Assignment
 
-Complete the starter notebook, then answer three short reflection questions. This capstone is intentionally small: finish it in one sitting.
+Complete your notebook, then answer three short reflection questions. This capstone is intentionally small: finish it in one sitting.
 
 ---
 
@@ -16,15 +16,15 @@ Build and verify a registration database on MongoDB Atlas that enrolls students 
 
 Every item has a **check cell** in the notebook. A step is complete when its check prints *passed*.
 
-| # | Step | Skill reused | Points |
+| # | Step | Skills used | Points |
 |---|------|--------------|--------|
-| 1 | Seed students and courses, add the unique index | Labs 1, 4, 4B | 10 |
-| 2 | Query, update and upsert | Labs 1, 2 | 10 |
-| 3 | Transactional enrollment (full course and inactive student rejected) | Labs 2, 5 | 20 |
-| 4 | Per-course enrollment and average-grade report | Lab 3 | 15 |
-| 5 | ESR index: `COLLSCAN` and `SORT` replaced by `IXSCAN` with no `SORT` | Labs 3, 3B | 15 |
-| 6 | Typo-tolerant catalog search (`programing` finds CS101) | Lab 4C | 15 |
-| 7 | Replica set, TLS and roles read correctly; database cleaned up | Lab 6 | 5 |
+| 1 | Seed students and courses, add the unique index | Schema design, inserting data, unique indexes | 10 |
+| 2 | Query, update and upsert | Queries, updates, upserts | 10 |
+| 3 | Transactional enrollment (full course and inactive student rejected) | Atomic updates, transactions | 20 |
+| 4 | Per-course enrollment and average-grade report | Aggregation | 15 |
+| 5 | ESR index: `COLLSCAN` and `SORT` replaced by `IXSCAN` with no `SORT` | Compound indexes, ESR rule, explain | 15 |
+| 6 | Typo-tolerant catalog search (`programing` finds CS101) | Atlas Search | 15 |
+| 7 | Replica set, TLS and roles read correctly; database cleaned up | Replica set, TLS and roles checks | 5 |
 | | Reflection questions (below) | All | 10 |
 | | **Total** | | **100** |
 
@@ -36,7 +36,7 @@ Every item has a **check cell** in the notebook. A step is complete when its che
 
 | Deliverable | What to submit |
 |-------------|----------------|
-| Completed notebook | `lab-7-registration-database.ipynb` with every step's check printing *passed* |
+| Completed notebook | Your completed notebook with every step's check printing *passed* |
 | Reflection answers | Your answers to the three questions below (a few sentences each) |
 
 ---
@@ -70,13 +70,13 @@ The query filters on two **equalities** (`course_id`, `status`) and sorts by `en
 |------|--------|---------|
 | Distinction | 85-100 | All steps pass and the reflection answers are accurate |
 | Pass | 60-84 | Steps 1-5 pass; some reflection gaps or Step 6 or 7 incomplete |
-| Not yet | below 60 | Revisit the earlier labs for the failing steps, then retry |
+| Not yet | below 60 | Revisit the failing steps and retry |
 
 ---
 
 # Tips
 
-- Do the steps **in order**: later steps rely on earlier data.
+- Do the steps **in order**: later steps rely on data from previous steps.
 - Read the **check cell's message** when it stops; it tells you exactly what is missing.
 - Step 6 needs Atlas Search, so make sure your cluster is running and wait for the index to build.
 - If you run a step twice and see duplicates or unexpected counts, restart from Step 0, which clears the collections.

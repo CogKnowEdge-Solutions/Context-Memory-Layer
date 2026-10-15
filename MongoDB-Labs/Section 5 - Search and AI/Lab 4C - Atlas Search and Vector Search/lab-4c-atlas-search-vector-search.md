@@ -1,10 +1,82 @@
-# MongoDB Intermediate: How to Search by Keywords and by Meaning
+# How to Search by Keywords and by Meaning
 
 ---
 
 # Problem Statement / Use Case Overview
 
 The university has a catalog of 22 courses and a search box that does exact matching. A student who types "make my chatbot remember what customers told it yesterday" gets nothing, even though a course on persistent conversation state is exactly what they need: none of their words appear in its description. Another student typing "databses" (a typo) also gets nothing.
+
+## What Are Keyword Search and Vector Search, and Why Use Them?
+
+**In one sentence:** *Keyword search* finds documents that contain the words you typed, while *vector search* finds documents that mean the same thing as your question, even when no words match.
+
+Think of it like this. Keyword search is the **index at the back of a book**: you look up a word and it tells you every page where that word appears. Vector search is a **map of ideas**: every text is a pin on the map, pins about similar ideas sit close together, and you search by dropping a pin for your question and looking at its neighbours.
+
+### Why `find()` is not enough for search
+
+`find()` with exact matching only answers "is this value equal to what I typed?". It cannot rank results, it does not forgive a typo, and it does not know that two sentences can say the same thing with different words. A search box needs all three.
+
+| What the student types | Exact matching with `find()` | Keyword search | Vector search |
+|------------------------|------------------------------|----------------|---------------|
+| `databases` | Only if a field equals that word exactly | Finds courses that contain the word, best match first | Finds courses about databases |
+| `databses` (typo) | Nothing | Finds the same courses, if fuzzy matching is on | Usually finds them, because the meaning is close |
+| `make my chatbot remember what customers told it yesterday` | Nothing | Nothing relevant: the words do not appear in the course | Finds the course on persistent conversation state |
+
+### Keyword search: an index of words
+
+Atlas Search builds a **search index**, much like the index in a book. It splits text into words and records which documents contain each word. At query time it looks the words up and gives each document a **relevance score**. Rare words and words that appear often count for more. Adding **fuzzy** matching lets a query still match when a word has a small spelling mistake.
+
+### Vector search: a map of meaning
+
+An **embedding** is a list of numbers that captures what a text means. A model turns each course description into 384 numbers. Texts with similar meaning get similar numbers, so they land close together. To search, the question is turned into numbers by the same model. Then Atlas Vector Search finds the **nearest neighbours**: the stored vectors closest to the question.
+
+```mermaid
+flowchart TB
+    T["Course text<br/>or a question"] --> M["Embedding model<br/>BAAI/bge-small-en-v1.5"]
+    M --> V["Vector<br/>384 numbers"]
+    V --> I["Vector search index"]
+    I --> N["Nearest results<br/>closest meaning first"]
+
+    style T fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style M fill:#fff3cd,stroke:#333333,stroke-width:1px,color:#111111
+    style V fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style I fill:#fff3cd,stroke:#333333,stroke-width:1px,color:#111111
+    style N fill:#d3f9d8,stroke:#333333,stroke-width:1px,color:#111111
+```
+
+The same model must embed both the course texts and the question. Otherwise the numbers come from different "maps" and distances mean nothing.
+
+### Keyword search versus vector search
+
+| | Keyword search (`$search`) | Vector search (`$vectorSearch`) |
+|---|---|---|
+| **Matches on** | The words in the text | The meaning of the text |
+| **Handles typos** | Yes, with fuzzy matching | Often, because meaning stays close, but it is not guaranteed |
+| **Handles synonyms and rephrasing** | Weak | Strong |
+| **Needs embeddings** | No | Yes (a model turns text into numbers) |
+| **Good for** | Exact names, codes, rare terms | Questions asked in everyday words |
+
+Each one is strong where the other is weak. That is why the lab also merges the two ranked lists into one **hybrid** list. Keyword scores and vector similarities use different scales, so the lab combines the *positions* in each list (Reciprocal Rank Fusion), not the raw scores. A course that ranks well in both lists comes out on top.
+
+### How the results feed an AI prompt
+
+The best results are then written into a short **context block**. This is the retrieval half of a **RAG** (retrieval-augmented generation) system: the retrieved courses are what you would paste into a prompt so that a language model answers from real catalog data. This lab stops at building that block.
+
+### The search indexes this lab creates
+
+| Index | Type | What it is for |
+|-------|------|----------------|
+| `course_text_index` | Atlas Search (keyword) | Word matching, fuzzy matching and filtering on `level` over `title`, `description` and `level` |
+| `course_vector_index` | Atlas Vector Search | Nearest-neighbour search over the stored 384-number embeddings, using cosine similarity |
+
+> **Honest note:** Vector search finds what is *similar*, not what is *exact*. It always returns its closest neighbours, even when none of them is a good answer, and its scores only make sense relative to each other. Use keyword search when you need an exact name or code. Also, both indexes are built in the background, so a query only works after the index is ready. The lab waits for that before searching.
+
+**Learn more (official MongoDB documentation):**
+
+- [MongoDB Search Overview](https://www.mongodb.com/docs/atlas/atlas-search/)
+- [MongoDB Vector Search Overview](https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-overview/)
+- [text operator (includes fuzzy matching)](https://www.mongodb.com/docs/atlas/atlas-search/operators-collectors/text/)
+- [$vectorSearch (aggregation stage)](https://www.mongodb.com/docs/manual/reference/operator/aggregation/vectorsearch/)
 
 Two different problems need two different tools. **Keyword search** (Atlas Search, built on Apache Lucene) finds documents that contain the words you typed, ranks them by relevance, and forgives typos. **Vector search** finds documents that *mean* the same thing, even with no words in common, by comparing embeddings (lists of numbers that capture meaning). Each is strong where the other is weak, so production systems often use both and merge the rankings.
 
@@ -16,7 +88,7 @@ This lab builds all three on one collection, and ends by formatting the top resu
 
 | Item | Detail |
 |------|--------|
-| **Catalog file** | `course_catalog.json` in this lab folder: 22 courses, each with `course_id`, `title`, `level`, `topic`, `description` |
+| **Catalog file** | `course_catalog.json` (provided with this lab): 22 courses, each with `course_id`, `title`, `level`, `topic`, `description` |
 | **Levels** | beginner (7), intermediate (7), advanced (8) |
 | **Collection** | `school_db.catalog_courses` (dropped and recreated by the notebook) |
 | **Embedding model** | `BAAI/bge-small-en-v1.5` through `fastembed`: 384-dimensional vectors, runs locally |
@@ -29,7 +101,7 @@ This lab builds all three on one collection, and ends by formatting the top resu
 ### Part A — Keyword Search with `$search`
 
 ```mermaid
-flowchart LR
+flowchart TB
     C["catalog_courses<br/>22 documents"] --> SI["Atlas Search index<br/>title, description, level"]
     Q["Typed words"] --> S["$search<br/>text + fuzzy + filter"]
     SI --> S
@@ -47,7 +119,7 @@ The notebook creates a search index, waits for it to become queryable, and runs 
 ### Part B — Vector Search and Hybrid Fusion
 
 ```mermaid
-flowchart LR
+flowchart TB
     D["Course descriptions"] --> EM["Embedding model<br/>384 numbers per text"]
     EM --> V["Stored in each document"]
     Q["Question"] --> QE["Same model<br/>embeds the question"]
@@ -66,7 +138,7 @@ flowchart LR
     style P fill:#c8e6c9,stroke:#333333,stroke-width:1px,color:#111111
 ```
 
-Each description is embedded once and stored beside the text. A vector index lets MongoDB find the closest vectors to the question's embedding. The two ranked lists (keyword and meaning) are then merged with Reciprocal Rank Fusion, the same method used in the Hybrid RAG labs.
+Each description is embedded once and stored beside the text. A vector index lets MongoDB find the closest vectors to the question's embedding. The two ranked lists (keyword and meaning) are then merged with Reciprocal Rank Fusion.
 
 ---
 
@@ -163,8 +235,8 @@ Retrieval-Augmented Generation takes the top search results, pastes them into th
 
 # Pre-requisites
 
-- Lab 4 completed
-- A working Atlas cluster and `.env` file (README Section 8). The M0 free tier is sufficient
+- Basic familiarity with MongoDB documents, collections and aggregation pipelines
+- A MongoDB Atlas cluster and a `.env` file holding your connection string — set these up before you start. The M0 free tier is sufficient
 - Network access to download the embedding model on first run (about 130 MB)
 - No LLM or embedding API key is required
 
@@ -180,7 +252,7 @@ Retrieval-Augmented Generation takes the top search results, pastes them into th
 | `fastembed` | Runs a small embedding model locally, so this lab needs **no API key** |
 
 ```bash
-pip install -qU "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi fastembed
+pip install -q "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi fastembed
 ```
 
 This installs the MongoDB driver, `python-dotenv`, `certifi`, and `fastembed` — a small library that runs an embedding model on your own machine, so this lab needs **no API key** for embeddings. The first run downloads the model (about 130 MB).
@@ -201,7 +273,7 @@ from dotenv import load_dotenv
 import pymongo
 from pymongo.operations import SearchIndexModel
 
-load_dotenv("../../.env")
+load_dotenv()
 client = pymongo.MongoClient(os.environ["MONGODB_URI"], tlsCAFile=certifi.where())
 db = client["school_db"]
 catalog = db["catalog_courses"]
@@ -216,7 +288,19 @@ print("Courses inserted:", catalog.count_documents({}))
 print("Example:", {k: courses[0][k] for k in ("course_id", "title", "level")})
 ```
 
-The 22 courses live in a JSON file next to the notebook so every learner searches the same data. The collection is dropped first so the notebook can be re-run. Note that nothing here is search-specific yet: these are ordinary documents.
+> **Where does the `.env` file go?** `load_dotenv()` looks for a file named `.env` in the folder you run from and then in each parent folder above it. Save it next to your notebook, or once in the root folder of your course project, with a single line: `MONGODB_URI=mongodb+srv://<user>:<password>@<cluster-host>/` (use your own Atlas connection string, and never commit this file to Git).
+
+
+The 22 courses live in a JSON file so every learner searches the same data. The collection is dropped first so the notebook can be re-run. Note that nothing here is search-specific yet: these are ordinary documents.
+
+**Colour key used in the table snapshots:** 🟩 inserted &nbsp;·&nbsp; 🟨 updated &nbsp;·&nbsp; 🟥 deleted &nbsp;·&nbsp; 🟦 matched / returned by a query &nbsp;·&nbsp; ⬜ not touched
+
+**Snapshot — `catalog_courses` after Step 1: all 22 documents are new (green) because the collection was dropped and refilled.**
+
+|  | course_id | title | level | topic | description |
+|---|---|---|---|---|---|
+| 🟩 | CAT303 | Persistent Conversation State for AI Assistants | advanced | (text from the JSON file) | (text from the JSON file) |
+| 🟩 | … 21 other documents | (same five fields in each) | beginner (7), intermediate (7), advanced (8) across all 22 | | |
 
 ---
 
@@ -260,6 +344,12 @@ print("Ready:", wait_until_queryable(catalog, TEXT_INDEX))
 
 A search index is built asynchronously by Atlas, which is why the helper polls `list_search_indexes` until `queryable` is true. The definition turns off dynamic mapping so only the three fields we name are indexed: `title` and `description` are analyzed as text, while `level` is a `token` (kept whole) so it can be used for exact filtering later.
 
+**Snapshot — the collection's search indexes: the new keyword index is green; the 22 documents themselves are unchanged.**
+
+|  | index name | type | fields indexed | status |
+|---|---|---|---|---|
+| 🟩 | course_text_index | search | title (string), description (string), level (token) | queryable once the build finishes |
+
 ---
 
 ### Step 3 — Keyword Search with $search
@@ -302,6 +392,18 @@ show(list(catalog.aggregate(text_pipeline("databses", fuzzy=True))))
 
 `$search` must be the **first** stage of the pipeline. Each result carries a relevance score through `{"$meta": "searchScore"}`. Without `fuzzy`, the misspelled word `databses` matches nothing; with `maxEdits: 1`, one missing character is forgiven and `databases` matches again. Keyword search is excellent at this kind of forgiving exact-word matching.
 
+**Snapshot — results returned by the three keyword queries (blue = returned by the query; nothing in the collection changes).**
+
+|  | query | rank | title |
+|---|---|---|---|
+| 🟦 | "databases" | 1 | Relational Databases and SQL |
+| 🟦 | "databases" | 2 | Introduction to Document Databases |
+| ⬜ | "databses" (no fuzzy) | - | (no results) |
+| 🟦 | "databses" (fuzzy, maxEdits 1) | 1 | Relational Databases and SQL |
+| 🟦 | "databses" (fuzzy, maxEdits 1) | 2 | Introduction to Document Databases |
+
+Exact scores and ordering can differ between runs, so they are not listed here.
+
 ---
 
 ### Step 4 — Combine a Search with a Filter
@@ -333,6 +435,13 @@ print(" ", target["description"])
 ```
 
 The best course for this question is *Persistent Conversation State for AI Assistants*, yet none of the question's important words appear in it. A keyword engine looks for shared words, so it either returns nothing relevant or returns weak accidental matches on common words. A person would instantly see "remember what customers told it" and "store dialogue history across sessions" mean the same thing. That is the gap embeddings close.
+
+**Snapshot — what Step 5 reads: keyword search finds nothing relevant (no blue rows), and `find_one` returns the one course we asked for (blue).**
+
+|  | course_id | title | level | description |
+|---|---|---|---|---|
+| ⬜ | (keyword search results) | nothing relevant, at most weak matches on common words | | |
+| 🟦 | CAT303 | Persistent Conversation State for AI Assistants | advanced | (description text is printed by the code; its words do not match the question) |
 
 ---
 
@@ -366,6 +475,16 @@ print("Embedded and stored:", catalog.count_documents({"embedding": {"$exists": 
 
 `fastembed` downloads a small model the first time and then runs entirely on your computer. Each course's title and description are embedded together into 384 numbers and stored in an `embedding` field **inside the same document**, so the vector always travels with its text. The numbers have no readable meaning on their own; only their *distance* from other vectors matters.
 
+**Snapshot — `catalog_courses` after Step 6: every document is updated (yellow) because a new `embedding` field was added to it.**
+
+|  | course_id | title | embedding |
+|---|---|---|---|
+| 🟨 | CAT301 | (unchanged) | (field missing) → [vector, 384 dims] |
+| 🟨 | CAT303 | Persistent Conversation State for AI Assistants | (field missing) → [vector, 384 dims] |
+| 🟨 | … 20 other documents | (unchanged) | (field missing) → [vector, 384 dims] |
+
+The last line of the code prints that 22 documents now have an `embedding` field.
+
 ---
 
 ### Step 7 — Create the Vector Search Index
@@ -391,6 +510,13 @@ print("Ready:", wait_until_queryable(catalog, VECTOR_INDEX))
 ```
 
 `numDimensions` must equal the model's output size (384); a mismatch fails at query time. `cosine` similarity compares the **direction** of two vectors, which works well for text embeddings. Declaring `level` as a `filter` field lets `$vectorSearch` restrict candidates *before* ranking, instead of throwing results away afterwards.
+
+**Snapshot — the collection's search indexes: the new vector index is green; the keyword index and the documents are untouched (grey).**
+
+|  | index name | type | fields indexed | status |
+|---|---|---|---|---|
+| ⬜ | course_text_index | search | title, description, level | unchanged |
+| 🟩 | course_vector_index | vectorSearch | embedding (384 dims, cosine), level (filter) | queryable once the build finishes |
 
 ---
 
@@ -426,6 +552,15 @@ show(list(catalog.aggregate(vector_pipeline(query_vector, level="advanced"))))
 
 The question is embedded with the same model, and MongoDB returns the courses whose vectors are nearest. Even though no important words are shared, *Persistent Conversation State for AI Assistants* is expected to rank near the top because its meaning is close to the question. `numCandidates` controls how many neighbours the index examines before returning `limit` results: raise it for better accuracy, lower it for speed. The `vectorSearchScore` is a similarity (higher is closer) and is not comparable to `searchScore`.
 
+**Snapshot — courses returned by `$vectorSearch` for the chatbot question (blue = returned; nothing in the collection changes).**
+
+|  | rank | title | level |
+|---|---|---|---|
+| 🟦 | near the top (expected) | Persistent Conversation State for AI Assistants | advanced |
+| 🟦 | … other courses up to `limit` = 5 | (not named in this lab) | |
+
+The lab does not state exact scores or the order of the other results, so they are not shown.
+
 ---
 
 ### Step 9 — Hybrid Search with Reciprocal Rank Fusion
@@ -455,7 +590,7 @@ for query in ["databases", question]:
     print()
 ```
 
-Keyword scores and vector similarities have different scales, so they cannot be added. **Reciprocal Rank Fusion** looks only at positions: a document earns `1/(60+rank)` from each list it appears in, and documents found by both lists rise to the top. The exact-word query keeps its precise matches; the paraphrased question still surfaces the semantically right course. This is the same fusion used in the Hybrid RAG labs, now running on top of MongoDB. (For production scale, Atlas also offers server-side fusion with `$rankFusion` on newer cluster versions; the Python version here works everywhere and shows the arithmetic.)
+Keyword scores and vector similarities have different scales, so they cannot be added. **Reciprocal Rank Fusion** looks only at positions: a document earns `1/(60+rank)` from each list it appears in, and documents found by both lists rise to the top. The exact-word query keeps its precise matches; the paraphrased question still surfaces the semantically right course. Here it runs on top of MongoDB. (For production scale, Atlas also offers server-side fusion with `$rankFusion` on newer cluster versions; the Python version here works everywhere and shows the arithmetic.)
 
 ---
 
@@ -484,7 +619,14 @@ Answer:"""
 print(prompt)
 ```
 
-This is the retrieval half of RAG: search finds the most relevant documents, and the prompt template constrains the model to answer only from them and to cite numbered sources. Sending `prompt` to any LLM would complete the pipeline, but the part you built here (the search) is where answer quality is won or lost. The Lab 7 capstone reuses the keyword half of this idea (Atlas Search) on a course catalog.
+This is the retrieval half of RAG: search finds the most relevant documents, and the prompt template constrains the model to answer only from them and to cite numbered sources. Sending `prompt` to any LLM would complete the pipeline, but the part you built here (the search) is where answer quality is won or lost.
+
+**Snapshot — the courses placed in the prompt's context block (blue = returned by the hybrid search; nothing in the collection changes).**
+
+|  | context number | title | level |
+|---|---|---|---|
+| 🟦 | [1] | Persistent Conversation State for AI Assistants | advanced |
+| 🟦 | [2] and [3] | (other top courses, not named in this lab; `limit` = 3) | |
 
 ---
 
@@ -499,18 +641,17 @@ for name in (TEXT_INDEX, VECTOR_INDEX):
 print("Remaining search indexes:", [i["name"] for i in catalog.list_search_indexes()])
 ```
 
-The free M0 tier allows only three search/vector indexes per cluster, so dropping the ones you no longer need leaves room for the capstone. Search indexes also consume resources while they exist, even when idle. The collection itself (with its embeddings) is kept so you can re-create the indexes later without re-embedding.
+The free M0 tier allows only three search/vector indexes per cluster, so dropping the ones you no longer need leaves room for new ones. Search indexes also consume resources while they exist, even when idle. The collection itself (with its embeddings) is kept so you can re-create the indexes later without re-embedding.
 
----
+**Snapshot — the collection's search indexes after clean-up: both indexes are deleted (red); the 22 documents and their embeddings stay (grey).**
 
-### Optional Exercise
+|  | item | detail |
+|---|---|---|
+| 🟥 | course_text_index | search index dropped |
+| 🟥 | course_vector_index | vectorSearch index dropped |
+| ⬜ | 22 documents in `catalog_courses` | kept, still with their `embedding` field |
 
-Experiment with the knobs:
-
-1. Change `numCandidates` in the vector query from 100 to 5 and then to 22. Do the results change? Why does a very small value risk missing the best match?
-2. Add a second text field boost: make title matches count more than description matches (hint: wrap the `text` operator with `score: {"boost": {"value": 3}}` and search `title` and `description` in separate `should` clauses).
-3. Write three new questions in your own words that share no words with the catalog and check which course vector search returns. Does it always match your intent?
-4. Change the `rrf_fuse` constant `k` from 60 to 5. What happens to the influence of rank 1 versus rank 5?
+Remaining search indexes: `[]`.
 
 ---
 
@@ -525,4 +666,4 @@ Experiment with the knobs:
 - **RAG retrieval is search plus a prompt template** that restricts the model to the retrieved context and asks for citations.
 - **The free M0 tier allows three search indexes** — drop indexes you are finished with.
 
-You can now find documents by words and by meaning. The next section covers reliability and scale (transactions, replication, security), and the capstone (Lab 7, University Registration Database) puts search, schema patterns, indexing and transactions together into one working registration system.
+You can now find documents by words and by meaning, and combine both rankings into one result list that feeds a RAG-style prompt.

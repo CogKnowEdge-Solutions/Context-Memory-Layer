@@ -1,10 +1,117 @@
-# MongoDB Intermediate: How to Make Queries Fast
+# How to Make Queries Fast
 
 ---
 
 # Problem Statement / Use Case Overview
 
-In Lab 3 you proved that an index changes a query plan from `COLLSCAN` to `IXSCAN`. Real applications need more than that. A university's enrollment system receives a hundred thousand records per year, and the dashboard that lists "the top 20 active Computer Science grades" has started to feel slow. Someone has asked you to find out why and fix it **without adding hardware**.
+An index can change a query plan from `COLLSCAN` to `IXSCAN`, but real applications need more than that. A university's enrollment system receives a hundred thousand records per year, and the dashboard that lists "the top 20 active Computer Science grades" has started to feel slow. Someone has asked you to find out why and fix it **without adding hardware**.
+
+## What Is Query Optimization, and Why Does It Matter?
+
+**In one sentence:** Query optimization means helping MongoDB find the documents you asked for by reading as *little* data as possible, so the answer comes back fast.
+
+Think of a library. To find every book on physics, you could walk past every shelf and check every spine. Or you could use the **catalogue**, which tells you the exact shelves. An index is that catalogue. A query is "slow" when MongoDB walks every shelf, even though it only needed a few books.
+
+### How MongoDB decides how to run a query
+
+When you run a query, MongoDB does not just start reading. A part called the **query planner** first picks a **query plan**: a recipe of steps (called *stages*) to find the documents. You can ask MongoDB to show you the plan with `explain()`.
+
+```mermaid
+flowchart TB
+    Q["Your query<br/>filter + sort + limit"] --> P["Query planner<br/>picks the cheapest plan"]
+    P --> PL["Query plan<br/>(stages)"]
+    PL --> R["Result<br/>documents returned"]
+    PL -.->|"explain() shows this"| X["Plan report<br/>stages + counts + time"]
+
+    style Q fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style P fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style PL fill:#fff3cd,stroke:#333333,stroke-width:1px,color:#111111
+    style R fill:#d3f9d8,stroke:#333333,stroke-width:1px,color:#111111
+    style X fill:#fff3cd,stroke:#333333,stroke-width:1px,color:#111111
+```
+
+### A slow plan and a fast plan for the same question
+
+The question is the same in both plans: "the top 20 active Computer Science grades". Only the plan is different.
+
+```mermaid
+flowchart LR
+    subgraph SLOW["Slow plan: no useful index"]
+        S1["COLLSCAN<br/>read all 100,000 documents"] --> S2["SORT<br/>sort the matches in memory"] --> S3["Return 20"]
+    end
+    subgraph FAST["Fast plan: compound index"]
+        F1["IXSCAN<br/>walk the index in order"] --> F2["FETCH<br/>load 20 documents"] --> F3["Return 20"]
+    end
+    SLOW ~~~ FAST
+
+    style S1 fill:#ffe3e3,stroke:#333333,stroke-width:1px,color:#111111
+    style S2 fill:#ffe3e3,stroke:#333333,stroke-width:1px,color:#111111
+    style S3 fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+    style F1 fill:#d3f9d8,stroke:#333333,stroke-width:1px,color:#111111
+    style F2 fill:#d3f9d8,stroke:#333333,stroke-width:1px,color:#111111
+    style F3 fill:#e1f5ff,stroke:#333333,stroke-width:1px,color:#111111
+```
+
+Both plans return the same 20 documents. The slow plan does far more work to get there.
+
+### How to read `explain()`
+
+| Field or stage | What it tells you | What a healthy value looks like |
+|----------------|-------------------|---------------------------------|
+| `COLLSCAN` | MongoDB read every document in the collection | Avoid it on big collections you query often |
+| `IXSCAN` | MongoDB used an index | This is what you want to see |
+| `FETCH` | MongoDB loaded the full document for an index entry | Fine, as long as it fetches few documents |
+| `SORT` | MongoDB sorted results in memory | Absent, because the index already gives the order |
+| `nReturned` | Documents sent back to you | Whatever the query needs |
+| `totalDocsExamined` | Documents MongoDB actually read | Close to `nReturned` |
+| `totalKeysExamined` | Index entries MongoDB walked | Close to `nReturned` |
+| `executionTimeMillis` | Time the server spent | Low. Compare it before and after a change |
+
+The key idea is the gap between **examined** and **returned**. Reading 100,000 documents to return 20 means about 99,980 were read for nothing.
+
+### Why a query is slow
+
+| Symptom in `explain()` | What it means in plain words | Usual fix |
+|------------------------|------------------------------|-----------|
+| `COLLSCAN` and docs examined much larger than returned | MongoDB walked every shelf | Add an index on the filtered fields |
+| A `SORT` stage | MongoDB gathered all matches, then sorted them in memory | Put the sort field in the index, in the right position |
+| `FETCH` of many documents you barely use | MongoDB opened full documents just to read a few fields | Return only the fields you need (a projection), and consider a covered query |
+
+### Compound indexes and the ESR rule
+
+A **compound index** is one index over several fields, in a fixed order. The order matters, just like a phone book sorted by last name and then first name. The **ESR rule** is a good starting order:
+
+| Position | Field type | Example from enrollment data | Why it goes here |
+|----------|------------|------------------------------|------------------|
+| 1st | **E**quality (`==`) | `course` = "Computer Science" | Narrows the index to one small block |
+| 2nd | **S**ort | `submitted_at`, newest first | Entries in that block are already in sort order |
+| 3rd | **R**ange (`>=`, `<`) | `grade` >= 90 | Checked while walking, so it cannot break the order |
+
+If you put the range field *before* the sort field, the entries are no longer in sort order. MongoDB then has to bring in an in-memory `SORT` again.
+
+### Covered queries and projections
+
+A **projection** lists which fields to return. If the filter fields and the returned fields all live in one index (and `_id` is left out), MongoDB can answer from the index alone. It reads **zero documents**. This is called a *covered query*.
+
+### What your changes cost
+
+| Benefit of an index | Cost of an index |
+|---------------------|------------------|
+| Queries read fewer documents | Takes extra storage |
+| Sorts can skip the in-memory step | Every insert, update of an indexed field, and delete must also update the index |
+| Covered queries are possible | An index nobody uses is pure cost |
+
+To find slow queries you did not know about, MongoDB has a **database profiler**. It records operations slower than a time limit you choose. It may not be available on every cluster tier.
+
+> **Honest note:** More indexes do not mean a faster database. Each one slows writes and uses memory and storage. ESR is a strong starting rule, not a law. Do not guess: **measure with `explain()`, change one thing, and measure again.**
+
+**Learn more (official MongoDB documentation):**
+
+- [Explain Results — Database Manual](https://www.mongodb.com/docs/manual/reference/explain-results/)
+- [Interpret Explain Plan Results — Database Manual](https://www.mongodb.com/docs/manual/tutorial/analyze-query-plan/)
+- [The ESR (Equality, Sort, Range) Guideline — Database Manual](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/)
+- [Query Plans — Database Manual](https://www.mongodb.com/docs/manual/core/query-plans/)
+- [Database Profiler — Database Manual](https://www.mongodb.com/docs/manual/tutorial/manage-the-database-profiler/)
 
 This lab gives you a deliberately unoptimized collection of 100,000 enrollment records and a short list of slow queries. For each one you will read the execution plan, form a diagnosis, apply a fix, and prove the fix worked with numbers: documents examined, index keys examined, and milliseconds. You will also learn the cost side of indexing: every index takes storage and slows writes, so unused ones must be found and removed.
 
@@ -30,7 +137,7 @@ The skill you leave with is a repeatable loop: **measure, diagnose, change one t
 ### Part A — Diagnose and Fix with Indexes
 
 ```mermaid
-flowchart LR
+flowchart TB
     S["Slow query"] --> E["explain()<br/>executionStats"]
     E --> D{"Examined >> Returned?"}
     D -->|Yes| I["Add or reorder index<br/>(ESR rule)"]
@@ -52,7 +159,7 @@ The notebook runs two slow queries: a "filter then sort" query (Query 1) and a "
 ### Part B — Covered Queries, Index Cost and Aggregations
 
 ```mermaid
-flowchart LR
+flowchart TB
     CQ["Covered query<br/>0 documents read"] --> IC["Index cost<br/>size + write speed"]
     IC --> UI["$indexStats<br/>find unused index"]
     UI --> AG["Aggregation<br/>indexed $match first"]
@@ -119,11 +226,11 @@ Aggregation (one slice)    100000 -> ~6250
 | Component | Tool |
 |-----------|------|
 | **MongoDB driver** | `pymongo[srv,tls]==4.10.1` — Python driver with SRV and TLS support |
-| **Credential loader** | `python-dotenv==1.0.1` — loads the shared `.env` file |
+| **Credential loader** | `python-dotenv==1.0.1` — loads the `.env` file |
 | **CA certificates** | `certifi` — trusted CA bundle for Atlas TLS connections |
 | **Standard library** | `random`, `datetime`, `time` — data generation and timing |
 
-> **Note:** This lab connects to a real MongoDB Atlas cluster. The connection string lives in the shared `.env` file at the module root (README Section 8), two folders above this notebook. The data set is sized to fit the free M0 tier.
+> **Note:** This lab connects to a real MongoDB Atlas cluster. The connection string is read from a `.env` file. The data set is sized to fit the free M0 tier.
 
 ---
 
@@ -172,8 +279,8 @@ Only the **first stages** of a pipeline can use an index. A `$match` (and a `$so
 
 # Pre-requisites
 
-- Lab 3 completed (aggregation and your first index)
-- A working Atlas cluster and `.env` file (README Section 8)
+- Basic familiarity with aggregation pipelines and creating a simple index (summarised in the concepts section above)
+- A working MongoDB Atlas cluster and a `.env` file holding your connection string — set these up before you start
 - Comfort reading Python dictionaries and loops
 
 > **Atlas free-tier note.** The database profiler and the Performance Advisor are not available on the free M0 tier. This lab uses `explain` and `$indexStats`, which work everywhere. Step 10 shows how to try the profiler and what to do if your tier refuses it.
@@ -189,10 +296,10 @@ Only the **first stages** of a pipeline can use an index. A `$match` (and a `$so
 | `certifi` | Provides up-to-date CA certificates for reliable SSL/TLS on all platforms |
 
 ```bash
-pip install -qU "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi
+pip install -q "pymongo[srv,tls]==4.10.1" python-dotenv==1.0.1 certifi
 ```
 
-This installs the MongoDB Python driver (`pymongo`), `python-dotenv` for loading credentials, and `certifi` for trusted CA certificates — the same packages as Labs 1-3.
+This installs the MongoDB Python driver (`pymongo`), `python-dotenv` for loading credentials, and `certifi` for trusted CA certificates.
 
 ---
 
@@ -210,8 +317,8 @@ import certifi
 from dotenv import load_dotenv
 import pymongo
 
-# The shared .env sits at the module root, two folders above this notebook
-load_dotenv("../../.env")
+# Load the Atlas connection string from the .env file
+load_dotenv()
 uri = os.environ["MONGODB_URI"]
 
 client = pymongo.MongoClient(uri, tlsCAFile=certifi.where())
@@ -221,7 +328,10 @@ log = db["enrollment_log"]
 print("Connected to MongoDB Atlas")
 ```
 
-Same connection pattern as the earlier labs. The only change is the path: labs now live inside section folders, so the shared `.env` is two levels up (`../../.env`).
+> **Where does the `.env` file go?** `load_dotenv()` looks for a file named `.env` in the folder you run from and then in each parent folder above it. Save it next to your notebook, or once in the root folder of your course project, with a single line: `MONGODB_URI=mongodb+srv://<user>:<password>@<cluster-host>/` (use your own Atlas connection string, and never commit this file to Git).
+
+
+`load_dotenv` reads the connection string from the `.env` file, and `certifi.where()` provides trusted CA certificates for SSL.
 
 ---
 
@@ -265,6 +375,22 @@ print("Indexes now:", list(log.index_information().keys()))
 ```
 
 Inserting in batches of 10,000 keeps each network request a reasonable size. `log.drop()` at the start makes the notebook safe to re-run, and it also removes any indexes left from a previous run. Only the automatic `_id_` index exists now, so every query other than a lookup by `_id` will scan the whole collection.
+
+**Colour key used in the table snapshots:** 🟩 inserted &nbsp;·&nbsp; 🟨 updated &nbsp;·&nbsp; 🟥 deleted &nbsp;·&nbsp; 🟦 matched / returned by a query &nbsp;·&nbsp; ⬜ not touched
+
+**Snapshot — the new `enrollment_log` collection after the inserts: all 100,000 documents are 🟩 newly inserted (first 6 shown, 99,994 more not listed). MongoDB adds the hidden `_id` field automatically, so it is left out here.**
+
+| | record_id | student_id | course | semester | status | grade | credits |
+|---|---|---|---|---|---|---|---|
+| 🟩 | 0 | STU00913 | Computer Science | 2025-Fall | active | 52 | 4 |
+| 🟩 | 1 | STU04468 | Computer Science | 2026-Spring | active | 46 | 2 |
+| 🟩 | 2 | STU04140 | Biology | 2024-Fall | active | 88 | 2 |
+| 🟩 | 3 | STU04828 | Physics | 2024-Fall | completed | 55 | 4 |
+| 🟩 | 4 | STU02788 | Physics | 2025-Spring | active | 78 | 2 |
+| 🟩 | 5 | STU03113 | Computer Science | 2025-Fall | completed | 68 | 2 |
+| 🟩 | … 99,994 more documents (record_id 6 to 99,999) | | | | | | |
+
+The columns `submitted_at` and `notes` also exist in every document but are left out to keep the table narrow. Values shown are what seed 42 produces with the code above.
 
 ---
 
@@ -330,6 +456,16 @@ print("\nTop 3 results:", top[:3])
 
 The dashboard asks for the 20 highest grades among active Computer Science enrollments. With no useful index MongoDB reads **all 100,000 documents** (`COLLSCAN`), keeps the ~12,000 matches, sorts them in memory (`SORT`), and returns 20. The gap between `docs examined` and `returned` is the signal that something can be improved.
 
+**Snapshot — no data changes; the query only reads. Of the 100,000 documents, the 12,011 Computer Science + active ones are 🟦 matched, and only the top 20 by grade are returned. The other documents are ⬜ untouched (but all had to be read).**
+
+| | Group of documents | Count | Note |
+|---|---|---|---|
+| 🟦 | course = Computer Science and status = active, grade 100 (top of the sort) | 156 of the 12,011 matches | the 20 returned documents all come from this group, because 156 is more than 20 |
+| 🟦 | … the other matching documents | 11,855 | read and sorted in memory, then discarded |
+| ⬜ | all other documents | 87,989 | read by `COLLSCAN` but do not match |
+
+Counts are computed from the seed-42 data. The plan itself is `COLLSCAN > SORT`: 100,000 documents examined to return 20 (see the Output section).
+
 ---
 
 ### Step 5 — Query 1 After: A Compound Index Built with ESR
@@ -351,6 +487,16 @@ print("\nSORT stage gone?", not has_stage(after_q1, "SORT"))
 ```
 
 The index stores entries grouped by `course`, then `status`, then `grade` in descending order. MongoDB jumps straight to `(Computer Science, active)` and reads the first 20 entries, which are already in the requested order, so there is no `SORT` stage and only about 20 documents are examined instead of 100,000. The `esr_index` helper simply makes the rule explicit: equality fields, then sort fields, then range fields.
+
+**Snapshot — the documents are unchanged, but the collection gains a new index. The new index is 🟩 added; the plan before is 🟥 shown once as the slow result it replaces; `_id_` is ⬜ untouched.**
+
+| | Indexes on `enrollment_log` | Query 1 plan | Docs examined | Keys examined |
+|---|---|---|---|---|
+| ⬜ | `_id_` | not used by Query 1 | | |
+| 🟩 | `esr_course_status_grade` on (course 1, status 1, grade -1) | `IXSCAN > FETCH` | 20 | 20 |
+| 🟥 | (no index) old plan | `COLLSCAN > SORT` | 100,000 | 0 |
+
+Numbers come from the Output section, which is illustrative: your exact times will differ.
 
 ---
 
@@ -380,6 +526,24 @@ print("ESR needed SORT:", has_stage(plan_b, "SORT"))
 
 Both indexes contain the same three fields, yet they behave differently. With the range field (`grade`) before the sort field (`submitted_at`), index entries for one course are ordered by grade first, so dates are scattered and MongoDB must gather every match and sort in memory. With the sort field before the range field, entries come out already ordered by date, MongoDB walks them newest-first, checks the grade range as it goes, and stops after 10 matches. The ESR index may examine a few dozen index keys but avoids the blocking sort. Always confirm with `explain` that the trade works for your data.
 
+**Snapshot — the documents are unchanged; only the indexes move. `ers_course_grade_date` was created and dropped again (🟥 deleted), `esr_course_date_grade` is 🟩 created and stays, the other indexes are ⬜ untouched.**
+
+| | Index | Key order | Query 2 plan | Docs examined |
+|---|---|---|---|---|
+| ⬜ | `_id_` | (_id) | not used | |
+| ⬜ | `esr_course_status_grade` | course, status, grade | not used by Query 2 | |
+| 🟥 | `ers_course_grade_date` (dropped) | course, grade, submitted_at | `IXSCAN > FETCH > SORT` | 3,430 (every Physics document with grade 90 or more) |
+| 🟩 | `esr_course_date_grade` | course, submitted_at, grade | `IXSCAN > FETCH` | a few dozen, no SORT (the Output section shows about 60, illustrative) |
+
+The 10 documents Query 2 returns are 🟦 matched. The newest three (computed from the data) are:
+
+| | student_id | grade | submitted_at |
+|---|---|---|---|
+| 🟦 | STU00716 | 99 | 2026-04-23 22:30 |
+| 🟦 | STU02713 | 95 | 2026-04-23 18:59 |
+| 🟦 | STU00259 | 90 | 2026-04-23 17:49 |
+| 🟦 | … 7 more documents | | |
+
 ---
 
 ### Step 7 — A Covered Query: Answer from the Index Alone
@@ -401,6 +565,15 @@ print("\nCovered query read", cov_plan["docs"], "documents")
 ```
 
 A query is covered when the filter fields and the returned fields all live in one index and `_id` is excluded. Here MongoDB answers from the index alone (`PROJECTION_COVERED`, zero documents examined). Asking for one extra field (`notes`) that is not in the index forces a `FETCH` of every matching document. Covered queries are the fastest queries you can write, but only worth designing for when the query is hot.
+
+**Snapshot — no data changes. The 5,078 Biology + completed documents are 🟦 matched in both queries; the difference is how they are read. The documents are ⬜ untouched, and the plan with `notes` is shown as the slower one.**
+
+| | Query | Plan | Docs examined | Keys examined | Returned |
+|---|---|---|---|---|---|
+| ⬜ | with `notes` (extra field) | `IXSCAN > FETCH` | 5,078 | 5,078 | 5,078 |
+| 🟦 | covered (course, status, grade only) | `IXSCAN > PROJECTION_COVERED` | 0 | 5,078 | 5,078 |
+
+Counts are computed from the seed-42 data (the Output section rounds this to 5,000).
 
 ---
 
@@ -434,6 +607,14 @@ print(f"5,000 inserts, with 3 indexes:       {ms_indexed:7.0f} ms")
 
 Every index is a second copy of part of your data that must be kept in sync. The first block reports how many megabytes each index occupies. The second block times the same 5,000 inserts into a plain collection and into `enrollment_log`. Network time is included in both numbers, so the difference is modest at this scale; on a busy production system with many indexes it becomes significant. The `delete_many` afterwards restores the collection to exactly 100,000 documents so later steps give consistent results.
 
+**Snapshot — `enrollment_log` after the timed insert and the clean-up: 5,000 test documents were 🟩 inserted and then 🟥 deleted (shown once here), so the 100,000 original documents are ⬜ untouched and the final total is 100,000. The scratch collection is created and dropped on the side.**
+
+| | record_id | student_id | course | status | grade |
+|---|---|---|---|---|---|
+| ⬜ | 0 to 99,999 (original data) | as in Step 2 | | | |
+| ⬜ | … 99,994 more original documents | | | | |
+| 🟥 | 100,000 to 104,999 (5,000 test rows, random values) | random | random | random | random |
+
 ---
 
 ### Step 9 — Find and Drop an Unused Index
@@ -460,6 +641,15 @@ for name in unused:
 ```
 
 `$indexStats` returns one row per index with `accesses.ops`, the number of times the index was used since the server started. An index that stays at `0` after representative traffic is costing storage and write time for nothing. In production you would check this over days or weeks, not seconds, because the counter resets on restart and a rarely-run monthly report may legitimately use an index only once a month.
+
+**Snapshot — the documents are unchanged; the index list changes. `idx_notes_unused` is 🟩 created and then 🟥 dropped (shown once), the other indexes are ⬜ kept, and 🟦 marks the indexes the sample queries used.**
+
+| | Index | Used by the sample queries | Result |
+|---|---|---|---|
+| ⬜ | `_id_` | not needed | kept (never dropped) |
+| 🟦 | `esr_course_status_grade` | Query 1, and the English + pending query | kept |
+| 🟦 | `esr_course_date_grade` | Query 2 | kept |
+| 🟥 | `idx_notes_unused` on (notes 1) | no query filters on `notes`, so `accesses.ops` is 0 | dropped |
 
 ---
 
@@ -504,6 +694,15 @@ scoreboard["Aggregation: average per course"] = {"before": plan_all, "after": pl
 
 Only the first stages of a pipeline can use an index. Starting with `$match` on indexed fields lets MongoDB read just the matching slice (`IXSCAN`) and hand a much smaller stream to `$group`. A pipeline that starts with `$group` has no choice but to read everything. The two pipelines answer slightly different questions (all data versus one semester and status), which is the point: if the business question only needs a slice, ask for the slice. MongoDB also reorders some stages automatically, so always check `explain` instead of assuming.
 
+**Snapshot — the documents are unchanged; one index is 🟩 added (`idx_semester_status`). The 6,084 documents with semester 2026-Spring and status completed are 🟦 matched by the second pipeline, the earlier indexes are ⬜ untouched, and the first pipeline is shown as the slow one.**
+
+| | Pipeline | Plan at the start | Docs examined |
+|---|---|---|---|
+| ⬜ | `$group` on everything | `COLLSCAN` | 100,000 |
+| 🟦 | `$match` on semester + status, then `$group` | `IXSCAN` on `idx_semester_status` | 6,084 |
+
+Counts are computed from the seed-42 data (the Output section shows about 6,250, illustrative).
+
 ---
 
 ### Step 11 — Try the Profiler (Where Your Tier Allows It)
@@ -545,17 +744,14 @@ for name, info in log.index_information().items():
 
 This collects every experiment into one table. The pattern to remember is the loop you just followed: measure with `explain`, diagnose from `docs examined` versus `returned` and from the presence of `SORT`, change one thing, and measure again.
 
----
+**Snapshot — read-only listing of the indexes left on `enrollment_log`: all four are ⬜ untouched by this step (`idx_notes_unused` is gone, `ers_course_grade_date` is gone). The 100,000 documents are unchanged.**
 
-### Optional Exercise
-
-Prefix versus suffix searches on `student_id`:
-
-1. Create an index on `student_id`.
-2. Run `log.find({"student_id": {"$regex": "^STU0042"}})` with `.explain()` and note `keys examined` and `docs examined`.
-3. Run `log.find({"student_id": {"$regex": "42$"}})` with `.explain()`.
-4. Explain, using the plan stages and key counts, why an anchored prefix can use the index efficiently while a suffix search cannot.
-5. Finally, drop every index you created in this lab except `_id_` and confirm with `log.index_information()`.
+| | Index | Keys |
+|---|---|---|
+| ⬜ | `_id_` | _id |
+| ⬜ | `esr_course_status_grade` | course, status, grade (descending) |
+| ⬜ | `esr_course_date_grade` | course, submitted_at (descending), grade |
+| ⬜ | `idx_semester_status` | semester, status |
 
 ---
 
@@ -570,4 +766,4 @@ Prefix versus suffix searches on `student_id`:
 - **The profiler and Performance Advisor find slow queries in production**, but they need a paid Atlas tier; `explain` works on every tier.
 - **Optimize by loop, not by guess:** measure, diagnose, change one thing, measure again.
 
-With query tuning in your toolbox, the next lab in the data-modeling section (Lab 4, Courses and Instructors) shows how the *shape* of your documents can make queries cheap or expensive before you ever create an index. Lab 4B then covers named schema patterns and the anti-patterns that cause performance problems.
+You can now read an `explain` plan, design compound indexes with the Equality-Sort-Range rule, build covered queries, weigh index cost against benefit, and clean up indexes that are not earning their keep.
