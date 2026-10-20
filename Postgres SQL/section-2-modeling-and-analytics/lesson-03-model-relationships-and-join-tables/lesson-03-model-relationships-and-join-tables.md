@@ -103,9 +103,9 @@ pip install "psycopg[binary]==3.3.6" "python-dotenv==1.2.4"
 
 ```python
 # Step 1: Model tables with foreign keys
-conn.execute("DROP TABLE IF EXISTS enrollments")
-conn.execute("DROP TABLE IF EXISTS courses")
-conn.execute("DROP TABLE IF EXISTS students")
+conn.execute("DROP TABLE IF EXISTS enrollments CASCADE")
+conn.execute("DROP TABLE IF EXISTS courses CASCADE")
+conn.execute("DROP TABLE IF EXISTS students CASCADE")
 
 conn.execute("""CREATE TABLE students (
     student_id TEXT PRIMARY KEY,
@@ -338,3 +338,13 @@ STU003     | Charlie Brown | MATH101 | Calculus I  |    91
 - **Joins:** `INNER`, `LEFT`, `RIGHT`, `FULL OUTER`, `CROSS`, and `SELF` each serve different questions.
 - **Set operations:** `UNION`, `INTERSECT`, and `EXCEPT` combine result sets.
 - **Practical reports:** Combining joins and aggregates turns relationships into answers.
+
+## 12. References
+
+- [PostgreSQL 18 Documentation](https://www.postgresql.org/docs/18/)
+- [CREATE TABLE / Constraints](https://www.postgresql.org/docs/18/ddl-constraints.html)
+- [Foreign Keys](https://www.postgresql.org/docs/18/ddl-constraints.html#DDL-CONSTRAINTS-FK)
+- [SELECT / Joins](https://www.postgresql.org/docs/18/queries-table-expressions.html#QUERIES-JOIN)
+- [Set Operations](https://www.postgresql.org/docs/18/queries-union.html)
+- [psycopg (3.x) Documentation](https://www.psycopg.org/psycopg3/docs/)
+- [python-dotenv](https://pypi.org/project/python-dotenv/)

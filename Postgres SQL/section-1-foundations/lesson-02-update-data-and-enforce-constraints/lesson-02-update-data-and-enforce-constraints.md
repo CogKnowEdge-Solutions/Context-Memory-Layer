@@ -909,11 +909,20 @@ show("""
     RETURNING student_id, name, grade, status
 """)
 conn.commit()
+
+# ON CONFLICT DO NOTHING (ignore if exists)
+conn.execute("""
+    INSERT INTO students (student_id, name, course, grade, status)
+    VALUES ('STU004', 'Diana Prince', 'English', 99, 'active')
+    ON CONFLICT (student_id) DO NOTHING
+""")
+conn.commit()
+print("DO NOTHING done (no error)")
 ```
 
 A common task is "insert this row if it is new, otherwise update it". Doing that by hand means a `SELECT` first and then either an `INSERT` or an `UPDATE` — two round trips with a race condition in between. The **upsert** does it in one statement.
 
-`ON CONFLICT (student_id)` catches a clash on the primary key. `DO UPDATE SET ... = EXCLUDED....` says what to change; the special name `EXCLUDED` refers to the row we *tried* to insert. Here `STU004` already exists, so her grade is updated to 71 instead of an error being raised.
+`ON CONFLICT (student_id)` catches a clash on the primary key. `DO UPDATE SET ... = EXCLUDED....` says what to change; the special name `EXCLUDED` refers to the row we *tried* to insert. Here `STU004` already exists, so her grade is updated to 71 instead of an error being raised. `ON CONFLICT ... DO NOTHING` silently ignores the insert when a conflict occurs.
 
 - **Input:** a row whose key (`STU004`) may or may not already exist.
 - **What happens:** PostgreSQL tries the insert; the key clashes, so it runs the `DO UPDATE` branch using the `EXCLUDED` values.
@@ -1040,6 +1049,19 @@ print("connection closed")
 ```
 
 Closing the connection releases the server resources we were holding. Unlike the rolled-back changes in Step 4, everything we committed — the cleaned rows, the new column, and all four constraints — stays in the `university` database. Reconnect any time and the rules are still there, guarding the table.
+
+## 12. References
+
+- [PostgreSQL 18 Documentation](https://www.postgresql.org/docs/18/)
+- [UPDATE](https://www.postgresql.org/docs/18/sql-update.html)
+- [DELETE](https://www.postgresql.org/docs/18/sql-delete.html)
+- [TRUNCATE](https://www.postgresql.org/docs/18/sql-truncate.html)
+- [ALTER TABLE](https://www.postgresql.org/docs/18/sql-altertable.html)
+- [INSERT ... ON CONFLICT (Upsert)](https://www.postgresql.org/docs/18/sql-insert.html#SQL-ON-CONFLICT)
+- [MERGE](https://www.postgresql.org/docs/18/sql-merge.html)
+- [UUID Functions](https://www.postgresql.org/docs/18/functions-uuid.html)
+- [psycopg (3.x) Documentation](https://www.psycopg.org/psycopg3/docs/)
+- [python-dotenv](https://pypi.org/project/python-dotenv/)
 
 **Output:**
 
