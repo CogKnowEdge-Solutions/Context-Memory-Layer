@@ -127,7 +127,7 @@ enrollment_id | student_id |   course   | enrolled_on
 | Jupyter | any recent version | Runs the notebook |
 | psql / pgAdmin | bundled with PostgreSQL | Optional command-line and graphical clients |
 
-**Compute and cost:** this lesson runs on a laptop's Central Processing Unit (CPU) using only a few megabytes of memory. No Graphics Processing Unit (GPU), no cloud account, and no paid service are needed, so a full run costs nothing. Both Python packages are free and open source. PostgreSQL 18 is required for `uuidv7()`; on an older server, replace it with `gen_random_uuid()`.
+**Compute and cost:** runs on a laptop CPU with minimal memory; no GPU, cloud account, or paid service required. Both Python packages are free and open source. PostgreSQL 18 is required for `uuidv7()`; the notebook falls back to `gen_random_uuid()` if `uuidv7()` is not available.
 
 ## 7. Underlying Concepts
 
@@ -161,14 +161,14 @@ A primary key is simply `NOT NULL` and `UNIQUE` combined — one column, or a fe
 
 **Reconciling data.** An **upsert** (`INSERT ... ON CONFLICT`) handles one row: insert it, or update it if the key exists. `MERGE` does the same job for a whole batch, comparing a source list against the target table and choosing update or insert per row. *Everyday example:* updating a contacts list — if the person is already there, their number is corrected; if they are new, they are added; `MERGE` is doing that for a whole address book at once.
 
-**`DELETE` versus `TRUNCATE`.** `DELETE ... WHERE` removes the rows you name and writes a log of each removal, so it can be rolled back row by row. `TRUNCATE` clears the entire table in one sweep and is much faster on large tables, but it cannot be aimed at some rows. *Everyday example:* tearing specific pages out of a notebook (`DELETE`) versus throwing the whole notebook away and starting a fresh one (`TRUNCATE`).
+**`DELETE` versus `TRUNCATE`.** `DELETE ... WHERE` removes the rows you name and writes a log of each removal, so it can be rolled back. `TRUNCATE` clears the entire table in one sweep and is much faster on large tables; it is transactional in PostgreSQL (can be rolled back), but it operates at table level, can't target specific rows, may require `CASCADE` when foreign keys point to the table, and can restart identity sequences (if `RESTART IDENTITY` is used). *Everyday example:* tearing specific pages out of a notebook (`DELETE`) versus emptying the whole notebook in one action (`TRUNCATE`).
 
 **Where everything lives.** PostgreSQL arranges its objects in a hierarchy: a *cluster* is one running server, a cluster hosts many *databases*, a database contains *schemas*, and a schema contains *tables*. Our table lives at `university > public > students`.
 
 ## 8. Prerequisites
 
 - **Background:** basic Python (variables, lists, tuples) and the ability to read a simple `SELECT`/`INSERT`. If you are new to writing queries, practise those two first.
-- **A running server:** a PostgreSQL server you can log in to, version 18 or newer, on `localhost:5432` if you use the defaults. (Version 18 is needed for `uuidv7()`.) If you do not have one yet, install PostgreSQL 18 from the official website and start the server.
+- **A running server:** a PostgreSQL server you can log in to (PostgreSQL 18 recommended). If using an older server, the lesson falls back to `gen_random_uuid()` where `uuidv7()` is unavailable.
 - **A settings file:** copy `.env.example` to `.env` at the course root and fill in your connection values (Section 9 explains this).
 - **Hardware and cost:** any laptop CPU is enough; no Graphics Processing Unit (GPU), cloud account, or paid service is required.
 
@@ -535,22 +535,24 @@ STU009     | Zoe Quinn | withdrawn
 
 ```python
 # Step 6: TRUNCATE empties a table in one stroke, far faster than DELETE
-# (it frees the storage in one go). We run it in a transaction and roll back.
+conn.execute("DELETE FROM students WHERE student_id = 'STU009'")
+show("SELECT count(*) AS count_before_truncate FROM students")
+
 conn.execute("TRUNCATE students")
-show("SELECT count(*) AS rows_after_truncate FROM students")
+show("SELECT count(*) AS count_after_truncate FROM students")
 
 conn.rollback()
 show("SELECT count(*) AS rows_after_rollback FROM students")
 ```
 
-`TRUNCATE` removes **every** row from a table and hands the storage back to the database in one operation. On a big table it is dramatically faster than `DELETE FROM table`, because `DELETE` writes a record for every row it removes while `TRUNCATE` simply resets the table's storage.
+`TRUNCATE` removes **every** row from a table. In PostgreSQL it is transactional (can be rolled back if not committed), operates at table level (table lock), cannot target specific rows, may require `CASCADE` when foreign keys reference the table, and can restart identity sequences with `RESTART IDENTITY`. On a big table it is dramatically faster than `DELETE FROM table`.
 
-The trade-off is that `TRUNCATE` cannot be aimed at some rows — it is all or nothing. Here we wrap it in a transaction and roll it back, so you see the table empty and then full again.
+The trade-off is that `TRUNCATE` cannot be aimed at some rows — it is all or nothing. Here we wrap it in a transaction and roll it back; note that `STU009` was already deleted earlier in this transaction, so rollback restores the state before truncation (eight rows).
 
-- **Input:** the table name.
-- **What happens:** PostgreSQL empties the table; the `rollback` then restores every row, because the truncation was never committed.
-- **Output:** the row count drops to zero, then returns to nine.
-- **Why:** reach for `TRUNCATE` when you genuinely want a table cleared — like reloading a staging table — and for `DELETE ... WHERE` when you want to remove specific rows.
+- **Input:** delete one row, count, truncate, count, rollback, count.
+- **What happens:** PostgreSQL empties the table; the `rollback` then restores the rows as they were before the truncation in this transaction.
+- **Output:** the row count drops to zero, then returns to eight.
+- **Why:** reach for `TRUNCATE` when you genuinely want to clear a table — and for `DELETE ... WHERE` when you want to remove specific rows.
 
 **Output:**
 
@@ -585,7 +587,7 @@ conn.commit()
 show("SELECT student_id, name, course, advisor FROM students ORDER BY student_id")
 ```
 
-So far we have only changed *data*. `ALTER TABLE` changes the table's *shape*: here we add a brand-new column, `advisor`. The nine rows that already exist are not lost — they simply get `NULL` in the new column, because there was no value to put there.
+So far we have only changed *data*. `ALTER TABLE` changes the table's *shape*: here we add a brand-new column, `advisor`. The rows that already exist are not lost — they simply get `NULL` in the new column, because there was no value to put there.
 
 Once the column exists we fill it with ordinary `UPDATE` statements, using `WHERE` each time to pick a course. The last statement uses `WHERE advisor IS NULL` as a catch-all, so no student is left without an advisor.
 
@@ -686,7 +688,7 @@ print("UNIQUE added")
 
 `UNIQUE` makes a column's values distinct: no two students may share an email address. The same pattern repeats — PostgreSQL checks the rows we already have, finds that `STU007` and `STU008` are using the same address, and refuses the rule until we fix the duplicate.
 
-One subtlety worth knowing: a `UNIQUE` column may still hold more than one `NULL`, because `NULL` means "unknown" and two unknowns are not considered equal. So `STU005`, with no email at all, does not break this rule.
+One subtlety worth knowing: a `UNIQUE` column may still hold more than one `NULL` by default, because `NULL` means "unknown" and two unknowns are not considered equal. So `STU005`, with no email at all, does not break this rule. In PostgreSQL 15+, you can use `UNIQUE NULLS NOT DISTINCT` to treat all `NULL`s as equal and prevent more than one `NULL`. Also useful: `INSERT ... ON CONFLICT DO NOTHING` lets you upsert safely without failing the whole statement.
 
 - **Input:** the columns that together must be unique, and the current rows.
 - **What happens:** PostgreSQL scans for duplicates, refuses the rule if it finds any, and enforces it once the rows are clean.
@@ -843,15 +845,30 @@ enrollment_id | student_id |   course   | enrolled_on
 ```python
 # Step 13: another way to key a row — a Universally Unique Identifier (UUID),
 # a long, globally unique value. PostgreSQL 18 can build a time-ordered one
-# with uuidv7(), so the ids also sort in creation order.
+# with uuidv7(); if unavailable, fall back to gen_random_uuid().
 conn.execute("DROP TABLE IF EXISTS events")
-conn.execute("""
-    CREATE TABLE events (
-        event_id UUID PRIMARY KEY DEFAULT uuidv7(),
-        message  TEXT NOT NULL
-    )
-""")
-conn.commit()
+try:
+    conn.execute("""
+        CREATE TABLE events (
+            event_id UUID PRIMARY KEY DEFAULT uuidv7(),
+            message  TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+except Exception:
+    conn.rollback()
+    try:
+        conn.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    conn.execute("""
+        CREATE TABLE events (
+            event_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            message  TEXT NOT NULL
+        )
+    """)
+    conn.commit()
 
 conn.execute("INSERT INTO events (message) VALUES ('table created')")
 conn.execute("INSERT INTO events (message) VALUES ('constraints added')")

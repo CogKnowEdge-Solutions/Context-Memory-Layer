@@ -118,7 +118,7 @@ students | failing | scholarships | missing_email | lowest | highest | average
 | Jupyter | any recent version | Runs the notebook |
 | psql / pgAdmin | bundled with PostgreSQL | Optional command-line and graphical clients (see the cheat sheet in Section 7) |
 
-**Compute and cost:** this lesson runs on a laptop's Central Processing Unit (CPU) using only a few megabytes of memory. No Graphics Processing Unit (GPU), no cloud account, and no paid service are needed, so a full run costs nothing. Both Python packages are free and open source.
+**Compute and cost:** runs on a laptop CPU with minimal memory; no GPU, cloud account, or paid service required. Both Python packages are free and open source.
 
 ## 7. Underlying Concepts
 

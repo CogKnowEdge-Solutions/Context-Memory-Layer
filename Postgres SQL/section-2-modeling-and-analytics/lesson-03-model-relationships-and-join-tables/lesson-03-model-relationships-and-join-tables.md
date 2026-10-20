@@ -53,7 +53,7 @@ flowchart LR
 
 ## 5. Output
 
-The combined report shows each student and the courses they take:
+The combined report shows each student and the courses they take (including students with no enrollments):
 
 ```
 student_id |      name     |    courses     |      avg_grade     
@@ -73,7 +73,7 @@ STU003     | Charlie Brown | MATH101        | 91.0000000000000000
 | python-dotenv | 1.2.4 | Loads `.env` |
 | Jupyter | any recent version | Runs the notebook |
 
-**Compute and cost:** Runs on a laptop CPU with minimal memory. No GPU, cloud account, or paid service required.
+**Compute and cost:** runs on a laptop CPU with minimal memory; no GPU, cloud account, or paid service required.
 
 ## 7. Underlying Concepts
 
@@ -85,7 +85,7 @@ STU003     | Charlie Brown | MATH101        | 91.0000000000000000
 
 **Joins.** `INNER JOIN`: only matching rows. `LEFT JOIN`: all left rows, NULLs if no match. `RIGHT JOIN`: all right rows. `FULL OUTER JOIN`: all rows from both. `CROSS JOIN`: all pairs. `SELF JOIN`: join a table to itself (hierarchies like prerequisites). *Everyday example:* "show me every student and the courses they take" uses a LEFT JOIN if you want students with no enrollments too.
 
-**Set operations.** `UNION` combines results and removes duplicates; `UNION ALL` keeps them. `INTERSECT` returns rows in both. `EXCEPT` (or `MINUS`) returns rows in the first but not the second. *Everyday example:* students taking CS101 UNION students taking MATH101 gives everyone taking either; INTERSECT gives those taking both.
+**Set operations.** `UNION` combines results and removes duplicates; `UNION ALL` keeps them. `INTERSECT` returns rows in both. `EXCEPT` returns rows in the first but not the second. *Everyday example:* students taking CS101 UNION students taking MATH101 gives everyone taking either; INTERSECT gives those taking both.
 
 **Entity-Relationship (ER) intuition.** Entities (students, courses) become tables; relationships become FKs or junction tables. *Everyday example:* drawing boxes and lines on a whiteboard maps cleanly to tables and foreign keys.
 
@@ -253,7 +253,7 @@ tables created
 
 ```python
 # Step 2: insert sample data
-conn.execute("INSERT INTO students VALUES ('STU001','Alice Johnson','alice@univ.example'),('STU002','Bob Smith','bob@univ.example'),('STU003','Charlie Brown','charlie@univ.example')")
+conn.execute("INSERT INTO students VALUES ('STU001','Alice Johnson','alice@univ.example'),('STU002','Bob Smith','bob@univ.example'),('STU003','Charlie Brown','charlie@univ.example'),('STU004','Dana Lee',NULL)")
 conn.execute("INSERT INTO courses VALUES ('C001','CS101','Intro to CS',3),('C002','MATH101','Calculus I',4),('C003','ENG101','Writing',3)")
 conn.execute("INSERT INTO enrollments (student_id,course_id,grade) VALUES ('STU001','C001',95),('STU001','C002',88),('STU002','C001',72),('STU003','C002',91)")
 conn.commit()
@@ -414,7 +414,7 @@ Charlie Brown | MATH101
 
 ```python
 # Step 7: SELF JOIN (courses could relate via prerequisites)
-conn.execute("ALTER TABLE courses ADD COLUMN prerequisite TEXT REFERENCES courses(course_id)")
+conn.execute("ALTER TABLE courses ADD COLUMN IF NOT EXISTS prerequisite TEXT REFERENCES courses(course_id)")
 conn.execute("UPDATE courses SET prerequisite='C001' WHERE course_id='C002'")
 conn.commit()
 show("""
@@ -446,16 +446,19 @@ show("""
   SELECT student_id FROM enrollments WHERE course_id='C001'
   UNION
   SELECT student_id FROM enrollments WHERE course_id='C002'
+  ORDER BY student_id
 """)
 show("""
   SELECT student_id FROM enrollments WHERE course_id='C001'
   INTERSECT
   SELECT student_id FROM enrollments WHERE course_id='C002'
+  ORDER BY student_id
 """)
 show("""
   SELECT student_id FROM enrollments WHERE course_id='C001'
   EXCEPT
   SELECT student_id FROM enrollments WHERE course_id='C002'
+  ORDER BY student_id
 """)
 ```
 

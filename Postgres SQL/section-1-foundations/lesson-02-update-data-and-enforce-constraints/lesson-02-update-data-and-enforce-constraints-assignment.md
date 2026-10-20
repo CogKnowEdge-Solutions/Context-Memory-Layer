@@ -47,7 +47,7 @@ conn.commit()
 **Why:** `WHERE` decides which rows a change touches. Forgetting it is the most common way to damage a real database, and a transaction is the safety net that lets you undo the mistake before it is saved.
 
 ### Exercise 3
-**Answer:** `DELETE FROM students WHERE status = 'withdrawn'` removes only the rows you name, writing a record of each removal, so it can be rolled back row by row — it is the right choice when you want to remove specific rows. `TRUNCATE students` empties the whole table in one operation and is far faster, but it cannot be aimed at some rows — it is the right choice when you genuinely want a table cleared, such as reloading a staging table.
+**Answer:** `DELETE FROM students WHERE status = 'withdrawn'` removes only the rows you name and is transactional in PostgreSQL (can be rolled back). `TRUNCATE students` empties the whole table in one operation (also transactional in PostgreSQL, so it can be rolled back if not committed), is faster on large tables, operates at table level, may need `CASCADE` with foreign keys, and cannot target specific rows. Use `DELETE` to remove specific rows; use `TRUNCATE` to clear an entire table (e.g., reloading a staging table).
 
 **Why:** `DELETE` trades speed for precision; `TRUNCATE` trades precision for speed. Choosing between them is really asking, "do I want to remove some rows, or all of them?".
 
@@ -57,15 +57,12 @@ conn.commit()
 conn.execute("ALTER TABLE students ADD COLUMN phone TEXT")
 conn.commit()
 
-conn.execute("UPDATE students SET phone = 'not provided' WHERE phone IS NULL")
-conn.commit()
-
 conn.execute("ALTER TABLE students ALTER COLUMN phone SET NOT NULL")
 conn.commit()
 ```
-Before the last command can succeed, **no existing row may have a `NULL` phone**. Adding the column makes every existing row `NULL` in it, so we fill those values first; otherwise PostgreSQL refuses the rule and reports that the column contains null values.
+Before the second command can succeed, **no existing row may have a `NULL` phone**. If the table already has rows, you must first `UPDATE` them with real values (never invent placeholders like `'not provided'`) before adding the `NOT NULL` constraint. Adding the column makes existing rows `NULL` in it, so PostgreSQL will refuse the constraint until they are filled.
 
-**Why:** This is the same pattern as the `NOT NULL` rule in the lesson: clean the rows you already have, then lock in the rule so the problem cannot come back.
+**Why:** The lesson emphasizes using `NULL` to represent unknown data. Avoid inserting placeholder strings as a way to dodge missing information.
 
 ### Exercise 5
 **Answer:** A `NULL` means "unknown", and two unknowns are never treated as equal, so the uniqueness test does not see two `NULL` emails as duplicates. That is why any number of rows can leave `email` empty while still satisfying the `UNIQUE` rule.
