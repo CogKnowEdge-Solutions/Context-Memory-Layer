@@ -1,6 +1,8 @@
 # Create Tables and Query Data
 
-## 1. What is Structured Query Language (SQL)?
+## 1. What is Creating Tables and Querying Data?
+
+### What is Structured Query Language (SQL)?
 
 SQL is the standard way to talk to a relational database: it is the language you use to describe how data is stored and to ask questions about it. It works with **tables** of rows and columns.
 
@@ -1169,6 +1171,15 @@ connection closed
 ```
 
 Closing the connection frees the server resources we were holding. The `students` table itself stays in the `university` database, so you can reconnect and keep querying it whenever you like.
+
+## 12. References
+
+- [PostgreSQL 18 Documentation](https://www.postgresql.org/docs/18/)
+- [CREATE TABLE](https://www.postgresql.org/docs/18/sql-createtable.html)
+- [INSERT](https://www.postgresql.org/docs/18/sql-insert.html)
+- [SELECT](https://www.postgresql.org/docs/18/sql-select.html)
+- [psycopg (3.x) Documentation](https://www.psycopg.org/psycopg3/docs/)
+- [python-dotenv](https://pypi.org/project/python-dotenv/)
 
 
 ## 11. What We Learnt
