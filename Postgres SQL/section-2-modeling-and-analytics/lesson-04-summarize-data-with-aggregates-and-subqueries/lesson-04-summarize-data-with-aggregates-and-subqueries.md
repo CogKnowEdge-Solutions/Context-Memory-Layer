@@ -51,12 +51,14 @@ flowchart LR
 
 The revenue report shows per-customer totals:
 
-```\n name | orders | items | revenue
+```
+ name | orders | items | revenue
 ------+--------+-------+--------
 Carol |      1 |     3 | 1298.99
 Alice |      2 |     4 | 1257.97
 Bob   |      1 |     3 |   88.47
-(3 rows)\n```
+(3 rows)
+```
 
 ## 6. Tech Stack
 
@@ -82,6 +84,20 @@ Bob   |      1 |     3 |   88.47
 **Rollups.** GROUPING SETS/Rollup/Cube produce subtotals and grand totals in one query. *Everyday example:* sales by region, by category, and overall.
 
 **Dates and series.** Intervals arithmetic, time zone conversion, generate_series build calendars. *Everyday example:* missing dates in a report filled with zeros.
+
+**The order PostgreSQL runs a query in.** We write `SELECT` first, but the database starts somewhere else.
+
+```mermaid
+flowchart LR
+  A[FROM / JOIN] --> B[WHERE]
+  B --> C[GROUP BY]
+  C --> D[HAVING]
+  D --> E[SELECT]
+  E --> F[ORDER BY]
+  F --> G[LIMIT]
+```
+
+This is why `WHERE` cannot use an aggregate such as `SUM` (the groups do not exist yet) while `HAVING` can.
 
 ## 8. Prerequisites
 
@@ -127,11 +143,6 @@ print(f"Connecting to {PGUSER}@{PGHOST}:{PGPORT}/{PGDATABASE} (sslmode={PGSSLMOD
 
 Loads connection settings from the shared `.env` at the course root.
 
-**Output:**
-
-```
-Connecting to postgres@localhost:5432/university (sslmode=prefer)
-```
 
 ```python
 # Ensure DB
@@ -144,11 +155,6 @@ print("db ready")
 
 Ensures the database exists (self-contained).
 
-**Output:**
-
-```
-db ready
-```
 
 ```python
 # Connect
@@ -158,42 +164,33 @@ print("connected")
 
 Opens connection (autocommit off).
 
-**Output:**
-
-```
-connected
-```
 
 ```python
 # show helper
-def show(q,params=None):
+def show(query, params=None):
+    """Run a query and print the result as a psql-style table."""
     with conn.cursor() as cur:
-        cur.execute(q,params)
-        if cur.description is None:
-            print(cur.statusmessage); return
-        cols=[d.name for d in cur.description]; rows=cur.fetchall()
-    fmt=lambda v:"NULL" if v is None else str(v)
-    cells=[[fmt(v) for v in r] for r in rows]
-    numeric=[bool(rows) and all(isinstance(v,(int,float,Decimal)) and not isinstance(v,bool) for v in col) for col in zip(*rows)] or [False]*len(cols)
-    widths=[max([len(c)]+[len(r[i]) for r in cells]) for i,c in enumerate(cols)]
-    print(" | ".join(c.center(w) for c,w in zip(cols,widths)))
-    print("-+-".join("-"*w for w in widths))
+        cur.execute(query, params)
+        if cur.description is None:              # statements like CREATE or INSERT return no rows
+            print(cur.statusmessage)
+            return
+        cols = [d.name for d in cur.description]
+        rows = cur.fetchall()
+    fmt = lambda v: "NULL" if v is None else ("t" if v is True else "f" if v is False else str(v))
+    cells = [[fmt(v) for v in r] for r in rows]
+    numeric = [bool(rows) and all(v is None or (isinstance(v, (int, float, Decimal)) and not isinstance(v, bool)) for v in col)
+               for col in zip(*rows)] or [False] * len(cols)
+    widths = [max([len(c)] + [len(r[i]) for r in cells]) for i, c in enumerate(cols)]
+    print(" | ".join(c.center(w) for c, w in zip(cols, widths)).rstrip())
+    print("-+-".join("-" * w for w in widths))
     for r in cells:
-        print(" | ".join((v.rjust(w) if numeric[i] else v.ljust(w)) for i,(v,w) in enumerate(zip(r,widths))))
-    print(f"({len(rows)} rows)")
+        print(" | ".join(v.rjust(w) if numeric[i] else v.ljust(w) for i, (v, w) in enumerate(zip(r, widths))).rstrip())
+    print(f"({len(rows)} row{'' if len(rows) == 1 else 's'})")
 show("SELECT current_database()")
 ```
 
 Aligned table helper (consistent style).
 
-**Output:**
-
-```
-current_database
-----------------
-university      
-(1 rows)
-```
 
 ### Step 1 — Set up sales data
 
@@ -236,34 +233,17 @@ print("loaded")
 
 Creates a small sales model (customers/orders/order_items/products) and loads sample data.
 
-**Output:**
-
-```
-loaded
-```
 
 ### Step 2 — Basic aggregates
 
 ```python
 # Step 2: Basic aggregates
-show("SELECT COUNT(*) AS orders, SUM(quantity) AS total_items, AVG(quantity) AS avg_qty FROM order_items")
+show("SELECT COUNT(*) AS order_items, SUM(quantity) AS total_items, AVG(quantity) AS avg_qty FROM order_items")
 show("SELECT MIN(price) AS min_price, MAX(price) AS max_price, ROUND(AVG(price),2) AS avg_price FROM products")
 ```
 
 `COUNT`, `SUM`, `AVG`, `MIN`, `MAX` summarize across rows.
 
-**Output:**
-
-```
-orders | total_items |      avg_qty      
--------+-------------+-------------------
-     6 |          10 | 1.6666666666666667
-(1 rows)
-min_price | max_price | avg_price
-----------+-----------+----------
-    29.49 |    999.99 |    344.50
-(1 rows)
-```
 
 ### Step 3 — GROUP BY and HAVING
 
@@ -275,7 +255,7 @@ show("""
   JOIN orders o ON o.customer_id=c.customer_id
   JOIN order_items oi ON oi.order_id=o.order_id
   GROUP BY c.customer_id, c.name
-  ORDER BY items DESC
+  ORDER BY items DESC, c.customer_id
 """)
 show("""
   SELECT c.region, COUNT(DISTINCT c.customer_id) AS customers, SUM(oi.quantity) AS items
@@ -290,20 +270,6 @@ show("""
 
 `GROUP BY` groups rows; `HAVING` filters groups (after aggregation).
 
-**Output:**
-
-```
-customer_id |  name | num_orders | items
-------------+-------+------------+------
-          1 | Alice |          2 |     4
-          2 | Bob   |          1 |     3
-          3 | Carol |          1 |     3
-(3 rows)
-region | customers | items
--------+-----------+------
-North  |         2 |     7
-(1 rows)
-```
 
 ### Step 4 — FILTER and string aggregation
 
@@ -316,20 +282,12 @@ show("""
          STRING_AGG(name, ', ' ORDER BY name) AS names
   FROM products
   GROUP BY category
+  ORDER BY category
 """)
 ```
 
 `FILTER (WHERE ...)` applies conditions per aggregate. `STRING_AGG` concatenates values.
 
-**Output:**
-
-```
-  category  | products | pricey |     names    
-------------+----------+--------+--------------
-Electronics |        2 |      1 | Laptop, Mouse
-Furniture   |        2 |      2 | Chair, Desk  
-(2 rows)
-```
 
 ### Step 5 — Percentiles and subqueries
 
@@ -346,18 +304,6 @@ show("""
 
 Percentiles summarize distributions; a scalar subquery finds products above average price.
 
-**Output:**
-
-```
-median |   p75   
--------+---------
-174.25 | 399.2475
-(1 rows)
- name  | price 
--------+-------
-Laptop | 999.99
-(1 rows)
-```
 
 ### Step 6 — EXISTS, ANY, ALL
 
@@ -375,23 +321,16 @@ show("""
   WHERE price > ALL (SELECT price FROM products WHERE category='Furniture')
   ORDER BY price DESC
 """)
+show("""
+  SELECT name, price
+  FROM products
+  WHERE price > ANY (SELECT price FROM products WHERE category='Furniture')
+  ORDER BY price DESC
+""")
 ```
 
 `EXISTS` tests for related rows. `ANY/ALL` compare against sets returned by subqueries.
 
-**Output:**
-
-```
-customer_id |  name
-------------+------
-          1 | Alice
-          3 | Carol
-(2 rows)
- name  | price 
--------+-------
-Laptop | 999.99
-(1 rows)
-```
 
 ### Step 7 — GROUPING SETS
 
@@ -410,47 +349,18 @@ show("""
 
 `GROUPING SETS` produces multiple groupings in one query; `ROLLUP`/`CUBE` give rollups/cross-tabulations.
 
-**Output:**
-
-```
-region |   category  | items
--------+-------------+------
-North  | NULL        |     7
-South  | NULL        |     3
-NULL   | Electronics |     7
-NULL   | Furniture   |     3
-NULL   | NULL        |    10
-(5 rows)
-```
 
 ### Step 8 — Dates, intervals, generate_series
 
 ```python
 # Step 8: Dates, time zones, intervals, generate_series
-show("SELECT NOW() AS now_ts, NOW() AT TIME ZONE 'UTC' AS now_utc, (NOW() - INTERVAL '7 days')::date AS week_ago")
+# NOW() changes on every run, so we use a fixed moment to keep the output repeatable
+show("SELECT TIMESTAMPTZ '2025-10-15 12:00:00+00' AT TIME ZONE 'UTC' AS utc_time, TIMESTAMPTZ '2025-10-15 12:00:00+00' AT TIME ZONE 'Asia/Kolkata' AS kolkata_time, (DATE '2025-10-15' - INTERVAL '7 days')::date AS week_ago")
 show("SELECT d::date AS day FROM generate_series('2025-10-01'::date, '2025-10-07'::date, INTERVAL '1 day') d")
 ```
 
 Date/time functions, intervals, and `generate_series` build calendars/series.
 
-**Output:**
-
-```
-             now_ts              |          now_utc           |  week_ago 
----------------------------------+----------------------------+-----------
-2026-10-20 14:04:51.187205+05:30 | 2026-10-20 08:34:51.187205 | 2026-10-13
-(1 rows)
-   day    
-----------
-2025-10-01
-2025-10-02
-2025-10-03
-2025-10-04
-2025-10-05
-2025-10-06
-2025-10-07
-(7 rows)
-```
 
 ### Step 9 — Showcase
 
@@ -470,16 +380,6 @@ show("""
 
 A revenue report combining joins and aggregates.
 
-**Output:**
-
-```
- name | orders | items | revenue
-------+--------+-------+--------
-Carol |      1 |     3 | 1298.99
-Alice |      2 |     4 | 1257.97
-Bob   |      1 |     3 |   88.47
-(3 rows)
-```
 
 ### Cleanup — Close the connection
 
@@ -491,11 +391,6 @@ print("connection closed")
 
 Closes the connection.
 
-**Output:**
-
-```
-connection closed
-```
 
 ## 11. What We Learnt
 

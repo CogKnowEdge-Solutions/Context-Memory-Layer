@@ -75,7 +75,7 @@ flowchart LR
 
 ## 5. Output
 
-After all sixteen steps, the `students` table is clean, typed, and guarded by four rules. The first query lists every row; the second folds them into a one-row summary:
+After all sixteen steps, the `students` table is clean, typed, and guarded by four kinds of rule (`NOT NULL` on `name`, `UNIQUE` on `email`, `CHECK` on `grade`, `PRIMARY KEY` on `student_id`). The first query lists every row; the second folds them into a one-row summary:
 
 ```
 student_id |      name     |              email               |      course      | grade |  status  |  advisor
@@ -165,12 +165,24 @@ A primary key is simply `NOT NULL` and `UNIQUE` combined — one column, or a fe
 
 **Where everything lives.** PostgreSQL arranges its objects in a hierarchy: a *cluster* is one running server, a cluster hosts many *databases*, a database contains *schemas*, and a schema contains *tables*. Our table lives at `university > public > students`.
 
+**How a transaction protects your data.** Changes are held in a waiting area until you commit; a rollback throws them away.
+
+```mermaid
+flowchart LR
+  A[Start changes] --> B[INSERT / UPDATE / DELETE]
+  B --> C{Any error?}
+  C -->|no| D[COMMIT: changes are saved]
+  C -->|yes| E[ROLLBACK: changes are undone]
+```
+
+The database only makes your changes permanent at `COMMIT`. If a rule is broken before that, `ROLLBACK` puts everything back as it was.
+
 ## 8. Prerequisites
 
 - **Background:** basic Python (variables, lists, tuples) and the ability to read a simple `SELECT`/`INSERT`. If you are new to writing queries, practise those two first.
 - **A running server:** a PostgreSQL server you can log in to (PostgreSQL 18 recommended). If using an older server, the lesson falls back to `gen_random_uuid()` where `uuidv7()` is unavailable.
 - **A settings file:** copy `.env.example` to `.env` at the course root and fill in your connection values (Section 9 explains this).
-- **Hardware and cost:** any laptop CPU is enough; no Graphics Processing Unit (GPU), cloud account, or paid service is required.
+- **Hardware and cost:** any laptop is enough; no cloud account or paid service is required.
 
 ## 9. Environment / Dependencies Setup
 
@@ -224,11 +236,6 @@ print(f"Connecting to {PGUSER}@{PGHOST}:{PGPORT}/{PGDATABASE} (sslmode={PGSSLMOD
 
 We load the connection details from one shared `.env` file so no password is ever written into the notebook. Each setting falls back to a sensible default (`localhost`, port `5432`, user `postgres`, database `university`), so the lesson still runs if a value is missing. The path `../../.env` goes up from this lesson folder to the section folder and then to the course root — that is why we start Jupyter from inside this lesson folder.
 
-**Output:**
-
-```
-Connecting to postgres@localhost:5432/university (sslmode=prefer)
-```
 
 ```python
 # Connect to the built-in `postgres` database (a server hosts many databases)
@@ -266,11 +273,6 @@ graph TD
 - **Output:** the `university` database exists on the server, and you see a short confirmation line.
 - **Why:** the notebook stays safe to re-run, and every step after this connects to `university` instead of the maintenance database.
 
-**Output:**
-
-```
-Database 'university' already exists.
-```
 
 ```python
 # Open the lesson connection to `university`. We leave autocommit OFF (the
@@ -281,11 +283,6 @@ print(f"Connected to {PGDATABASE}")
 
 Here we open the connection the rest of the lesson uses. Unlike the short-lived connection above, this one has **autocommit off**, which means our changes are not saved until we say `conn.commit()`. That pauses the clock after each change, so we can inspect it — or throw it away with `conn.rollback()`. We use that safety net in Step 4 to undo a mistake on purpose.
 
-**Output:**
-
-```
-Connected to university
-```
 
 ```python
 # A small helper that runs a query and prints the rows as an aligned table,
@@ -322,21 +319,13 @@ show("SELECT current_database() AS connected_to")
 
 This is the one function we keep, because almost every step calls it.
 
-**Output:**
-
-```
-connected_to
-------------
-university
-(1 row)
-```
 
 ### Step 1 — Create the `students` Table
 
 ```python
 # Step 1: start from a clean table. DROP first so the notebook is safe to
 # re-run, then CREATE the columns — deliberately with no rules on them yet.
-conn.execute("DROP TABLE IF EXISTS students")
+conn.execute("DROP TABLE IF EXISTS students CASCADE")
 
 conn.execute("""
     CREATE TABLE students (
@@ -351,7 +340,7 @@ conn.execute("""
 conn.commit()
 ```
 
-`CREATE TABLE` names the table and lists each column with a **data type**, and PostgreSQL enforces those types: you can never store the word `abc` in an `INTEGER` column. We run `DROP TABLE IF EXISTS` first so the notebook can be run again and again without errors.
+`CREATE TABLE` names the table and lists each column with a **data type**, and PostgreSQL enforces those types: you can never store the word `abc` in an `INTEGER` column. We run `DROP TABLE IF EXISTS ... CASCADE` first so the notebook can be run again and again without errors (`CASCADE` also removes anything that depends on the table, such as the foreign keys later lessons add).
 
 Notice there are **no rules yet** — not even "every student must have a name". We left the table wide open on purpose, because the messiest data is the best place to learn how constraints clean it up. Three problems are already hiding in the rows we are about to insert: a missing name, a copied email address, and a grade of 120.
 
@@ -400,22 +389,6 @@ Look closely and you can already spot the trouble: `STU006` has no name, `STU007
 - **Output:** nine rows now live in the `students` table, with the three problems still in place.
 - **Why:** loading all rows in one call is both faster and safer than building a giant SQL string, and the values never touch the SQL text.
 
-**Output:**
-
-```
-student_id |      name     |              email               |      course      | grade |   status
------------+---------------+----------------------------------+------------------+-------+----------
-STU001     | Alice Johnson | alice.johnson@university.example | Computer Science |    95 | active
-STU002     | Bob Smith     | bob.smith@university.example     | Mathematics      |    78 | active
-STU003     | Charlie Brown | charlie.brown@university.example | Physics          |    55 | active
-STU004     | Diana Prince  | diana.prince@university.example  | English          |    48 | active
-STU005     | Eve Torres    | NULL                             | Biology          |    88 | active
-STU006     | NULL          | frank.castle@university.example  | Mathematics      |    52 | inactive
-STU007     | Grace Hopper  | grace.hopper@university.example  | Computer Science |   120 | active
-STU008     | Hank Pym      | grace.hopper@university.example  | Physics          |    73 | active
-STU009     | Zoe Quinn     | zoe.quinn@university.example     | Biology          |    91 | withdrawn
-(9 rows)
-```
 
 ### Step 3 — UPDATE: Change Rows Safely
 
@@ -440,14 +413,6 @@ conn.commit()
 - **Output:** one row echoes back with its new grade — and it is now saved.
 - **Why:** `WHERE` keeps the change surgical; without it, `UPDATE` rewrites *every* row, which is the trap we look at next.
 
-**Output:**
-
-```
-student_id |      name     | grade
------------+---------------+------
-STU003     | Charlie Brown |    65
-(1 row)
-```
 
 ### Step 4 — The Danger of a Missing WHERE
 
@@ -487,22 +452,6 @@ graph LR
 - **Output:** the counts show the change, then show the data restored to its original state.
 - **Why:** seeing the damage and the undo side by side is the best way to build the habit of checking for `WHERE` before you press Enter.
 
-**Output:**
-
-```
-not_active_before
------------------
-                2
-(1 row)
-not_active_after
-----------------
-               0
-(1 row)
-not_active_after_rollback
--------------------------
-                        2
-(1 row)
-```
 
 ### Step 5 — DELETE: Remove Rows and See What Went
 
@@ -522,14 +471,6 @@ conn.commit()
 - **Output:** the deleted row echoed back, and the row is now gone from the table.
 - **Why:** to undo a real deletion you need either a backup or a transaction that has not committed yet — so we always confirm with `RETURNING` before committing.
 
-**Output:**
-
-```
-student_id |    name   |   status
------------+-----------+----------
-STU009     | Zoe Quinn | withdrawn
-(1 row)
-```
 
 ### Step 6 — TRUNCATE: Empty a Table in One Stroke
 
@@ -554,18 +495,6 @@ The trade-off is that `TRUNCATE` cannot be aimed at some rows — it is all or n
 - **Output:** the row count drops to zero, then returns to eight.
 - **Why:** reach for `TRUNCATE` when you genuinely want to clear a table — and for `DELETE ... WHERE` when you want to remove specific rows.
 
-**Output:**
-
-```
-rows_after_truncate
--------------------
-                  0
-(1 row)
-rows_after_rollback
--------------------
-                  8
-(1 row)
-```
 
 ### Step 7 — ALTER TABLE: Add a Column
 
@@ -596,21 +525,6 @@ Once the column exists we fill it with ordinary `UPDATE` statements, using `WHER
 - **Output:** every student now has an advisor, and the table has one more column than before.
 - **Why:** real databases grow and change over time; `ALTER TABLE` lets a live table gain columns without rebuilding it from scratch.
 
-**Output:**
-
-```
-student_id |      name     |      course      |  advisor
------------+---------------+------------------+-----------
-STU001     | Alice Johnson | Computer Science | Dr. Ada
-STU002     | Bob Smith     | Mathematics      | Dr. Nash
-STU003     | Charlie Brown | Physics          | Dr. Curie
-STU004     | Diana Prince  | English          | Dr. Wells
-STU005     | Eve Torres    | Biology          | Dr. Darwin
-STU006     | NULL          | Mathematics      | Dr. Nash
-STU007     | Grace Hopper  | Computer Science | Dr. Ada
-STU008     | Hank Pym      | Physics          | Dr. Curie
-(8 rows)
-```
 
 ### Step 8 — NOT NULL: Every Row Needs a Value
 
@@ -829,24 +743,15 @@ We also meet two more common ingredients here: `NOT NULL` (already familiar) and
 - **Output:** the enrollments come back numbered 1, 2, 3 automatically.
 - **Why:** identity keys are ideal for rows that have no natural key of their own, like a line in a transcript or a log entry.
 
-**Output:**
-
-```
-enrollment_id | student_id |   course   | enrolled_on
---------------+------------+------------+------------
-            1 | STU001     | Databases  | 2025-09-01
-            2 | STU002     | Databases  | 2025-09-01
-            3 | STU003     | Algorithms | 2025-09-02
-(3 rows)
-```
 
 ### Step 13 — UUID Keys with uuidv7()
 
 ```python
 # Step 13: another way to key a row — a Universally Unique Identifier (UUID),
 # a long, globally unique value. PostgreSQL 18 can build a time-ordered one
-# with uuidv7(); if unavailable, fall back to gen_random_uuid().
+# with uuidv7(); on an older server we fall back to gen_random_uuid().
 conn.execute("DROP TABLE IF EXISTS events")
+conn.commit()   # make the drop final first, so the rollback below cannot undo it
 try:
     conn.execute("""
         CREATE TABLE events (
@@ -855,13 +760,8 @@ try:
         )
     """)
     conn.commit()
-except Exception:
+except psycopg.errors.UndefinedFunction:   # uuidv7() does not exist before PostgreSQL 18
     conn.rollback()
-    try:
-        conn.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
-        conn.commit()
-    except Exception:
-        conn.rollback()
     conn.execute("""
         CREATE TABLE events (
             event_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -879,7 +779,7 @@ show("SELECT event_id, message FROM events ORDER BY event_id")
 
 A UUID is a long random-looking value, such as `0199a1f2-...`, that is unique across every machine in the world. That makes it a good key when rows are created in different places and you cannot have them all ask one server for the next number.
 
-`uuidv7()` is a newer flavour that starts with the current time. Because the time comes first, the ids still sort in the order the rows were created — you get the global uniqueness of a UUID without losing a sensible ordering.
+`uuidv7()` is a newer flavour that starts with the current time. Because the time comes first, the ids still sort in the order the rows were created — you get the global uniqueness of a UUID without losing a sensible ordering. (On an older server the `gen_random_uuid()` fallback gives random ids, so they will not sort in creation order.)
 
 - **Input:** two short messages to log.
 - **What happens:** for each row, `uuidv7()` builds a fresh time-based id as the default value of `event_id`.
@@ -929,14 +829,6 @@ A common task is "insert this row if it is new, otherwise update it". Doing that
 - **Output:** one row changed — the existing `STU004`, now with a grade of 71.
 - **Why:** upserts let a data feed be replayed safely: run it twice, and the second run corrects rather than duplicates.
 
-**Output:**
-
-```
-student_id |     name     | grade | status
------------+--------------+-------+-------
-STU004     | Diana Prince |    71 | active
-(1 row)
-```
 
 ### Step 15 — MERGE: Many Rows in One Statement
 
@@ -970,23 +862,6 @@ Here the source is a short list of grade corrections. `ON s.student_id = new_dat
 - **Output:** `STU002`'s grade becomes 81, and `STU010` is added as a new row.
 - **Why:** `MERGE` expresses "sync this list into that table" as one readable statement, which is exactly what data feeds and nightly loads need.
 
-**Output:**
-
-```
-MERGE 2
-student_id |      name     | grade |  status
------------+---------------+-------+---------
-STU001     | Alice Johnson |    95 | active
-STU002     | Bob Smith     |    81 | active
-STU003     | Charlie Brown |    65 | active
-STU004     | Diana Prince  |    71 | active
-STU005     | Eve Torres    |    88 | active
-STU006     | Frank Castle  |    52 | inactive
-STU007     | Grace Hopper  |    82 | active
-STU008     | Hank Pym      |    73 | active
-STU010     | Ivan Petrov   |    67 | active
-(9 rows)
-```
 
 ### Step 16 — The Finished Table
 
@@ -1018,26 +893,6 @@ The first query lists the repaired table. The second is a one-row summary using 
 - **Output:** the cleaned table, then one summary row.
 - **Why:** this is the state the registrar wanted — data that is correct now and that the database will keep correct.
 
-**Output:**
-
-```
-student_id |      name     |              email               |      course      | grade |  status  |  advisor
------------+---------------+----------------------------------+------------------+-------+----------+-----------
-STU001     | Alice Johnson | alice.johnson@university.example | Computer Science |    95 | active   | Dr. Ada
-STU002     | Bob Smith     | bob.smith@university.example     | Mathematics      |    81 | active   | Dr. Nash
-STU003     | Charlie Brown | charlie.brown@university.example | Physics          |    65 | active   | Dr. Curie
-STU004     | Diana Prince  | diana.prince@university.example  | English          |    71 | active   | Dr. Wells
-STU005     | Eve Torres    | NULL                             | Biology          |    88 | active   | Dr. Darwin
-STU006     | Frank Castle  | frank.castle@university.example  | Mathematics      |    52 | inactive | Dr. Nash
-STU007     | Grace Hopper  | grace.hopper@university.example  | Computer Science |    82 | active   | Dr. Ada
-STU008     | Hank Pym      | hank.pym@university.example      | Physics          |    73 | active   | Dr. Curie
-STU010     | Ivan Petrov   | NULL                             | Physics          |    67 | active   | NULL
-(9 rows)
-students | with_email | lowest | highest | average
----------+------------+--------+---------+--------
-       9 |          7 |     52 |      95 |    74.9
-(1 row)
-```
 
 ### Cleanup — Close the Connection
 
@@ -1049,25 +904,6 @@ print("connection closed")
 ```
 
 Closing the connection releases the server resources we were holding. Unlike the rolled-back changes in Step 4, everything we committed — the cleaned rows, the new column, and all four constraints — stays in the `university` database. Reconnect any time and the rules are still there, guarding the table.
-
-## 12. References
-
-- [PostgreSQL 18 Documentation](https://www.postgresql.org/docs/18/)
-- [UPDATE](https://www.postgresql.org/docs/18/sql-update.html)
-- [DELETE](https://www.postgresql.org/docs/18/sql-delete.html)
-- [TRUNCATE](https://www.postgresql.org/docs/18/sql-truncate.html)
-- [ALTER TABLE](https://www.postgresql.org/docs/18/sql-altertable.html)
-- [INSERT ... ON CONFLICT (Upsert)](https://www.postgresql.org/docs/18/sql-insert.html#SQL-ON-CONFLICT)
-- [MERGE](https://www.postgresql.org/docs/18/sql-merge.html)
-- [UUID Functions](https://www.postgresql.org/docs/18/functions-uuid.html)
-- [psycopg (3.x) Documentation](https://www.psycopg.org/psycopg3/docs/)
-- [python-dotenv](https://pypi.org/project/python-dotenv/)
-
-**Output:**
-
-```
-connection closed
-```
 
 ## 11. What We Learnt
 

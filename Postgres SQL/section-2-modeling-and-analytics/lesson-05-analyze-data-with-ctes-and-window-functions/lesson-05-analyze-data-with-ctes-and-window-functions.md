@@ -52,14 +52,16 @@ flowchart LR
 
 Top 2 performers per region (from CTE + window):
 
-```\nregion | salesperson |  amount | rnk
+```
+region | salesperson |  amount | rnk
 -------+-------------+---------+----
 North  | Alice       | 1500.00 |   1
 North  | Alice       | 1000.00 |   2
 South  | Carol       | 1200.00 |   1
 South  | Carol       |  900.00 |   2
 West   | Dave        | 2000.00 |   1
-(5 rows)\n```
+(5 rows)
+```
 
 ## 6. Tech Stack
 
@@ -83,6 +85,16 @@ West   | Dave        | 2000.00 |   1
 **Offsets and frames.** LAG/LEAD access previous/next; frames (ROWS/RANGE) control window bounds. *Everyday example:* month-over-month change.
 
 **Practical use.** CTEs + windows solve "top N per group" cleanly. *Everyday example:* best seller per category.
+
+**How a window function differs from `GROUP BY`.** A window function looks at related rows but keeps every row.
+
+```mermaid
+flowchart LR
+  A[All rows] --> B[GROUP BY: one row per group]
+  A --> C[OVER window: every row kept plus a new column]
+```
+
+Use `GROUP BY` when you want a summary, and a window function when you want the summary next to each original row.
 
 ## 8. Prerequisites
 
@@ -145,29 +157,28 @@ print("connected")
 
 Connects.
 
-**Output:**
-
-```
-connected
-```
 
 ```python
 # show helper
-def show(q,params=None):
+def show(query, params=None):
+    """Run a query and print the result as a psql-style table."""
     with conn.cursor() as cur:
-        cur.execute(q,params)
-        if cur.description is None:
-            print(cur.statusmessage); return
-        cols=[d.name for d in cur.description]; rows=cur.fetchall()
-    fmt=lambda v:"NULL" if v is None else str(v)
-    cells=[[fmt(v) for v in r] for r in rows]
-    numeric=[bool(rows) and all(isinstance(v,(int,float,Decimal)) and not isinstance(v,bool) for v in col) for col in zip(*rows)] or [False]*len(cols)
-    widths=[max([len(c)]+[len(r[i]) for r in cells]) for i,c in enumerate(cols)]
-    print(" | ".join(c.center(w) for c,w in zip(cols,widths)))
-    print("-+-".join("-"*w for w in widths))
+        cur.execute(query, params)
+        if cur.description is None:              # statements like CREATE or INSERT return no rows
+            print(cur.statusmessage)
+            return
+        cols = [d.name for d in cur.description]
+        rows = cur.fetchall()
+    fmt = lambda v: "NULL" if v is None else ("t" if v is True else "f" if v is False else str(v))
+    cells = [[fmt(v) for v in r] for r in rows]
+    numeric = [bool(rows) and all(v is None or (isinstance(v, (int, float, Decimal)) and not isinstance(v, bool)) for v in col)
+               for col in zip(*rows)] or [False] * len(cols)
+    widths = [max([len(c)] + [len(r[i]) for r in cells]) for i, c in enumerate(cols)]
+    print(" | ".join(c.center(w) for c, w in zip(cols, widths)).rstrip())
+    print("-+-".join("-" * w for w in widths))
     for r in cells:
-        print(" | ".join((v.rjust(w) if numeric[i] else v.ljust(w)) for i,(v,w) in enumerate(zip(r,widths))))
-    print(f"({len(rows)} rows)")
+        print(" | ".join(v.rjust(w) if numeric[i] else v.ljust(w) for i, (v, w) in enumerate(zip(r, widths))).rstrip())
+    print(f"({len(rows)} row{'' if len(rows) == 1 else 's'})")
 ```
 
 Helper for output.
@@ -188,19 +199,6 @@ show("SELECT * FROM sales ORDER BY sale_id")
 
 Creates sales data for CTEs and window functions.
 
-**Output:**
-
-```
-sale_id | region_id | salesperson |  amount | sale_date 
---------+-----------+-------------+---------+-----------
-      1 |         1 | Alice       | 1000.00 | 2025-10-01
-      2 |         1 | Alice       | 1500.00 | 2025-10-05
-      3 |         1 | Bob         |  800.00 | 2025-10-03
-      4 |         2 | Carol       | 1200.00 | 2025-10-02
-      5 |         2 | Carol       |  900.00 | 2025-10-10
-      6 |         3 | Dave        | 2000.00 | 2025-10-04
-(6 rows)
-```
 
 ### Step 2 — Simple CTE (WITH)
 
@@ -218,17 +216,6 @@ show("""
 
 Common Table Expressions (CTEs) make complex queries readable.
 
-**Output:**
-
-```
-salesperson |  total 
-------------+--------
-Alice       | 2500.00
-Carol       | 2100.00
-Dave        | 2000.00
-Bob         |  800.00
-(4 rows)
-```
 
 ### Step 3 — Recursive CTE
 
@@ -246,18 +233,6 @@ show("""
 
 Recursive CTEs traverse hierarchies or generate series of rows.
 
-**Output:**
-
-```
-n
--
-1
-2
-3
-4
-5
-(5 rows)
-```
 
 ### Step 4 — Window functions: ranking
 
@@ -271,9 +246,19 @@ show("""
   FROM sales
   ORDER BY amount DESC
 """)
+
+# Our sales amounts are all different, so the three agree. With ties they differ:
+show("""
+  SELECT salesperson, amount,
+         ROW_NUMBER() OVER (ORDER BY amount DESC, salesperson) AS rn,
+         RANK() OVER (ORDER BY amount DESC) AS rnk,
+         DENSE_RANK() OVER (ORDER BY amount DESC) AS drnk
+  FROM (VALUES ('Ann', 100), ('Ben', 100), ('Cy', 80), ('Di', 60)) AS t(salesperson, amount)
+  ORDER BY amount DESC, salesperson
+""")
 ```
 
-Window functions compute values across a set of rows related to current row (no collapse).
+Window functions compute values across a set of rows related to current row (no collapse). In the sales data every amount is different, so the three ranking functions agree; the second query uses made-up values with a tie to show the difference: `ROW_NUMBER` always counts 1, 2, 3, `RANK` repeats a rank and skips the next, and `DENSE_RANK` repeats a rank without skipping.
 
 **Output:**
 
@@ -305,19 +290,6 @@ show("""
 
 PARTITION BY creates windows per group.
 
-**Output:**
-
-```
-region | salesperson |  amount | region_total |  pct 
--------+-------------+---------+--------------+------
-North  | Alice       | 1500.00 |      3300.00 |  45.5
-North  | Alice       | 1000.00 |      3300.00 |  30.3
-North  | Bob         |  800.00 |      3300.00 |  24.2
-South  | Carol       | 1200.00 |      2100.00 |  57.1
-South  | Carol       |  900.00 |      2100.00 |  42.9
-West   | Dave        | 2000.00 |      2000.00 | 100.0
-(6 rows)
-```
 
 ### Step 6 — LAG/LEAD and window frames
 
@@ -340,28 +312,6 @@ show("""
 
 LAG/LEAD look at previous/next rows; window frames define which rows are included.
 
-**Output:**
-
-```
-salesperson |  amount | sale_date  | prev_amount | next_amount
-------------+---------+------------+-------------+------------
-Alice       | 1000.00 | 2025-10-01 | NULL        | 1200.00    
-Carol       | 1200.00 | 2025-10-02 | 1000.00     | 800.00     
-Bob         |  800.00 | 2025-10-03 | 1200.00     | 2000.00    
-Dave        | 2000.00 | 2025-10-04 | 800.00      | 1500.00    
-Alice       | 1500.00 | 2025-10-05 | 2000.00     | 900.00     
-Carol       |  900.00 | 2025-10-10 | 1500.00     | NULL       
-(6 rows)
-sale_date  |  amount | running_sum
------------+---------+------------
-2025-10-01 | 1000.00 |     1000.00
-2025-10-02 | 1200.00 |     2200.00
-2025-10-03 |  800.00 |     3000.00
-2025-10-04 | 2000.00 |     5000.00
-2025-10-05 | 1500.00 |     6500.00
-2025-10-10 |  900.00 |     7400.00
-(6 rows)
-```
 
 ### Step 7 — FIRST_VALUE and NTILE
 
@@ -378,19 +328,6 @@ show("""
 
 More window functions for comparative analysis.
 
-**Output:**
-
-```
-salesperson |  amount | top_amount | half
-------------+---------+------------+-----
-Dave        | 2000.00 |    2000.00 |    1
-Alice       | 1500.00 |    2000.00 |    1
-Carol       | 1200.00 |    2000.00 |    1
-Alice       | 1000.00 |    2000.00 |    2
-Carol       |  900.00 |    2000.00 |    2
-Bob         |  800.00 |    2000.00 |    2
-(6 rows)
-```
 
 ### Step 8 — Showcase: top 2 per region
 
@@ -431,11 +368,6 @@ print("connection closed")
 
 Closes connection.
 
-**Output:**
-
-```
-connection closed
-```
 
 ## 11. What We Learnt
 

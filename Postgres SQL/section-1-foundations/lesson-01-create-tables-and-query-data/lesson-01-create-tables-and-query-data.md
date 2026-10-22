@@ -202,7 +202,7 @@ That order is why an alias you define in `SELECT` can be used in `ORDER BY` but 
 - **Background:** basic Python (variables, lists, tuples). No prior SQL is needed.
 - **A running server:** a PostgreSQL server you can log in to, on `localhost:5432` if you use the defaults. If you do not have one yet, install PostgreSQL 18 from the official website and start the server.
 - **A settings file:** copy `.env.example` to `.env` at the course root and fill in your connection values (Section 9 explains this).
-- **Hardware and cost:** any laptop CPU is enough; no Graphics Processing Unit (GPU), cloud account, or paid service is required.
+- **Hardware and cost:** any laptop is enough; no cloud account or paid service is required.
 
 ## 9. Environment / Dependencies Setup
 
@@ -246,8 +246,8 @@ We import the pieces we use throughout: `os` and `Decimal` from Python's standar
 **Load the connection settings** from the global `.env`.
 
 ```python
-# Read the connection settings from the shared .env file two folders up
-# (the section folder, then the course root).
+# Read the connection settings from the shared .env file
+
 load_dotenv("../../.env")
 
 PGHOST = os.getenv("PGHOST", "localhost")
@@ -262,11 +262,6 @@ print(f"Connecting to {PGUSER}@{PGHOST}:{PGPORT}/{PGDATABASE} (sslmode={PGSSLMOD
 
 We load the connection details from one shared `.env` file so no password is ever written into the notebook. Each setting falls back to a sensible default (`localhost`, port `5432`, user `postgres`, database `university`), so the lesson still runs if a value is missing. The path `../../.env` goes up from this lesson folder to the section folder and then to the course root — that is why we start Jupyter from inside this lesson folder.
 
-**Output:**
-
-```
-Connecting to postgres@localhost:5432/university (sslmode=prefer)
-```
 
 **Create the `university` database if it is missing.** A server hosts many databases, so we connect to the built-in `postgres` maintenance database first. `CREATE DATABASE` cannot run inside a transaction, which is why the connection uses `autocommit=True`. On a re-run the message changes to `Database 'university' already exists.`
 
@@ -303,11 +298,6 @@ graph TD
 - **Output:** the `university` database exists on the server, and you see a short confirmation line.
 - **Why:** the notebook stays safe to re-run, and every step after this connects to `university` instead of the maintenance database.
 
-**Output:**
-
-```
-Database 'university' created.
-```
 
 **Connect and define `show()`**, a helper that prints query results as an aligned, psql-style table.
 
@@ -351,14 +341,6 @@ show("SELECT current_database() AS connected_to")
 
 This is the one function we keep, because almost every step calls it (Section 6 lists the packages it relies on). You can run any of these queries directly in `psql` or pgAdmin and get the same rows.
 
-**Output:**
-
-```
-connected_to
-------------
-university
-(1 row)
-```
 
 ### Step 1 — Explore the Server, Databases and Schemas
 
@@ -386,33 +368,17 @@ show("""
 """)
 ```
 
-**Output:**
-
-```
- database  |   role   | schema
------------+----------+-------
-university | postgres | public
-(1 row)
-  search_path
----------------
-"$user", public
-(1 row)
-schema
-------
-public
-(1 row)
-```
 
 `current_schema()` returns `public` because our `search_path` is `"$user", public` and there is no schema named after our role. Every table this lesson creates goes into `public`.
 
 ### Step 2 — Create the `students` Table
 
-A table is a named set of rows that all share the same columns. `CREATE TABLE` lists each column with a **data type**, and PostgreSQL enforces it: you cannot store the word `abc` in an `INTEGER` column. We run `DROP TABLE IF EXISTS` first so the notebook is safe to run again and again. We deliberately add no constraints yet, to keep this first lesson focused on creating and reading data.
+A table is a named set of rows that all share the same columns. `CREATE TABLE` lists each column with a **data type**, and PostgreSQL enforces it: you cannot store the word `abc` in an `INTEGER` column. We run `DROP TABLE IF EXISTS ... CASCADE` first so the notebook is safe to run again and again (`CASCADE` also removes anything that depends on the table, such as the foreign keys later lessons add). We deliberately add no constraints yet, to keep this first lesson focused on creating and reading data.
 
 ```python
 # Step 2: create the `students` table. DROP first so re-running the notebook
 # starts clean, then CREATE the table with one typed column per fact.
-conn.execute("DROP TABLE IF EXISTS students")
+conn.execute("DROP TABLE IF EXISTS students CASCADE")
 
 conn.execute("""
     CREATE TABLE students (
@@ -430,11 +396,6 @@ conn.execute("""
 print("students table created")
 ```
 
-**Output:**
-
-```
-students table created
-```
 
 Ask PostgreSQL to describe what it just built.
 
@@ -448,22 +409,6 @@ show("""
 """)
 ```
 
-**Output:**
-
-```
-pos |   column_name   | data_type | is_nullable
-----+-----------------+-----------+------------
-  1 | student_id      | text      | YES
-  2 | name            | text      | YES
-  3 | email           | text      | YES
-  4 | course          | text      | YES
-  5 | grade           | integer   | YES
-  6 | enrollment_date | date      | YES
-  7 | status          | text      | YES
-  8 | scholarship     | boolean   | YES
-  9 | graduation_date | date      | YES
-(9 rows)
-```
 
 `information_schema.columns` is a standard catalog view that lists every column of every table, so it is a reliable way to confirm what we built. In `psql` the same check is the one-letter command `\d students`; in pgAdmin, expand *Databases > university > Schemas > public > Tables* and right-click the table.
 
@@ -536,14 +481,6 @@ graph LR
     style T fill:#c8e6c9,stroke:#2e7d32,color:#1b5e20
 ```
 
-**Output:**
-
-```
-students_loaded
----------------
-             25
-(1 row)
-```
 
 ### Step 4 — SELECT: Choose Columns, Alias, LIMIT, DISTINCT
 
@@ -552,18 +489,6 @@ students_loaded
 show("SELECT * FROM students ORDER BY student_id LIMIT 5")
 ```
 
-**Output:**
-
-```
-student_id |      name     |              email               |      course      | grade | enrollment_date | status | scholarship | graduation_date
------------+---------------+----------------------------------+------------------+-------+-----------------+--------+-------------+----------------
-STU001     | Alice Johnson | alice.johnson@university.example | Computer Science |    95 | 2024-09-01      | active | t           |            NULL
-STU002     | Bob Smith     | bob.smith@university.example     | Mathematics      |    78 | 2024-09-01      | active | f           |            NULL
-STU003     | Charlie Brown | charlie.brown@university.example | Physics          |    55 | 2024-09-02      | active | f           |            NULL
-STU004     | Diana Prince  | diana.prince@university.example  | English          |    48 | 2024-09-01      | active | f           |            NULL
-STU005     | Eve Torres    | eve.torres@university.example    | Biology          |    88 | 2024-09-03      | active | f           |            NULL
-(5 rows)
-```
 
 `SELECT` reads data without changing it. `*` means "all columns". We add `ORDER BY student_id` because a table has **no guaranteed row order** — without it, the same query could return rows in any order, so we always sort to make the output repeatable. `LIMIT 5` caps the result to five rows.
 
@@ -577,18 +502,6 @@ show("""
 """)
 ```
 
-**Output:**
-
-```
-  id   |    student    | score
--------+---------------+------
-STU001 | Alice Johnson |    95
-STU002 | Bob Smith     |    78
-STU003 | Charlie Brown |    55
-STU004 | Diana Prince  |    48
-STU005 | Eve Torres    |    88
-(5 rows)
-```
 
 Naming the columns we want is clearer than `*` and slightly cheaper. `AS` renames a column in the result only — the stored data is untouched. Aliases such as `id`, `student`, and `score` make the output read better for whoever consumes it.
 
@@ -598,24 +511,6 @@ show("SELECT DISTINCT course FROM students ORDER BY course")
 show("SELECT DISTINCT status FROM students ORDER BY status")
 ```
 
-**Output:**
-
-```
-     course
-----------------
-Biology
-Computer Science
-English
-Mathematics
-Physics
-(5 rows)
-  status
----------
-active
-graduated
-inactive
-(3 rows)
-```
 
 `DISTINCT` collapses the 25 rows into the unique values, which is a quick way to learn what a column actually contains without scrolling the whole table. We see five courses and three statuses.
 
@@ -631,19 +526,6 @@ show("""
 """)
 ```
 
-**Output:**
-
-```
-student_id |      name     |    course   | grade
------------+---------------+-------------+------
-STU012     | Laura Palmer  | Biology     |    45
-STU004     | Diana Prince  | English     |    48
-STU006     | Frank Castle  | Mathematics |    52
-STU003     | Charlie Brown | Physics     |    55
-STU023     | Walt Disney   | Physics     |    56
-STU018     | Rosa Parks    | English     |    58
-(6 rows)
-```
 
 `WHERE` keeps only the rows for which a condition is true, so here we get the six students scoring below 60. Sorting by `grade` (ascending by default) and then by `student_id` puts the lowest score first and breaks any ties the same way every time.
 
@@ -657,19 +539,6 @@ show("""
 """)
 ```
 
-**Output:**
-
-```
-     name     | grade
---------------+------
-Alice Johnson |    95
-Grace Hopper  |    91
-Quincy Adams  |    87
-Ivan Petrov   |    84
-Yusuf Islam   |    70
-Uma Thurman   |    62
-(6 rows)
-```
 
 Text values go in single quotes (`'Computer Science'`); double quotes in SQL mean an identifier, such as a column really named `"Order"`. `DESC` sorts from high to low, so the strongest Computer Science students come first.
 
@@ -686,19 +555,6 @@ show("""
 """)
 ```
 
-**Output:**
-
-```
-    name    |    course   | grade | status
-------------+-------------+-------+-------
-Oscar Wilde | Mathematics |    93 | active
-Tina Turner | Mathematics |    79 | active
-Bob Smith   | Mathematics |    78 | active
-Sam Wilson  | Physics     |    98 | active
-Marco Polo  | Physics     |    82 | active
-Hank Pym    | Physics     |    73 | active
-(6 rows)
-```
 
 We combine conditions with `AND` and `OR`. The parentheses are not decoration: `AND` binds more tightly than `OR`, so without them the query would mean something different. Grouped this way, the condition reads "a Mathematics or Physics student who is also active and scoring at least 70".
 
@@ -708,19 +564,6 @@ We combine conditions with `AND` and `OR`. The parentheses are not decoration: `
 show("SELECT name, grade FROM students WHERE scholarship ORDER BY grade DESC, student_id")
 ```
 
-**Output:**
-
-```
-     name     | grade
---------------+------
-Sam Wilson    |    98
-Alice Johnson |    95
-Xena Warrior  |    94
-Oscar Wilde   |    93
-Grace Hopper  |    91
-Julia Child   |    90
-(6 rows)
-```
 
 Because `scholarship` is a `BOOLEAN`, we can put it straight into `WHERE` — it is true only for the rows we want, and `NULL` would be treated as "not true". These six students are the scholarship holders.
 
@@ -730,26 +573,6 @@ show("SELECT name, grade FROM students ORDER BY grade DESC, student_id LIMIT 5")
 show("SELECT name, grade FROM students ORDER BY grade DESC, student_id LIMIT 5 OFFSET 5")
 ```
 
-**Output:**
-
-```
-     name     | grade
---------------+------
-Sam Wilson    |    98
-Alice Johnson |    95
-Xena Warrior  |    94
-Oscar Wilde   |    93
-Grace Hopper  |    91
-(5 rows)
-    name     | grade
--------------+------
-Julia Child  |    90
-Eve Torres   |    88
-Quincy Adams |    87
-Vera Wang    |    85
-Ivan Petrov  |    84
-(5 rows)
-```
 
 `LIMIT` caps the number of rows and `OFFSET` skips a number before it, together giving you pages of results. A large `OFFSET` gets slow because PostgreSQL still reads and discards the skipped rows — fine for a 25-row table, worth knowing as data grows.
 
@@ -765,16 +588,6 @@ show("""
 """, (course, min_grade))
 ```
 
-**Output:**
-
-```
-   name    | grade
------------+------
-Sam Wilson |    98
-Marco Polo |    82
-Hank Pym   |    73
-(3 rows)
-```
 
 Here the values come from Python variables and are passed as parameters with `%s`, not pasted into the string. psycopg sends the SQL text and the values separately, so a value like `"x'; DROP TABLE students; --"` would simply be an unmatched text value. This is how we avoid SQL injection, the trick of hiding commands inside data.
 
@@ -787,23 +600,6 @@ show("SELECT name FROM students WHERE name LIKE 'A%' ORDER BY name")
 show("SELECT name FROM students WHERE name ILIKE '%AN%' ORDER BY name")
 ```
 
-**Output:**
-
-```
-     name
--------------
-Alice Johnson
-(1 row)
-    name
-------------
-Diana Prince
-Frank Castle
-Hank Pym
-Ivan Petrov
-Uma Thurman
-Vera Wang
-(6 rows)
-```
 
 `LIKE` matches a text pattern, where `%` stands for any run of characters and `_` stands for exactly one. `ILIKE` is the case-insensitive version (a PostgreSQL extension). So `'A%'` finds names starting with a capital A, and `'%AN%'` finds any name containing "an" in any letter case.
 
@@ -818,16 +614,6 @@ show("""
 """)
 ```
 
-**Output:**
-
-```
-    name    |  course |   status
-------------+---------+----------
-Julia Child | English | graduated
-Rosa Parks  | English | inactive
-Vera Wang   | Biology | graduated
-(3 rows)
-```
 
 `IN (...)` checks whether a value is one of a short list and reads more cleanly than `course = 'Biology' OR course = 'English'`. Combined with the status filter, we get Biology or English students who are no longer active.
 
@@ -841,23 +627,6 @@ show("""
 """)
 ```
 
-**Output:**
-
-```
-    name    | grade
-------------+------
-Yusuf Islam |    70
-Pia Zadora  |    71
-Hank Pym    |    73
-Nina Simone |    76
-Bob Smith   |    78
-Tina Turner |    79
-(6 rows)
-enrolled_sep_2_or_3
--------------------
-                 14
-(1 row)
-```
 
 `BETWEEN a AND b` includes both endpoints, so a grade of exactly 70 or exactly 79 is returned, and it works for dates too. One caution: for a column that stores a time of day, `BETWEEN day_start AND day_end` can drop the last day's later rows — prefer `>= start AND < next_day`.
 
@@ -872,19 +641,6 @@ show("SELECT student_id, name FROM students WHERE email IS NULL ORDER BY student
 show("SELECT student_id, name FROM students WHERE email = NULL")
 ```
 
-**Output:**
-
-```
-student_id |     name
------------+-------------
-STU006     | Frank Castle
-STU012     | Laura Palmer
-STU018     | Rosa Parks
-(3 rows)
-student_id | name
------------+-----
-(0 rows)
-```
 
 Because `email = NULL` evaluates to *unknown* rather than true, that query silently returns nothing; the right test is `IS NULL`. The same three rows appear correctly only when we compare with `IS NULL`.
 
@@ -901,20 +657,6 @@ show("""
 """)
 ```
 
-**Output:**
-
-```
-total_rows | with_email
------------+-----------
-        25 |         22
-(1 row)
-student_id |     name     |            contact
------------+--------------+------------------------------
-STU005     | Eve Torres   | eve.torres@university.example
-STU006     | Frank Castle | no email on file
-STU012     | Laura Palmer | no email on file
-(3 rows)
-```
 
 `count(*)` counts rows, while `count(email)` counts only the rows where the email is not `NULL` — 25 versus 22, so three are missing. `COALESCE(email, 'no email on file')` returns the email when it exists and the fallback text when it does not, which is how we show a friendly default instead of a blank.
 
@@ -938,23 +680,6 @@ show("""
 """)
 ```
 
-**Output:**
-
-```
-     name     | grade | letter
---------------+-------+-------
-Sam Wilson    |    98 | A
-Alice Johnson |    95 | A
-Xena Warrior  |    94 | A
-Oscar Wilde   |    93 | A
-Grace Hopper  |    91 | A
-Julia Child   |    90 | A
-Eve Torres    |    88 | B
-Quincy Adams  |    87 | B
-Vera Wang     |    85 | B
-Ivan Petrov   |    84 | B
-(10 rows)
-```
 
 - **Input:** every student's `grade` value.
 - **What happens:** `CASE` checks the conditions from top to bottom and returns the value next to the first one that is true; `END` closes the expression, and `ELSE` covers everything left over.
@@ -993,21 +718,6 @@ show("""
 """)
 ```
 
-**Output:**
-
-```
-     name     | grade | result | standing
---------------+-------+--------+---------
-Laura Palmer  |    45 | fail   | Enrolled
-Diana Prince  |    48 | fail   | Enrolled
-Frank Castle  |    52 | fail   | On leave
-Charlie Brown |    55 | fail   | Enrolled
-Walt Disney   |    56 | fail   | Enrolled
-Rosa Parks    |    58 | fail   | On leave
-Uma Thurman   |    62 | pass   | Enrolled
-Karl Marx     |    67 | pass   | Enrolled
-(8 rows)
-```
 
 There are two forms of `CASE`. The searched form (`CASE WHEN condition THEN ...`) tests full conditions, as above. The simple form (`CASE status WHEN 'active' THEN ...`) compares one column against exact values. If no branch matches and there is no `ELSE`, the result is `NULL`, so it is good practice to always add an `ELSE`.
 
@@ -1027,18 +737,6 @@ show("""
 """)
 ```
 
-**Output:**
-
-```
-  name_upper  | chars | first_name |   last_first
---------------+-------+------------+---------------
-ALICE JOHNSON |    13 | Alice      | Johnson, Alice
-BOB SMITH     |     9 | Bob        | Smith, Bob
-CHARLIE BROWN |    13 | Charlie    | Brown, Charlie
-DIANA PRINCE  |    12 | Diana      | Prince, Diana
-EVE TORRES    |    10 | Eve        | Torres, Eve
-(5 rows)
-```
 
 PostgreSQL ships with hundreds of built-in functions. `upper` uppercases text, `length` counts characters, `split_part(name, ' ', 1)` returns the first word (the first name), and `||` joins strings together — here flipping "Alice Johnson" into "Johnson, Alice".
 
@@ -1053,14 +751,6 @@ show("""
 """)
 ```
 
-**Output:**
-
-```
-integer_division |  numeric_division  | rounded |   cast_shortcut    | text_to_int
------------------+--------------------+---------+--------------------+------------
-               9 | 9.5000000000000000 |     9.5 | 9.5000000000000000 |          43
-(1 row)
-```
 
 When both sides of a division are integers, PostgreSQL does integer division and truncates the fraction — `95 / 10` is `9`. Making one side `numeric` (or writing `95::numeric`, the short cast) keeps the decimals, and `round(value, 1)` trims them to one place. The two spellings — `::numeric` and `CAST('42' AS integer)` — do the same job: convert a value from one type to another.
 
@@ -1080,15 +770,6 @@ show("""
 """)
 ```
 
-**Output:**
-
-```
-    name    | enrollment_date | plus_30_days |    pretty   | weekday_no | days_to_graduate
-------------+-----------------+--------------+-------------+------------+-----------------
-Julia Child | 2024-09-02      | 2024-10-02   | 02 Sep 2024 |          1 |              301
-Vera Wang   | 2024-09-01      | 2024-10-01   | 01 Sep 2024 |          0 |              302
-(2 rows)
-```
 
 Adding a whole number to a `DATE` moves it forward that many days; subtracting two dates gives an integer number of days. `to_char` formats a date as text, and `extract` pulls out one part — here `dow` (day of week), which numbers Sunday as 0. We use a fixed `enrollment_date` instead of `current_date` so the output is the same every time you run it.
 
@@ -1112,22 +793,6 @@ show("""
 """)
 ```
 
-**Output:**
-
-```
-student_id |    student     |      course      | grade | letter | scholarship |             contact
------------+----------------+------------------+-------+--------+-------------+---------------------------------
-STU019     | WILSON, Sam    | Physics          |    98 | A      | yes         | sam.wilson@university.example
-STU001     | JOHNSON, Alice | Computer Science |    95 | A      | yes         | alice.johnson@university.example
-STU024     | WARRIOR, Xena  | English          |    94 | A      | yes         | xena.warrior@university.example
-STU015     | WILDE, Oscar   | Mathematics      |    93 | A      | yes         | oscar.wilde@university.example
-STU007     | HOPPER, Grace  | Computer Science |    91 | A      | yes         | grace.hopper@university.example
-STU005     | TORRES, Eve    | Biology          |    88 | B      | no          | eve.torres@university.example
-STU017     | ADAMS, Quincy  | Computer Science |    87 | B      | no          | quincy.adams@university.example
-STU009     | PETROV, Ivan   | Computer Science |    84 | B      | no          | ivan.petrov@university.example
-STU013     | POLO, Marco    | Physics          |    82 | B      | no          | marco.polo@university.example
-(9 rows)
-```
 
 This is the report the registrar wanted: active students scoring 80 or above, with names reformatted "Last, First", a letter grade, a readable scholarship flag, and a contact that never shows a blank. Every piece — `split_part`, `||`, `CASE`, `COALESCE`, `WHERE`, `BETWEEN`, `ORDER BY`, `LIMIT` — is something we met earlier in the lesson. `LIMIT 10` is only a safety cap here.
 
@@ -1145,14 +810,6 @@ show("""
 """)
 ```
 
-**Output:**
-
-```
-students | failing | scholarships | missing_email | lowest | highest | average
----------+---------+--------------+---------------+--------+---------+--------
-      25 |       6 |            6 |             3 |     45 |      98 |    75.1
-(1 row)
-```
 
 `count`, `sum`, `min`, `max`, and `avg` summarize many rows into one. We use `sum(CASE WHEN ... THEN 1 ELSE 0 END)` as a counting trick: the `CASE` gives 1 for rows that match and 0 for the rest, and `sum` adds them up. `count(*) - count(email)` gives the number of missing emails.
 
@@ -1164,23 +821,8 @@ conn.close()
 print("connection closed")
 ```
 
-**Output:**
-
-```
-connection closed
-```
 
 Closing the connection frees the server resources we were holding. The `students` table itself stays in the `university` database, so you can reconnect and keep querying it whenever you like.
-
-## 12. References
-
-- [PostgreSQL 18 Documentation](https://www.postgresql.org/docs/18/)
-- [CREATE TABLE](https://www.postgresql.org/docs/18/sql-createtable.html)
-- [INSERT](https://www.postgresql.org/docs/18/sql-insert.html)
-- [SELECT](https://www.postgresql.org/docs/18/sql-select.html)
-- [psycopg (3.x) Documentation](https://www.psycopg.org/psycopg3/docs/)
-- [python-dotenv](https://pypi.org/project/python-dotenv/)
-
 
 ## 11. What We Learnt
 

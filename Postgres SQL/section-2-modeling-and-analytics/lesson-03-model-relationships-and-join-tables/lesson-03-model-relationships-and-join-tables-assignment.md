@@ -33,7 +33,7 @@ Explain the difference between 1NF, 2NF, and 3NF in plain words, using the `stud
 **Why:** Choose RESTRICT to avoid accidental data loss; choose CASCADE only when deletion should automatically clean up children.
 
 ### Exercise 3
-**Answer:** Use `LEFT JOIN` from `students` to `enrollments` (and to `courses`). `LEFT JOIN` keeps all students; unmatched enrollments become NULL, so students with no courses still appear.
+**Answer:** Use `LEFT JOIN` from `students` to `enrollments` (and to `courses`). `LEFT JOIN` keeps all students; for a student with no match, the enrollment and course columns come back as `NULL`, so students with no courses still appear.
 
 **Why:** `INNER JOIN` would drop students with no enrollments entirely.
 
